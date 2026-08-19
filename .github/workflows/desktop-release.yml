@@ -32,41 +32,31 @@ jobs:
         run: New-Item -ItemType Directory -Force .cache/npm,.cache/electron,.cache/electron-builder,.cache/ms-playwright,.tmp,logs | Out-Null
       - name: Install exact dependencies
         run: npm ci
-      - name: Test and build unsigned release
+      - name: Test and build unsigned production release
         run: |
           npm test
           npm run build
-      - name: Upload Dev and Test build artifacts
+      - name: Upload production build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: NGR-AssetPilot-3.0.0-Dev-Test-Windows-x64
+          name: NGR-AssetPilot-Production-Windows-x64
           path: |
-            artifacts/dev/*.exe
-            artifacts/dev/*.blockmap
-            artifacts/dev/*-SHA256SUMS.txt
-            artifacts/dev/*-sbom.cdx.json
-            artifacts/dev/*-build-manifest.json
-            artifacts/test/*.exe
-            artifacts/test/*.blockmap
-            artifacts/test/*-SHA256SUMS.txt
-            artifacts/test/*-sbom.cdx.json
-            artifacts/test/*-build-manifest.json
+            artifacts/prod/*.exe
+            artifacts/prod/*.blockmap
+            artifacts/prod/*-SHA256SUMS.txt
+            artifacts/prod/*-sbom.cdx.json
+            artifacts/prod/*-build-manifest.json
           if-no-files-found: error
       - name: Create draft GitHub Release for tag
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          prerelease: true
+          prerelease: false
           generate_release_notes: true
           files: |
-            artifacts/dev/*.exe
-            artifacts/dev/*.blockmap
-            artifacts/dev/*-SHA256SUMS.txt
-            artifacts/dev/*-sbom.cdx.json
-            artifacts/dev/*-build-manifest.json
-            artifacts/test/*.exe
-            artifacts/test/*.blockmap
-            artifacts/test/*-SHA256SUMS.txt
-            artifacts/test/*-sbom.cdx.json
-            artifacts/test/*-build-manifest.json
+            artifacts/prod/*.exe
+            artifacts/prod/*.blockmap
+            artifacts/prod/*-SHA256SUMS.txt
+            artifacts/prod/*-sbom.cdx.json
+            artifacts/prod/*-build-manifest.json

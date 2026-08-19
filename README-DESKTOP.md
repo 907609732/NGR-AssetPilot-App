@@ -1,11 +1,12 @@
 # NGR AssetPilot V3 桌面版
 
-工程保留两个明确隔离的版本，不设正式版：
+工程提供三个明确隔离的版本：
 
+- 正式版 `NGR AssetPilot`：面向最终用户，数据位于 `%APPDATA%\NGR AssetPilot`，产物位于 `artifacts/prod`。
 - 开发版 `NGR AssetPilot Dev`：日常开发与调试，数据位于 `%APPDATA%\NGR AssetPilot Dev`，产物位于 `artifacts/dev`。
 - 测试版 `NGR AssetPilot Test`：安装与功能验收，数据位于 `%APPDATA%\NGR AssetPilot Test`，产物位于 `artifacts/test`。
 
-两版拥有不同应用 ID、进程名、快捷方式和数据目录，设置、图库索引、模型与缩略图不会互相覆盖。首次启动时，如果各自目录尚无本地搜图数据，会从现有 `NGR AssetPilot`/旧测试目录复制迁移；来源目录不会删除。
+三版拥有不同应用 ID、进程名、快捷方式和数据目录，设置、图库索引、模型与缩略图不会互相覆盖。正式版首次启动时，如果目录尚无本地搜图数据，可从已有开发版数据复制迁移；来源目录不会删除。
 
 ## 开发与测试
 
@@ -21,13 +22,17 @@ npm test
 ## 构建
 
 ```powershell
+# 默认只构建正式版
+npm run build
+# 或分别构建
+npm run build:prod
 npm run build:dev
 npm run build:test
-# 或依次构建两版
-npm run build
+# 依次构建全部版本
+npm run build:all
 ```
 
-两版都会生成 Setup 与 portable x64 EXE、SBOM、SHA-256 和构建清单，均不内置平台 API 凭据。
+三版都会生成 Setup 与 portable x64 EXE、SBOM、SHA-256 和构建清单，均不内置平台 API 凭据。正式版不显示 DEV/TEST 徽标。
 
 ## 本地 AI 搜图与纯离线使用
 

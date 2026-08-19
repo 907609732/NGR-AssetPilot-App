@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.0 module: lifecycle-rules.js */
+/* NGR AssetPilot V3.0.1 module: lifecycle-rules.js */
 let currentViewName = "home";
 let settingsReturnView = "home";
 function init() {

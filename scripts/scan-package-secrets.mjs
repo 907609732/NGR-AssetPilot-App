@@ -98,7 +98,7 @@ function encodeKnownSecretNeedles(secretPairs) {
 }
 
 export function scanArtifacts({ edition, env = process.env } = {}) {
-  if (!['dev', 'test'].includes(edition)) throw new Error("版本必须是 dev 或 test");
+  if (!["prod", "dev", "test"].includes(edition)) throw new Error("版本必须是 prod、dev 或 test");
   const artifactDirectory = projectPaths[`${edition}Artifacts`];
   const files = walkFiles(artifactDirectory);
   if (files.length === 0) {
@@ -151,7 +151,7 @@ export function scanArtifacts({ edition, env = process.env } = {}) {
 const isCli = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isCli) {
   try {
-    if (process.argv.length !== 3) throw new Error("请指定 dev 或 test");
+    if (process.argv.length !== 3) throw new Error("请指定 prod、dev 或 test");
     const result = scanArtifacts({ edition: process.argv[2] });
     console.log(`凭据扫描通过：检查 ${result.fileCount} 个文件，未输出任何凭据值。`);
   } catch (error) {

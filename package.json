@@ -1,6 +1,6 @@
 {
   "name": "ngr-assetpilot-desktop",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "private": true,
   "description": "NGR AssetPilot Windows desktop application",
   "license": "MIT",
@@ -17,13 +17,18 @@
     "test": "node --test tests/*.test.mjs",
     "test:packaging": "node --test tests/packaging-infrastructure.test.mjs",
     "test:local-image-search:performance": "node scripts/benchmark-local-image-search.mjs",
+    "build:prod": "node scripts/run-build.mjs prod",
     "build:dev": "node scripts/run-build.mjs dev",
     "build:test": "node scripts/run-build.mjs test",
-    "build": "npm run build:dev && npm run build:test",
+    "build": "npm run build:prod",
+    "build:all": "npm run build:prod && npm run build:dev && npm run build:test",
+    "release:metadata:prod": "node scripts/generate-release-metadata.mjs prod",
     "release:metadata:dev": "node scripts/generate-release-metadata.mjs dev",
     "release:metadata:test": "node scripts/generate-release-metadata.mjs test",
+    "release:scan:prod": "node scripts/scan-package-secrets.mjs prod",
     "release:scan:dev": "node scripts/scan-package-secrets.mjs dev",
-    "release:scan:test": "node scripts/scan-package-secrets.mjs test"
+    "release:scan:test": "node scripts/scan-package-secrets.mjs test",
+    "verify:packaged:prod": "node scripts/verify-packaged-apps.mjs prod"
   },
   "dependencies": {
     "@huggingface/transformers": "4.2.0",

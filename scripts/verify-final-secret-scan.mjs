@@ -74,7 +74,7 @@ if (sourcePlaintextHits.length) {
   throw new Error(`桌面源码发现 ${sourcePlaintextHits.length} 个明文凭据命中`);
 }
 
-for (const channel of ["test", "release"]) {
+for (const channel of ["test", "prod"]) {
   const root = path.join(projectRoot, "artifacts", channel);
   const files = walk(root);
   const plaintextHits = files.filter((filePath) => containsAny(filePath, plaintextNeedles));

@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.0 module: workspace-migration.js */
+/* NGR AssetPilot V3.0.1 module: workspace-migration.js */
 (function initializeWorkspaceMigrationModule(globalScope) {
   "use strict";
 
@@ -463,11 +463,19 @@
     document.documentElement.classList.toggle("desktop-runtime", Boolean(desktopInfo.isDesktop));
     const editionBadge = document.getElementById("editionBadge");
     if (editionBadge && desktopInfo.isDesktop) {
+      const isProduction = desktopInfo.edition === "prod";
       const isTest = desktopInfo.edition === "test";
-      editionBadge.textContent = isTest ? "TEST 测试版" : "DEV 开发版";
-      editionBadge.classList.remove("hidden", "dev", "test");
-      editionBadge.classList.add(isTest ? "test" : "dev");
-      document.title = `${isTest ? "NGR AssetPilot Test" : "NGR AssetPilot Dev"}｜AI资源领航`;
+      editionBadge.classList.remove("dev", "test");
+      if (isProduction) {
+        editionBadge.textContent = "";
+        editionBadge.classList.add("hidden");
+        document.title = "NGR AssetPilot｜AI资源领航";
+      } else {
+        editionBadge.textContent = isTest ? "TEST 测试版" : "DEV 开发版";
+        editionBadge.classList.remove("hidden");
+        editionBadge.classList.add(isTest ? "test" : "dev");
+        document.title = `${isTest ? "NGR AssetPilot Test" : "NGR AssetPilot Dev"}｜AI资源领航`;
+      }
     }
     if (els.workspaceMigrationIntro && desktopInfo.isDesktop && !localStorage.getItem(MIGRATION_NOTICE_KEY)) {
       els.workspaceMigrationIntro.textContent = "首次使用桌面版？请从原网页版导出 .ngrap，再在这里导入。原数据不会被自动删除。";

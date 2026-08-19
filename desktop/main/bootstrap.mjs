@@ -77,10 +77,15 @@ function migrateLegacyLocalImageSearch(appDataPath, userDataPath, legacyNames) {
 }
 
 export async function runDesktopApp({ edition = "dev" } = {}) {
-  if (!["dev", "test"].includes(edition)) throw new Error("桌面版本必须是 dev 或 test");
+  if (!["prod", "dev", "test"].includes(edition)) throw new Error("桌面版本必须是 prod、dev 或 test");
   const isTestEdition = edition === "test";
-  const applicationName = isTestEdition ? "NGR AssetPilot Test" : "NGR AssetPilot Dev";
-  const applicationId = `com.chenyuecai.ngrassetpilot.${edition}`;
+  const isProductionEdition = edition === "prod";
+  const applicationName = isProductionEdition
+    ? "NGR AssetPilot"
+    : isTestEdition ? "NGR AssetPilot Test" : "NGR AssetPilot Dev";
+  const applicationId = isProductionEdition
+    ? "com.chenyuecai.ngrassetpilot"
+    : `com.chenyuecai.ngrassetpilot.${edition}`;
   const appDataPath = app.getPath("appData");
   const e2eUserDataPath = process.env.NGR_E2E_USER_DATA;
   const userDataPath = typeof e2eUserDataPath === "string" && path.isAbsolute(e2eUserDataPath)
@@ -93,9 +98,11 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   let migrationError = null;
   if (!e2eUserDataPath) {
     try {
-      const migrationSources = isTestEdition
-        ? ["NGR AssetPilot Dev", "NGR AssetPilot", "NGR AssetPilot Public Test"]
-        : ["NGR AssetPilot", "NGR AssetPilot Public Test"];
+      const migrationSources = isProductionEdition
+        ? ["NGR AssetPilot Dev", "NGR AssetPilot Public Test"]
+        : isTestEdition
+          ? ["NGR AssetPilot Dev", "NGR AssetPilot", "NGR AssetPilot Public Test"]
+          : ["NGR AssetPilot", "NGR AssetPilot Public Test"];
       migratedLocalSearchFrom = migrateLegacyLocalImageSearch(appDataPath, userDataPath, migrationSources);
     } catch (error) {
       migrationError = errorCodeOnly(error);
@@ -129,7 +136,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   writeStartupLog(app, "credentials-ready");
 
   const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
-  const updateChannel = isTestEdition ? "test" : "dev";
+  const updateChannel = isProductionEdition ? "latest" : isTestEdition ? "test" : "dev";
   const updaterRequested = false;
   const autoUpdater = await resolveAutoUpdater(updaterRequested);
   const updater = new UpdaterController({

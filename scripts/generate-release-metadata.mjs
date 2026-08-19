@@ -56,13 +56,15 @@ function generateSbom(outputPath) {
 }
 
 export function generateReleaseMetadata(edition) {
-  if (!['dev', 'test'].includes(edition)) throw new Error("版本必须是 dev 或 test");
+  if (!["prod", "dev", "test"].includes(edition)) throw new Error("版本必须是 prod、dev 或 test");
   const artifactDirectory = projectPaths[`${edition}Artifacts`];
   fs.mkdirSync(artifactDirectory, { recursive: true });
   const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
   const version = packageJson.version;
-  const editionLabel = edition === "test" ? "Test" : "Dev";
-  const metadataPrefix = `NGR-AssetPilot-${editionLabel}-${version}`;
+  const editionLabel = edition === "prod" ? null : edition === "test" ? "Test" : "Dev";
+  const metadataPrefix = editionLabel
+    ? `NGR-AssetPilot-${editionLabel}-${version}`
+    : `NGR-AssetPilot-${version}`;
   const sbomName = `${metadataPrefix}-sbom.cdx.json`;
   const checksumsName = `${metadataPrefix}-SHA256SUMS.txt`;
   const manifestName = `${metadataPrefix}-build-manifest.json`;
@@ -94,7 +96,7 @@ export function generateReleaseMetadata(edition) {
 
   const manifest = {
     schemaVersion: 1,
-    product: edition === "test" ? "NGR AssetPilot Test" : "NGR AssetPilot Dev",
+    product: edition === "prod" ? "NGR AssetPilot" : edition === "test" ? "NGR AssetPilot Test" : "NGR AssetPilot Dev",
     edition,
     version,
     generatedAt: new Date().toISOString(),
@@ -127,7 +129,7 @@ export function generateReleaseMetadata(edition) {
 const isCli = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isCli) {
   try {
-    if (process.argv.length !== 3) throw new Error("请指定 dev 或 test");
+    if (process.argv.length !== 3) throw new Error("请指定 prod、dev 或 test");
     const manifest = generateReleaseMetadata(process.argv[2]);
     console.log(`发布元数据已生成：${manifest.artifacts.length} 个文件，版本 ${manifest.version}`);
   } catch (error) {

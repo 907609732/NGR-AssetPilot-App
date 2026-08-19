@@ -4,8 +4,10 @@ import { DatabaseSync } from "node:sqlite";
 import { LocalImageSearchEngine } from "../desktop/services/local-image-search/engine.mjs";
 
 const edition = process.argv[2];
-assert.ok(["dev", "test"].includes(edition), "请指定 dev 或 test");
-const productName = edition === "test" ? "NGR AssetPilot Test" : "NGR AssetPilot Dev";
+assert.ok(["prod", "dev", "test"].includes(edition), "请指定 prod、dev 或 test");
+const productName = edition === "prod"
+  ? "NGR AssetPilot"
+  : edition === "test" ? "NGR AssetPilot Test" : "NGR AssetPilot Dev";
 const dataRoot = path.join(process.env.APPDATA, productName, "local-image-search");
 const dbPath = path.join(dataRoot, "index.sqlite3");
 const modelRoot = path.join(dataRoot, "models");

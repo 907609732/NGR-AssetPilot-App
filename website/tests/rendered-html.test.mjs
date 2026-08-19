@@ -25,7 +25,7 @@ test("server-renders the NGR AssetPilot official website", async () => {
   assert.match(html, /让每一张 UI 资源/);
   assert.match(html, /核心能力/);
   assert.match(html, /本地优先/);
-  assert.match(html, /V(?:<!-- -->)?3\.0\.0/);
+  assert.match(html, /V(?:<!-- -->)?3\.0\.1/);
   assert.match(html, /Windows 版准备中/);
   assert.match(html, /下载包不包含内置平台凭据/);
   assert.match(html, /https:\/\/ngr\.lttlt\.top/);

@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.0 module: local-image-search.js */
+/* NGR AssetPilot V3.0.1 module: local-image-search.js */
 (function initializeLocalImageSearchModule(globalScope) {
   "use strict";
 

@@ -377,16 +377,23 @@ test("updater is disabled for non-installer builds and uses an explicit download
   assert.equal(updaterMetadata.normalizeReleaseNotes("<script>x</script><p>A&amp;B</p>"), "xA&B");
 });
 
-test("both packaged editions contain current entrypoints and a self-contained preload", {
+test("all packaged editions contain current entrypoints and a self-contained preload", {
   skip: process.env.NGR_VERIFY_PACKAGED_ARTIFACTS !== "1",
 }, async (t) => {
   const asar = require("@electron/asar");
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const archivePathFor = (relativePath) => relativePath.split("/").join(path.sep);
+  const requestedEditions = new Set(
+    String(process.env.NGR_VERIFY_PACKAGED_EDITIONS || "prod,dev,test")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
   for (const { edition, entryPath } of [
+    { edition: "prod", entryPath: "desktop/main/prod-index.mjs" },
     { edition: "dev", entryPath: "desktop/main/index.mjs" },
     { edition: "test", entryPath: "desktop/main/test-index.mjs" },
-  ]) {
+  ].filter(({ edition }) => requestedEditions.has(edition))) {
     const archivePath = path.join(projectRoot, "artifacts", edition, "win-unpacked", "resources", "app.asar");
     try { await access(archivePath); } catch { t.skip(`${edition} packaged artifact is not present`); return; }
     const packagedJson = JSON.parse(asar.extractFile(archivePath, "package.json").toString("utf8"));

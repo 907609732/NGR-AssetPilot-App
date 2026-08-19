@@ -3,15 +3,35 @@ const path = require("node:path");
 const projectRoot = path.resolve(__dirname, "..");
 const packageJson = require(path.join(projectRoot, "package.json"));
 const edition = process.env.NGR_BUILD_EDITION;
-if (!['dev', 'test'].includes(edition)) throw new Error('NGR_BUILD_EDITION 必须是 dev 或 test');
+const editionConfig = {
+  prod: {
+    appId: "com.chenyuecai.ngrassetpilot",
+    productName: "NGR AssetPilot",
+    packageName: "ngr-assetpilot",
+    main: "desktop/main/prod-index.mjs",
+    artifactBase: `NGR-AssetPilot-${packageJson.version}`,
+  },
+  dev: {
+    appId: "com.chenyuecai.ngrassetpilot.dev",
+    productName: "NGR AssetPilot Dev",
+    packageName: "ngr-assetpilot-dev",
+    main: "desktop/main/index.mjs",
+    artifactBase: `NGR-AssetPilot-Dev-${packageJson.version}`,
+  },
+  test: {
+    appId: "com.chenyuecai.ngrassetpilot.test",
+    productName: "NGR AssetPilot Test",
+    packageName: "ngr-assetpilot-test",
+    main: "desktop/main/test-index.mjs",
+    artifactBase: `NGR-AssetPilot-Test-${packageJson.version}`,
+  },
+}[edition];
+if (!editionConfig) throw new Error('NGR_BUILD_EDITION 必须是 prod、dev 或 test');
 
-const isTest = edition === 'test';
-const editionLabel = isTest ? 'Test' : 'Dev';
-const productName = `NGR AssetPilot ${editionLabel}`;
-const artifactBase = `NGR-AssetPilot-${editionLabel}-${packageJson.version}`;
+const { appId, productName, packageName, main, artifactBase } = editionConfig;
 
 module.exports = {
-  appId: `com.chenyuecai.ngrassetpilot.${edition}`,
+  appId,
   productName,
   executableName: productName,
   electronVersion: "43.4.1",
@@ -26,9 +46,9 @@ module.exports = {
   buildDependenciesFromSource: false,
   removePackageScripts: true,
   extraMetadata: {
-    name: `ngr-assetpilot-${edition}`,
+    name: packageName,
     version: packageJson.version,
-    main: isTest ? "desktop/main/test-index.mjs" : "desktop/main/index.mjs",
+    main,
   },
   directories: {
     app: projectRoot,

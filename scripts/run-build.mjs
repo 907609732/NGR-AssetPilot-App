@@ -6,8 +6,8 @@ import { createProjectEnvironment, projectPaths, projectRoot } from "./project-e
 import { scanArtifacts } from "./scan-package-secrets.mjs";
 
 const edition = process.argv[2];
-if (!['dev', 'test'].includes(edition) || process.argv.length !== 3) {
-  throw new Error("请使用 npm run build:dev 或 npm run build:test");
+if (!["prod", "dev", "test"].includes(edition) || process.argv.length !== 3) {
+  throw new Error("请使用 npm run build:prod、npm run build:dev 或 npm run build:test");
 }
 
 const artifactDirectory = projectPaths[`${edition}Artifacts`];
@@ -40,8 +40,9 @@ function acquireBuildLock() {
 
 function safelyResetOutput(directory) {
   const resolved = path.resolve(directory);
-  const allowed = [projectPaths.devArtifacts, projectPaths.testArtifacts].map((value) => path.resolve(value));
-  if (!allowed.includes(resolved)) throw new Error("拒绝清理开发版/测试版产物目录以外的位置");
+  const allowed = [projectPaths.prodArtifacts, projectPaths.devArtifacts, projectPaths.testArtifacts]
+    .map((value) => path.resolve(value));
+  if (!allowed.includes(resolved)) throw new Error("拒绝清理正式版/开发版/测试版产物目录以外的位置");
   fs.rmSync(resolved, { recursive: true, force: true });
   fs.mkdirSync(resolved, { recursive: true });
 }
@@ -64,7 +65,8 @@ try {
   runBuilder(env);
   const manifest = generateReleaseMetadata(edition);
   const scan = scanArtifacts({ edition, env });
-  console.log(`${edition === 'test' ? '测试版' : '开发版'}构建完成：${manifest.version}；凭据扫描 ${scan.fileCount} 个文件。`);
+  const editionName = edition === "prod" ? "正式版" : edition === "test" ? "测试版" : "开发版";
+  console.log(`${editionName}构建完成：${manifest.version}；凭据扫描 ${scan.fileCount} 个文件。`);
 } finally {
   releaseBuildLock();
 }
