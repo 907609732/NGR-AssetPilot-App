@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>启动 NGR AssetPilot｜AI资源领航 V2.26</title>
+    <meta http-equiv="refresh" content="0; url=app/index.html" />
+    <style>
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        background: #f5f8fa;
+        color: #17232b;
+        font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      }
+
+      main {
+        width: min(520px, calc(100vw - 40px));
+        padding: 32px;
+        border: 1px solid #d8e3e8;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 18px 42px rgba(23, 35, 43, 0.12);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .brand-logo {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        flex: 0 0 48px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.48);
+        border-radius: 15px;
+        background: linear-gradient(145deg, #0f646d 0%, #177e89 48%, #28a9a5 100%);
+        box-shadow: 0 10px 24px rgba(15, 100, 109, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+      }
+
+      .brand-logo::before {
+        content: "";
+        position: absolute;
+        inset: 9px;
+        border: 1px solid rgba(255, 255, 255, 0.44);
+        border-radius: 50%;
+      }
+
+      .brand-logo::after {
+        content: "";
+        position: absolute;
+        width: 15px;
+        height: 26px;
+        background: #fff;
+        clip-path: polygon(50% 0, 100% 100%, 50% 77%, 0 100%);
+        transform: rotate(28deg);
+        filter: drop-shadow(0 2px 2px rgba(5, 64, 72, 0.2));
+      }
+
+      .brand-logo span {
+        position: relative;
+        z-index: 1;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #bdf8ea;
+        box-shadow: 0 0 0 2px rgba(15, 100, 109, 0.42);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+      }
+
+      h1 strong {
+        color: #0f646d;
+        font-weight: 760;
+      }
+
+      p {
+        margin: 8px 0;
+        color: #60717b;
+        line-height: 1.7;
+      }
+
+      a {
+        color: #0f8790;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <div class="brand-logo" role="img" aria-label="NGR AssetPilot 品牌标志"><span></span></div>
+        <h1>NGR AssetPilot｜<strong>AI资源领航</strong> V2.26</h1>
+      </div>
+      <p>正在启动工具，请稍候。</p>
+      <p>如果没有自动打开，请点击 <a href="app/index.html">这里启动</a>。</p>
+    </main>
+    <script>
+      window.location.replace("app/index.html");
+    </script>
+  </body>
+</html>

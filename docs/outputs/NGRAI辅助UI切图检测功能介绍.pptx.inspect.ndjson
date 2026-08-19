@@ -1,0 +1,175 @@
+{"kind":"deck","id":"pr/wt0xe5","name":"Deck"}
+{"kind":"layout","layoutId":"2c52ba3b-66e2-4139-9d92-924afbf9291a","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"7271cd50-b4d6-485b-b3a9-067b08a4f6be","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/sqd6tk","slide":1,"title":"普通用户教程","textShapes":6}
+{"kind":"textbox","id":"sh/3itgfmlk","slide":1,"text":"普通用户教程","textPreview":"普通用户教程","textChars":6,"textLines":1,"bbox":[56,58,132,34]}
+{"kind":"textbox","id":"sh/w3m94fu1","slide":1,"text":"UI切图检测\n功能介绍","textPreview":"UI切图检测 | 功能介绍","textChars":11,"textLines":2,"bbox":[56,150,540,180]}
+{"kind":"textbox","id":"sh/loj2t83i","slide":1,"text":"提交资源前，快速检查格式、尺寸、警告项和疑似重复资源。","textPreview":"提交资源前，快速检查格式、尺寸、警告项和疑似重复资源。","textChars":27,"textLines":1,"bbox":[60,366,560,72]}
+{"kind":"shape","id":"sh/e9cvixcz","slide":1,"bbox":[60,478,380,2]}
+{"kind":"textbox","id":"sh/3q5o7qpg","slide":1,"text":"适用版本 V2.18","textPreview":"适用版本 V2.18","textChars":10,"textLines":1,"bbox":[60,510,240,34]}
+{"kind":"shape","id":"sh/wb2hwfyx","slide":1,"bbox":[666,72,540,540]}
+{"kind":"textbox","id":"sh/ahoza1gv","slide":1,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/32lszqtc","slide":1,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"image","id":"im/gfmlkjm1","slide":1,"name":"","geometry":"roundRect","alt":"软件主界面","bbox":[676,82,520,520]}
+{"kind":"notes","id":"nt/sqd6tk","slide":1,"text":""}
+{"kind":"slide","id":"sl/1x8lcq","slide":2,"title":"什么时候用切图检测？","textShapes":16}
+{"kind":"textbox","id":"sh/1kre1w7m","slide":2,"text":"什么时候用切图检测？","textPreview":"什么时候用切图检测？","textChars":10,"textLines":1,"bbox":[56,52,720,58]}
+{"kind":"textbox","id":"sh/uxc3ylc7","slide":2,"text":"在资源提交前做一次检查，先发现问题，再回到设计工具修正。","textPreview":"在资源提交前做一次检查，先发现问题，再回到设计工具修正。","textChars":28,"textLines":1,"bbox":[58,116,760,34]}
+{"kind":"textbox","id":"sh/ji5snelo","slide":2,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[76,204,38,38]}
+{"kind":"textbox","id":"sh/crmhk3q5","slide":2,"text":"格式","textPreview":"格式","textChars":2,"textLines":1,"bbox":[130,202,475,28]}
+{"kind":"textbox","id":"sh/1cfa9w3m","slide":2,"text":"检查是否符合项目要求，例如 NGR 只允许 PNG。","textPreview":"检查是否符合项目要求，例如 NGR 只允许 PNG。","textChars":26,"textLines":1,"bbox":[130,234,475,34]}
+{"kind":"textbox","id":"sh/ulwval87","slide":2,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[76,280,38,38]}
+{"kind":"textbox","id":"sh/j6tovaho","slide":2,"text":"尺寸","textPreview":"尺寸","textChars":2,"textLines":1,"bbox":[130,278,475,28]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":2,"text":"检查单数尺寸、大图阈值、图标标准尺寸等。","textPreview":"检查单数尺寸、大图阈值、图标标准尺寸等。","textChars":20,"textLines":1,"bbox":[130,310,475,34]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":2,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[76,356,38,38]}
+{"kind":"textbox","id":"sh/psfil0rq","slide":2,"text":"警告","textPreview":"警告","textChars":2,"textLines":1,"bbox":[130,354,475,28]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":2,"text":"找出允许但不推荐的资源，提交前人工确认。","textPreview":"找出允许但不推荐的资源，提交前人工确认。","textChars":20,"textLines":1,"bbox":[130,386,475,34]}
+{"kind":"textbox","id":"sh/7mp0bi9s","slide":2,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[76,432,38,38]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":2,"text":"重复","textPreview":"重复","textChars":2,"textLines":1,"bbox":[130,430,475,28]}
+{"kind":"textbox","id":"sh/pg3ex0nu","slide":2,"text":"开启后辅助发现疑似重复或相似图片。","textPreview":"开启后辅助发现疑似重复或相似图片。","textChars":17,"textLines":1,"bbox":[130,462,475,34]}
+{"kind":"shape","id":"sh/wval87ed","slide":2,"bbox":[654,160,540,410]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":2,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/lc7u54zi","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"image","id":"im/sji5snel","slide":2,"name":"","geometry":"roundRect","alt":"检测页面空状态","bbox":[664,170,520,390]}
+{"kind":"notes","id":"nt/1x8lcq","slide":2,"text":""}
+{"kind":"slide","id":"sl/g58g3x","slide":3,"title":"入口和页面结构","textShapes":10}
+{"kind":"textbox","id":"sh/sfil0rqd","slide":3,"text":"入口和页面结构","textPreview":"入口和页面结构","textChars":7,"textLines":1,"bbox":[56,52,720,58]}
+{"kind":"textbox","id":"sh/zupwb2hw","slide":3,"text":"普通用户主要看三个区域：顶部选择检测方式，中间上传文件，下方看结果。","textPreview":"普通用户主要看三个区域：顶部选择检测方式，中间上传文件，下方看结果。","textChars":34,"textLines":1,"bbox":[58,116,850,34]}
+{"kind":"shape","id":"sh/a9w3m94f","slide":3,"bbox":[54,156,780,496]}
+{"kind":"textbox","id":"sh/orytsvu9","slide":3,"text":"1 选择检测模式","textPreview":"1 选择检测模式","textChars":8,"textLines":1,"bbox":[866,210,184,34]}
+{"kind":"textbox","id":"sh/z61032ls","slide":3,"text":"检测项目组、检测模式、重复检测都在页面顶部。","textPreview":"检测项目组、检测模式、重复检测都在页面顶部。","textChars":22,"textLines":1,"bbox":[868,254,300,70]}
+{"kind":"textbox","id":"sh/al87ed8b","slide":3,"text":"2 上传资源","textPreview":"2 上传资源","textChars":6,"textLines":1,"bbox":[866,358,142,34]}
+{"kind":"textbox","id":"sh/hk3q5o7q","slide":3,"text":"上传文件夹，也可以补充单张图片。","textPreview":"上传文件夹，也可以补充单张图片。","textChars":16,"textLines":1,"bbox":[868,402,300,58]}
+{"kind":"textbox","id":"sh/oza1gvy9","slide":3,"text":"3 查看结果","textPreview":"3 查看结果","textChars":6,"textLines":1,"bbox":[866,504,142,34]}
+{"kind":"textbox","id":"sh/29gr2p8n","slide":3,"text":"检测完成后，在下方列表查看问题和警告。","textPreview":"检测完成后，在下方列表查看问题和警告。","textChars":19,"textLines":1,"bbox":[868,548,300,64]}
+{"kind":"textbox","id":"sh/vu9knih4","slide":3,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/kf6dcbul","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"image","id":"im/g3ex0nux","slide":3,"name":"","geometry":"roundRect","alt":"检测页面结构","bbox":[64,166,760,476]}
+{"kind":"notes","id":"nt/g58g3x","slide":3,"text":""}
+{"kind":"slide","id":"sl/bu78f2","slide":4,"title":"先选检测方式","textShapes":12}
+{"kind":"textbox","id":"sh/wval87ed","slide":4,"text":"先选检测方式","textPreview":"先选检测方式","textChars":6,"textLines":1,"bbox":[56,52,600,58]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":4,"text":"检测前确认项目组、检测模式和是否开启重复检测。","textPreview":"检测前确认项目组、检测模式和是否开启重复检测。","textChars":23,"textLines":1,"bbox":[58,116,760,34]}
+{"kind":"shape","id":"sh/epkzupwb","slide":4,"bbox":[590,128,588,460]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":4,"text":"NGR切图规范","textPreview":"NGR切图规范","textChars":7,"textLines":1,"bbox":[76,190,250,34]}
+{"kind":"textbox","id":"sh/7mp0bi9s","slide":4,"text":"检查 PNG、双数尺寸、大图规则","textPreview":"检查 PNG、双数尺寸、大图规则","textChars":16,"textLines":1,"bbox":[76,228,430,32]}
+{"kind":"shape","id":"sh/e1w7mp0b","slide":4,"bbox":[76,264,410,2]}
+{"kind":"textbox","id":"sh/l0rqd4vm","slide":4,"text":"策划配置切图规范","textPreview":"策划配置切图规范","textChars":8,"textLines":1,"bbox":[76,272,250,34]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":4,"text":"检查尺寸是否符合配置资源要求","textPreview":"检查尺寸是否符合配置资源要求","textChars":14,"textLines":1,"bbox":[76,310,430,32]}
+{"kind":"shape","id":"sh/ixczed8v","slide":4,"bbox":[76,346,410,2]}
+{"kind":"textbox","id":"sh/bi9s36hc","slide":4,"text":"图标尺寸检测规范","textPreview":"图标尺寸检测规范","textChars":8,"textLines":1,"bbox":[76,354,250,34]}
+{"kind":"textbox","id":"sh/032lszqt","slide":4,"text":"检查正方形和标准图标尺寸","textPreview":"检查正方形和标准图标尺寸","textChars":12,"textLines":1,"bbox":[76,392,430,32]}
+{"kind":"shape","id":"sh/tovahoza","slide":4,"bbox":[76,428,410,2]}
+{"kind":"textbox","id":"sh/i9s36hcr","slide":4,"text":"重复检测","textPreview":"重复检测","textChars":4,"textLines":1,"bbox":[76,436,250,34]}
+{"kind":"textbox","id":"sh/bulwval8","slide":4,"text":"关闭最快，低/中/高逐级更敏感","textPreview":"关闭最快，低/中/高逐级更敏感","textChars":15,"textLines":1,"bbox":[76,474,430,32]}
+{"kind":"shape","id":"sh/0fepkzup","slide":4,"bbox":[76,510,410,2]}
+{"kind":"textbox","id":"sh/p0bi9s36","slide":4,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/idonyd0z","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"image","id":"im/k3q5o7qp","slide":4,"name":"","geometry":"roundRect","alt":"检测方式选择","bbox":[600,138,568,440]}
+{"kind":"notes","id":"nt/bu78f2","slide":4,"text":""}
+{"kind":"slide","id":"sl/bxyyqt","slide":5,"title":"上传后，直接看检测结果","textShapes":14}
+{"kind":"textbox","id":"sh/l87ed8ba","slide":5,"text":"上传后，直接看检测结果","textPreview":"上传后，直接看检测结果","textChars":11,"textLines":1,"bbox":[56,52,760,58]}
+{"kind":"textbox","id":"sh/ahoza1gv","slide":5,"text":"列表会显示预览、尺寸、问题提示和警告提示。","textPreview":"列表会显示预览、尺寸、问题提示和警告提示。","textChars":21,"textLines":1,"bbox":[58,116,760,34]}
+{"kind":"shape","id":"sh/32lszqtc","slide":5,"bbox":[54,154,780,494]}
+{"kind":"textbox","id":"sh/lkjm1cfa","slide":5,"text":"优先看两件事","textPreview":"优先看两件事","textChars":6,"textLines":1,"bbox":[874,184,260,34]}
+{"kind":"textbox","id":"sh/at47y1kr","slide":5,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[876,254,38,38]}
+{"kind":"textbox","id":"sh/3ex0nuxc","slide":5,"text":"问题图片","textPreview":"问题图片","textChars":4,"textLines":1,"bbox":[930,252,270,28]}
+{"kind":"textbox","id":"sh/w3m94fu1","slide":5,"text":"通常需要重新导出、调整尺寸或改格式。","textPreview":"通常需要重新导出、调整尺寸或改格式。","textChars":18,"textLines":1,"bbox":[930,284,270,34]}
+{"kind":"textbox","id":"sh/loj2t83i","slide":5,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[876,330,38,38]}
+{"kind":"textbox","id":"sh/9knih4by","slide":5,"text":"警告图片","textPreview":"警告图片","textChars":4,"textLines":1,"bbox":[930,328,270,28]}
+{"kind":"textbox","id":"sh/kzupwb2h","slide":5,"text":"允许但不推荐，按项目要求决定是否优化。","textPreview":"允许但不推荐，按项目要求决定是否优化。","textChars":19,"textLines":1,"bbox":[930,360,270,34]}
+{"kind":"textbox","id":"sh/re1w7mp0","slide":5,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[876,406,38,38]}
+{"kind":"textbox","id":"sh/2t83itgf","slide":5,"text":"疑似重复","textPreview":"疑似重复","textChars":4,"textLines":1,"bbox":[930,404,270,28]}
+{"kind":"textbox","id":"sh/9w3m94fu","slide":5,"text":"只是辅助判断，需要人工对比确认。","textPreview":"只是辅助判断，需要人工对比确认。","textChars":16,"textLines":1,"bbox":[930,436,270,34]}
+{"kind":"textbox","id":"sh/kb6xkf6d","slide":5,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/rqd4vmtw","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"image","id":"im/twra5gbq","slide":5,"name":"","geometry":"roundRect","alt":"检测结果列表","bbox":[64,164,760,474]}
+{"kind":"notes","id":"nt/bxyyqt","slide":5,"text":""}
+{"kind":"slide","id":"sl/zjygjb","slide":6,"title":"不懂提示，就先看规范","textShapes":6}
+{"kind":"textbox","id":"sh/mhk3q5o7","slide":6,"text":"不懂提示，就先看规范","textPreview":"不懂提示，就先看规范","textChars":10,"textLines":1,"bbox":[56,52,760,58]}
+{"kind":"textbox","id":"sh/t83itgfm","slide":6,"text":"“查看检测规范”会展开当前模式的规则说明，适合解释为什么被标记。","textPreview":"“查看检测规范”会展开当前模式的规则说明，适合解释为什么被标记。","textChars":32,"textLines":1,"bbox":[58,116,900,34]}
+{"kind":"shape","id":"sh/4nap4r65","slide":6,"bbox":[62,164,802,470]}
+{"kind":"textbox","id":"sh/m58z25kb","slide":6,"text":"规范里会说明","textPreview":"规范里会说明","textChars":6,"textLines":1,"bbox":[902,192,260,36]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":6,"text":"PNG 格式要求\n双数尺寸要求\n2048 大图警告\n图标标准尺寸\n重复资源判断方式","textPreview":"PNG 格式要求 | 双数尺寸要求 | 2048 大图警告 | 图标标准尺寸 | 重复资源判断方式","textChars":41,"textLines":5,"bbox":[906,252,300,230]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":6,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/bm58z25k","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"image","id":"im/eloj2t83","slide":6,"name":"","geometry":"roundRect","alt":"检测规范展开","bbox":[72,174,782,450]}
+{"kind":"notes","id":"nt/zjygjb","slide":6,"text":""}
+{"kind":"slide","id":"sl/y0d3ef","slide":7,"title":"用筛选按钮集中处理","textShapes":6}
+{"kind":"textbox","id":"sh/7u54zido","slide":7,"text":"用筛选按钮集中处理","textPreview":"用筛选按钮集中处理","textChars":9,"textLines":1,"bbox":[56,52,760,58]}
+{"kind":"textbox","id":"sh/wfyxobm5","slide":7,"text":"先看问题，再看警告，处理顺序会更清楚。","textPreview":"先看问题，再看警告，处理顺序会更清楚。","textChars":19,"textLines":1,"bbox":[58,116,760,34]}
+{"kind":"shape","id":"sh/l0rqd4vm","slide":7,"bbox":[52,166,568,418]}
+{"kind":"shape","id":"sh/36hcrmhk","slide":7,"bbox":[666,166,568,418]}
+{"kind":"textbox","id":"sh/lc7u54zi","slide":7,"text":"只看问题图片","textPreview":"只看问题图片","textChars":6,"textLines":1,"bbox":[226,598,164,34]}
+{"kind":"textbox","id":"sh/epkzupwb","slide":7,"text":"只看警告图片","textPreview":"只看警告图片","textChars":6,"textLines":1,"bbox":[840,598,164,34]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":7,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/nqxs72x4","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"image","id":"im/n29gr2p8","slide":7,"name":"","geometry":"roundRect","alt":"只看问题图片","bbox":[62,176,548,398]}
+{"kind":"image","id":"im/58z25kb6","slide":7,"name":"","geometry":"roundRect","alt":"只看警告图片","bbox":[676,176,548,398]}
+{"kind":"notes","id":"nt/y0d3ef","slide":7,"text":""}
+{"kind":"slide","id":"sl/b9ei7y","slide":8,"title":"常见提示怎么处理","textShapes":14}
+{"kind":"textbox","id":"sh/je9cvixc","slide":8,"text":"常见提示怎么处理","textPreview":"常见提示怎么处理","textChars":8,"textLines":1,"bbox":[56,52,760,58]}
+{"kind":"textbox","id":"sh/8z25kb6x","slide":8,"text":"检测提示是辅助判断，最终以项目规范和负责人要求为准。","textPreview":"检测提示是辅助判断，最终以项目规范和负责人要求为准。","textChars":26,"textLines":1,"bbox":[58,116,820,34]}
+{"kind":"shape","id":"sh/1gvy90je","slide":8,"bbox":[78,178,1030,56]}
+{"kind":"textbox","id":"sh/q1orytsv","slide":8,"text":"非 PNG 格式","textPreview":"非 PNG 格式","textChars":8,"textLines":1,"bbox":[104,188,310,34]}
+{"kind":"textbox","id":"sh/fmlkjm1c","slide":8,"text":"重新导出为 PNG","textPreview":"重新导出为 PNG","textChars":9,"textLines":1,"bbox":[468,190,520,32]}
+{"kind":"shape","id":"sh/87ed8bat","slide":8,"bbox":[78,250,1030,56]}
+{"kind":"textbox","id":"sh/xs72x4na","slide":8,"text":"分辨率不是双数","textPreview":"分辨率不是双数","textChars":7,"textLines":1,"bbox":[104,260,310,34]}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":8,"text":"调整宽高，避免单数","textPreview":"调整宽高，避免单数","textChars":9,"textLines":1,"bbox":[468,262,520,32]}
+{"kind":"shape","id":"sh/fyxobm58","slide":8,"bbox":[78,322,1030,56]}
+{"kind":"textbox","id":"sh/7mp0bi9s","slide":8,"text":"单边超过上限","textPreview":"单边超过上限","textChars":6,"textLines":1,"bbox":[104,332,310,34]}
+{"kind":"textbox","id":"sh/e1w7mp0b","slide":8,"text":"拆分图片或重新切图","textPreview":"拆分图片或重新切图","textChars":9,"textLines":1,"bbox":[468,334,520,32]}
+{"kind":"shape","id":"sh/psfil0rq","slide":8,"bbox":[78,394,1030,56]}
+{"kind":"textbox","id":"sh/w7mp0bi9","slide":8,"text":"黄色警告","textPreview":"黄色警告","textChars":4,"textLines":1,"bbox":[104,404,310,34]}
+{"kind":"textbox","id":"sh/7adsji5s","slide":8,"text":"允许但不推荐，按要求优化","textPreview":"允许但不推荐，按要求优化","textChars":12,"textLines":1,"bbox":[468,406,520,32]}
+{"kind":"shape","id":"sh/epkzupwb","slide":8,"bbox":[78,466,1030,56]}
+{"kind":"textbox","id":"sh/pg3ex0nu","slide":8,"text":"疑似重复资源","textPreview":"疑似重复资源","textChars":6,"textLines":1,"bbox":[104,476,310,34]}
+{"kind":"textbox","id":"sh/wval87ed","slide":8,"text":"人工对比，确认是否保留","textPreview":"人工对比，确认是否保留","textChars":11,"textLines":1,"bbox":[468,478,520,32]}
+{"kind":"textbox","id":"sh/36hcrmhk","slide":8,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/eloj2t83","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"notes","id":"nt/b9ei7y","slide":8,"text":""}
+{"kind":"slide","id":"sl/9zhjlw","slide":9,"title":"推荐操作流程","textShapes":19}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":9,"text":"推荐操作流程","textPreview":"推荐操作流程","textChars":6,"textLines":1,"bbox":[56,52,760,58]}
+{"kind":"textbox","id":"sh/94fu18jq","slide":9,"text":"按这个顺序操作，普通用户基本不会漏步骤。","textPreview":"按这个顺序操作，普通用户基本不会漏步骤。","textChars":20,"textLines":1,"bbox":[58,116,760,34]}
+{"kind":"textbox","id":"sh/kjm1cfa9","slide":9,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[88,190,38,38]}
+{"kind":"textbox","id":"sh/ra5gbq1o","slide":9,"text":"进入 UI切图检测","textPreview":"进入 UI切图检测","textChars":9,"textLines":1,"bbox":[142,188,500,28]}
+{"kind":"textbox","id":"sh/2p8nqxs7","slide":9,"text":"从主界面点击检测入口。","textPreview":"从主界面点击检测入口。","textChars":11,"textLines":1,"bbox":[142,220,500,34]}
+{"kind":"textbox","id":"sh/9gr2p8nq","slide":9,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[88,266,38,38]}
+{"kind":"textbox","id":"sh/gvy90je9","slide":9,"text":"选择检测模式","textPreview":"选择检测模式","textChars":6,"textLines":1,"bbox":[142,264,500,28]}
+{"kind":"textbox","id":"sh/re1w7mp0","slide":9,"text":"确认项目组、模式和重复检测。","textPreview":"确认项目组、模式和重复检测。","textChars":14,"textLines":1,"bbox":[142,296,500,34]}
+{"kind":"textbox","id":"sh/2t83itgf","slide":9,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[88,342,38,38]}
+{"kind":"textbox","id":"sh/sneloj2t","slide":9,"text":"上传资源文件夹","textPreview":"上传资源文件夹","textChars":7,"textLines":1,"bbox":[142,340,500,28]}
+{"kind":"textbox","id":"sh/l87ed8ba","slide":9,"text":"等待检测结果生成。","textPreview":"等待检测结果生成。","textChars":9,"textLines":1,"bbox":[142,372,500,34]}
+{"kind":"textbox","id":"sh/ahoza1gv","slide":9,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[88,418,38,38]}
+{"kind":"textbox","id":"sh/32lszqtc","slide":9,"text":"筛选问题和警告","textPreview":"筛选问题和警告","textChars":7,"textLines":1,"bbox":[142,416,500,28]}
+{"kind":"textbox","id":"sh/szqtcj6t","slide":9,"text":"记录需要修改的图片。","textPreview":"记录需要修改的图片。","textChars":10,"textLines":1,"bbox":[142,448,500,34]}
+{"kind":"textbox","id":"sh/lkjm1cfa","slide":9,"text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[88,494,38,38]}
+{"kind":"textbox","id":"sh/at47y1kr","slide":9,"text":"清空后继续下一批","textPreview":"清空后继续下一批","textChars":8,"textLines":1,"bbox":[142,492,500,28]}
+{"kind":"textbox","id":"sh/3ex0nuxc","slide":9,"text":"清空列表不会删除本地原图。","textPreview":"清空列表不会删除本地原图。","textChars":13,"textLines":1,"bbox":[142,524,500,34]}
+{"kind":"shape","id":"sh/w3m94fu1","slide":9,"bbox":[698,164,472,412]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":9,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"image","id":"im/ahoza1gv","slide":9,"name":"","geometry":"roundRect","alt":"图标尺寸检测模式","bbox":[708,174,452,392]}
+{"kind":"notes","id":"nt/9zhjlw","slide":9,"text":""}
+{"kind":"slide","id":"sl/027bix","slide":10,"title":"交付前检查清单","textShapes":15}
+{"kind":"textbox","id":"sh/4nap4r65","slide":10,"text":"交付前检查清单","textPreview":"交付前检查清单","textChars":7,"textLines":1,"bbox":[56,52,760,58]}
+{"kind":"textbox","id":"sh/b2hwfyxo","slide":10,"text":"检测不会修改图片，只帮你提前发现风险。","textPreview":"检测不会修改图片，只帮你提前发现风险。","textChars":19,"textLines":1,"bbox":[58,116,760,34]}
+{"kind":"shape","id":"sh/mhk3q5o7","slide":10,"bbox":[98,194,30,30]}
+{"kind":"textbox","id":"sh/twra5gbq","slide":10,"text":"✓","textPreview":"✓","textChars":1,"textLines":1,"bbox":[103,192,20,30]}
+{"kind":"textbox","id":"sh/4byhgn29","slide":10,"text":"是否选择了正确的检测项目组？","textPreview":"是否选择了正确的检测项目组？","textChars":14,"textLines":1,"bbox":[150,190,760,40]}
+{"kind":"shape","id":"sh/bq1oryts","slide":10,"bbox":[98,266,30,30]}
+{"kind":"textbox","id":"sh/m58z25kb","slide":10,"text":"✓","textPreview":"✓","textChars":1,"textLines":1,"bbox":[103,264,20,30]}
+{"kind":"textbox","id":"sh/tsvu9kni","slide":10,"text":"检测模式是否符合当前资源类型？","textPreview":"检测模式是否符合当前资源类型？","textChars":15,"textLines":1,"bbox":[150,262,760,40]}
+{"kind":"shape","id":"sh/47y1kre1","slide":10,"bbox":[98,338,30,30]}
+{"kind":"textbox","id":"sh/adsji5sn","slide":10,"text":"✓","textPreview":"✓","textChars":1,"textLines":1,"bbox":[103,336,20,30]}
+{"kind":"textbox","id":"sh/3ylc7u54","slide":10,"text":"问题图片是否已经全部处理？","textPreview":"问题图片是否已经全部处理？","textChars":13,"textLines":1,"bbox":[150,334,760,40]}
+{"kind":"shape","id":"sh/sji5snel","slide":10,"bbox":[98,410,30,30]}
+{"kind":"textbox","id":"sh/h4byhgn2","slide":10,"text":"✓","textPreview":"✓","textChars":1,"textLines":1,"bbox":[103,408,20,30]}
+{"kind":"textbox","id":"sh/a5gbq1or","slide":10,"text":"警告图片是否已经确认可以提交？","textPreview":"警告图片是否已经确认可以提交？","textChars":15,"textLines":1,"bbox":[150,406,760,40]}
+{"kind":"shape","id":"sh/3m94fu18","slide":10,"bbox":[98,482,30,30]}
+{"kind":"textbox","id":"sh/s72x4nap","slide":10,"text":"✓","textPreview":"✓","textChars":1,"textLines":1,"bbox":[103,480,20,30]}
+{"kind":"textbox","id":"sh/lszqtcj6","slide":10,"text":"疑似重复资源是否人工对比过？","textPreview":"疑似重复资源是否人工对比过？","textChars":14,"textLines":1,"bbox":[150,478,760,40]}
+{"kind":"shape","id":"sh/a1gvy90j","slide":10,"bbox":[98,594,680,2]}
+{"kind":"textbox","id":"sh/zidonyd0","slide":10,"text":"完成检查后，再提交资源。","textPreview":"完成检查后，再提交资源。","textChars":12,"textLines":1,"bbox":[98,614,520,38]}
+{"kind":"textbox","id":"sh/val87ed8","slide":10,"text":"NGRAI辅助UI切图命名工具 · UI切图检测","textPreview":"NGRAI辅助UI切图命名工具 · UI切图检测","textChars":24,"textLines":1,"bbox":[56,678,520,24]}
+{"kind":"textbox","id":"sh/6psfil0r","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1160,674,64,30]}
+{"kind":"notes","id":"nt/027bix","slide":10,"text":""}

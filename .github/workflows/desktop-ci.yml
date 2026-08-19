@@ -1,0 +1,46 @@
+name: Desktop CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      npm_config_cache: ${{ github.workspace }}\.cache\npm
+      ELECTRON_CACHE: ${{ github.workspace }}\.cache\electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}\.cache\ms-playwright
+      TEMP: ${{ github.workspace }}\.tmp
+      TMP: ${{ github.workspace }}\.tmp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare project-local directories
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force .cache/npm,.cache/electron,.cache/electron-builder,.cache/ms-playwright,.tmp,logs | Out-Null
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Verify environment and tests
+        run: |
+          npm run env:check
+          npm test
+      - name: Install website dependencies
+        working-directory: website
+        run: npm ci
+      - name: Verify V3 website
+        working-directory: website
+        run: |
+          npm run lint
+          npm test

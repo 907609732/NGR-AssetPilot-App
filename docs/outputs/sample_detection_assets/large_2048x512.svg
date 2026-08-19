@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="512" viewBox="0 0 2048 512">
+  <rect width="2048" height="512" fill="#eef2ff"/>
+  <rect x="96" y="120" width="1856" height="272" rx="36" fill="#5256a3"/>
+  <text x="1024" y="280" text-anchor="middle" font-family="Arial" font-size="82" fill="#ffffff">2048 Warning Demo</text>
+</svg>
