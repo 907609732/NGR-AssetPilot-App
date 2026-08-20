@@ -29,6 +29,7 @@ function init() {
   renderAssetList();
   initializeWorkspaceMigration();
   void initLocalImageSearch();
+  void window.NgrExternalAppLauncher?.init();
   void window.initializeUpdates();
 }
 

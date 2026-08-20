@@ -37,6 +37,10 @@ const channels = Object.freeze({
   updaterGetState: "ngr:updater:get-state",
   updaterStateChanged: "ngr:updater:state-changed",
   shellOpenExternal: "ngr:shell:open-external",
+  externalAppsList: "ngr:external-apps:list",
+  externalAppsChoose: "ngr:external-apps:choose",
+  externalAppsRemove: "ngr:external-apps:remove",
+  externalAppsLaunch: "ngr:external-apps:launch",
   localImageSearchGetModelStatus: "ngr:local-image-search:get-model-status",
   localImageSearchListModels: "ngr:local-image-search:list-models",
   localImageSearchValidateModel: "ngr:local-image-search:validate-model",
@@ -130,6 +134,12 @@ const api = deepFreeze({
         channels.shellOpenExternal,
         typeof urlOrRequest === "string" ? { url: urlOrRequest } : urlOrRequest,
       ),
+  },
+  externalApps: {
+    list: () => invoke(channels.externalAppsList),
+    choose: (request) => invoke(channels.externalAppsChoose, request),
+    remove: (request) => invoke(channels.externalAppsRemove, request),
+    launch: (request) => invoke(channels.externalAppsLaunch, request),
   },
   localImageSearch: {
     getModelStatus: (request) => invoke(channels.localImageSearchGetModelStatus, request),

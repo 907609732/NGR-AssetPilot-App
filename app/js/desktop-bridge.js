@@ -277,6 +277,14 @@
     return true;
   }
 
+  const externalApps = Object.freeze({
+    isAvailable: () => hasCapability("externalApps.list"),
+    list: () => invoke("externalApps.list"),
+    choose: (request) => invoke("externalApps.choose", request),
+    remove: (request) => invoke("externalApps.remove", request),
+    launch: (request) => invoke("externalApps.launch", request),
+  });
+
   const localImageSearch = Object.freeze({
     isAvailable: () => hasCapability("localImageSearch.getModelStatus"),
     getModelStatus: (request) => invoke("localImageSearch.getModelStatus", request),
@@ -339,6 +347,7 @@
     onBeforeQuit,
     readyToQuit,
     openExternal,
+    externalApps,
     localImageSearch,
   });
   globalScope.ngrFetch = request;

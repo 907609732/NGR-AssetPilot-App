@@ -58,7 +58,7 @@ test("应用版本、界面标识和静态资源缓存版本保持一致", () =>
   assert.deepEqual([...new Set(visibleVersions)], [packageJson.version]);
 
   const cacheVersions = [...appIndex.matchAll(/[?&]v=V(\d+\.\d+\.\d+)/g)].map((match) => match[1]);
-  assert.equal(cacheVersions.length, 22);
+  assert.equal(cacheVersions.length, 23);
   assert.deepEqual([...new Set(cacheVersions)], [packageJson.version]);
 });
 

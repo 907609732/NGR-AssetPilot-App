@@ -58,6 +58,7 @@ export function registerDesktopIpc({
   lifecycle,
   environmentInfo,
   localImageSearch,
+  externalApps,
   runtimeLogger = null,
 }) {
   const registered = [];
@@ -156,6 +157,10 @@ export function registerDesktopIpc({
     await shell.openExternal(rawUrl, { activate: true });
     return { opened: true };
   });
+  handle(channels.externalAppsList, async () => externalApps.list());
+  handle(channels.externalAppsChoose, async (_event, payload) => externalApps.choose(payload));
+  handle(channels.externalAppsRemove, async (_event, payload) => externalApps.remove(payload));
+  handle(channels.externalAppsLaunch, async (_event, payload) => externalApps.launch(payload));
 
   handle(channels.localImageSearchGetModelStatus, async (_event, payload) => localImageSearch.getModelStatus(payload));
   handle(channels.localImageSearchListModels, async () => localImageSearch.listModels());

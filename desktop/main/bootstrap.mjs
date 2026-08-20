@@ -8,6 +8,7 @@ import { errorCodeOnly } from "../shared/core.mjs";
 import { BackupFileService } from "../services/backup-files.mjs";
 import { CredentialStore } from "../services/credential-store.mjs";
 import { DirectoryTokenStore } from "../services/directory-tokens.mjs";
+import { ExternalAppRegistry } from "../services/external-app-registry.mjs";
 import { NetworkClient } from "../services/network-client.mjs";
 import { ProviderRegistry } from "../services/provider-registry.mjs";
 import { RuntimeLogger } from "../services/runtime-logger.mjs";
@@ -172,6 +173,13 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
       : null,
   });
   const directoryTokens = new DirectoryTokenStore();
+  const externalApps = new ExternalAppRegistry({
+    userDataPath: app.getPath("userData"),
+    dialog,
+    shell,
+    getWindow: () => mainWindow,
+  });
+  await externalApps.initialize();
   const networkClient = new NetworkClient({
     fetchImpl: net.fetch.bind(net),
     providerRegistry,
@@ -255,6 +263,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     lifecycle,
     environmentInfo,
     localImageSearch,
+    externalApps,
     runtimeLogger,
   });
 

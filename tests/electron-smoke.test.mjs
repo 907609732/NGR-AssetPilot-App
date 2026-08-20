@@ -82,6 +82,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
       "backup",
       "credentials",
       "environment",
+      "externalApps",
       "files",
       "localImageSearch",
       "network",
@@ -138,6 +139,8 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.equal(await window.locator("#feedbackFormLink").isHidden(), true);
     assert.equal(await window.locator("#workProjectName").inputValue(), "");
     assert.match(await window.locator(".toolbar-download-action").innerText(), /下载命名完成的图片/);
+    await window.locator("#externalAppMenu").waitFor({ state: "visible" });
+    assert.match(await window.locator("#externalAppPrimaryLabel").innerText(), /ArtHub/);
     await window.evaluate(() => {
       const image = new File(
         ['<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#0f766e"/></svg>'],

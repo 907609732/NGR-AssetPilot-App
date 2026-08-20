@@ -522,6 +522,23 @@
               </label>
               <button id="runSelectedNaming" class="primary-action" type="button">运行百度翻译API命名</button>
               <button id="stopNaming" class="danger-action hidden" type="button">终止命名</button>
+              <details id="externalAppMenu" class="compact-action-menu external-app-menu">
+                <summary id="externalAppPrimary" class="external-app-trigger" aria-label="打开快捷应用菜单" title="快速打开 ArtHub 或其他电脑软件">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5H5v14h14v-3M11 13 20 4m0 0h-6m6 0v6" /></svg>
+                  <span id="externalAppPrimaryLabel">打开 ArtHub</span>
+                  <svg class="menu-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+                </summary>
+                <div class="compact-menu-panel external-app-menu-panel">
+                  <div class="external-app-menu-head">
+                    <div><strong>快速打开应用</strong><small>命名完成后直接拉起上传工具</small></div>
+                    <button id="externalAppAdd" class="ghost-action compact-button" type="button">＋ 添加</button>
+                  </div>
+                  <div id="externalAppList" class="external-app-list" role="list">
+                    <p class="external-app-empty">正在读取电脑应用…</p>
+                  </div>
+                  <p id="externalAppStatus" class="external-app-status" aria-live="polite"></p>
+                </div>
+              </details>
               <details id="exportMenu" class="compact-action-menu export-action-menu">
                 <summary class="toolbar-download-action" aria-label="打开导出菜单" title="下载命名完成的图片">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1167,6 +1184,7 @@
     <script src="js/config.js?v=V3.0.7"></script>
     <script src="js/prefix-library.js?v=V3.0.7"></script>
     <script src="js/desktop-bridge.js?v=V3.0.7"></script>
+    <script src="js/external-app-launcher.js?v=V3.0.7"></script>
     <script src="js/updates.js?v=V3.0.7"></script>
     <script src="js/workspace-backup.js?v=V3.0.7"></script>
     <script src="js/state-dom.js?v=V3.0.7"></script>
