@@ -3231,6 +3231,12 @@ button:disabled {
   opacity: 0;
 }
 
+.local-search-dropzone-actions {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
 .local-search-dropzone img {
   max-width: 220px;
   max-height: 130px;

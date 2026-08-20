@@ -30,6 +30,7 @@
       "localSearchErrors", "localSearchImageTab", "localSearchTextTab", "localSearchImagePanel", "localSearchTextPanel",
       "localSearchDropzone", "localSearchImageInput", "localSearchQueryPreview", "localSearchTextInput",
       "localSearchTextSubmit", "localSearchQueryStatus", "localSearchResultCount", "localSearchResults",
+      "localSearchClearImageQuery",
       "localSearchResultsEmpty", "localSearchLibrarySelect", "localSearchGuideOverlay", "localSearchGuideClose", "localSearchGuideStart",
     ].forEach((id) => { nodes[id] = $(`#${id}`); });
   }
@@ -379,6 +380,19 @@
     state.resultUrls = [];
   }
 
+  function clearImageQuery() {
+    if (state.queryPreviewUrl) {
+      URL.revokeObjectURL(state.queryPreviewUrl);
+      state.queryPreviewUrl = "";
+    }
+    nodes.localSearchQueryPreview.src = "";
+    nodes.localSearchQueryPreview.classList.add("hidden");
+    if (nodes.localSearchImageInput) nodes.localSearchImageInput.value = "";
+    if (nodes.localSearchClearImageQuery) nodes.localSearchClearImageQuery.disabled = true;
+    clearResults();
+    showStatus("已清除查询图片，恢复到默认搜索态。", "");
+  }
+
   function clearResults() {
     clearResultUrls();
     nodes.localSearchResults.replaceChildren();
@@ -426,6 +440,7 @@
     state.queryPreviewUrl = URL.createObjectURL(file);
     nodes.localSearchQueryPreview.src = state.queryPreviewUrl;
     nodes.localSearchQueryPreview.classList.remove("hidden");
+    if (nodes.localSearchClearImageQuery) nodes.localSearchClearImageQuery.disabled = false;
     showStatus("正在本地计算图片向量并精确搜索…", "working");
     try {
       const result = await bridge().searchByImage({ libraryId: state.activeLibraryId, data: await file.arrayBuffer(), mimeType: file.type });
@@ -478,6 +493,10 @@
       event.preventDefault();
       nodes.localSearchDropzone.classList.remove("drag-over");
       searchImage(Array.from(event.dataTransfer?.files || []).find((file) => file.type.startsWith("image/")));
+    });
+    nodes.localSearchClearImageQuery?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      clearImageQuery();
     });
     document.addEventListener("paste", (event) => {
       if (!$("#localImageSearchView")?.classList.contains("active")) return;
