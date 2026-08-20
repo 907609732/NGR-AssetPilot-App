@@ -224,6 +224,8 @@ const els = {
   translatorSettings: document.querySelector("#translatorSettings"),
   translatorProvider: document.querySelector("#translatorProvider"),
   translatorProviderGroups: document.querySelectorAll("[data-provider-group]"),
+  baiduCredentialType: document.querySelector("#baiduCredentialType"),
+  baiduCredentialLabel: document.querySelector("#baiduCredentialLabel"),
   baiduTranslateAppId: document.querySelector("#baiduTranslateAppId"),
   baiduTranslateSecret: document.querySelector("#baiduTranslateSecret"),
   baiduTranslateEndpoint: document.querySelector("#baiduTranslateEndpoint"),

@@ -351,6 +351,24 @@ test("provider registry keeps secrets in DPAPI storage and exposes metadata only
     });
     assert.equal(resolved.url.href, "https://api.openai.com/v1/responses");
     assert.equal(resolved.headers.authorization, "Bearer provider-secret-test-only");
+    await registry.upsert({
+      provider: { id: "baidu", apiFormat: "baidu-ai" },
+      secretAction: "replace",
+      secret: { appId: "baidu-test-app", apiKey: "baidu-api-key-test-only" },
+    });
+    const baiduRequest = await registry.resolveRequest({
+      providerId: "baidu",
+      operation: "translate",
+      body: { q: "测试", from: "zh", to: "en" },
+    });
+    assert.equal(baiduRequest.url.href, "https://fanyi-api.baidu.com/ait/api/aiTextTranslate");
+    assert.equal(baiduRequest.method, "POST");
+    assert.equal(baiduRequest.headers.authorization, "Bearer baidu-api-key-test-only");
+    assert.equal(baiduRequest.headers["content-type"], "application/x-www-form-urlencoded");
+    assert.match(baiduRequest.body, /q=%E6%B5%8B%E8%AF%95/);
+    assert.match(baiduRequest.body, /appid=baidu-test-app/);
+    assert.match(baiduRequest.body, /model_type=llm/);
+    assert.equal(JSON.stringify(await registry.list()).includes("baidu-api-key-test-only"), false);
     assert.equal(validateProviderBaseUrl("http://127.0.0.1:11434/v1").allowLoopback, true);
     assert.throws(() => validateProviderBaseUrl("http://127.0.0.1/v1"), { code: "PROVIDER_PORT_REQUIRED" });
     assert.throws(() => validateProviderBaseUrl("https://192.0.2.8/v1"), { code: "PROVIDER_IP_NOT_ALLOWED" });

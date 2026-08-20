@@ -8,6 +8,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const workflow = fs.readFileSync(path.join(projectRoot, "app/js/ai-workflow.js"), "utf8");
 const translator = fs.readFileSync(path.join(projectRoot, "app/js/uploads-editor-translator.js"), "utf8");
 const knowledge = fs.readFileSync(path.join(projectRoot, "app/js/naming-knowledge.js"), "utf8");
+const index = fs.readFileSync(path.join(projectRoot, "app/index.html"), "utf8");
 
 test("百度 API 命名模式强制启用百度并且不再静默冒充本地命名", () => {
   assert.match(workflow, /activateBaiduTranslation\(\{ revealSettings: true \}\)/);
@@ -24,4 +25,11 @@ test("命名单词翻译支持回车并将 API 错误展示给用户", () => {
   assert.match(translator, /void runTranslatorNaming\(\)/);
   assert.match(translator, /翻译失败：\$\{error\?\.message/);
   assert.match(translator, /requireConfiguredProvider: true/);
+});
+
+test("百度翻译设置支持新版 API Key 和传统密钥两种鉴权", () => {
+  assert.match(index, /id="baiduCredentialType"/);
+  assert.match(index, /value="apiKey">新版 API Key/);
+  assert.match(index, /value="legacy">App ID \+ 传统密钥/);
+  assert.match(translator, /aiTextTranslate/);
 });

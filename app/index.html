@@ -875,12 +875,19 @@
               </select>
             </label>
             <label data-provider-group="baidu">
+              <span>百度鉴权方式</span>
+              <select id="baiduCredentialType">
+                <option value="apiKey">新版 API Key（推荐）</option>
+                <option value="legacy">App ID + 传统密钥</option>
+              </select>
+            </label>
+            <label data-provider-group="baidu">
               <span>百度 App ID</span>
               <input id="baiduTranslateAppId" type="text" placeholder="请输入百度翻译 App ID" />
             </label>
             <label data-provider-group="baidu">
-              <span>百度密钥</span>
-              <input id="baiduTranslateSecret" type="password" placeholder="请输入百度翻译密钥" />
+              <span id="baiduCredentialLabel">百度 API Key</span>
+              <input id="baiduTranslateSecret" type="password" placeholder="请输入百度大模型翻译 API Key" />
             </label>
             <label data-provider-group="baidu">
               <span>接口地址</span>

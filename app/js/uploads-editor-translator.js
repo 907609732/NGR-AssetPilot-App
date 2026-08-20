@@ -167,6 +167,7 @@ function bindTranslator() {
     requestAnimationFrame(constrainTranslatorPanelToViewport);
   });
   els.translatorProvider.addEventListener("change", syncTranslatorProviderFields);
+  els.baiduCredentialType?.addEventListener("change", syncBaiduCredentialFields);
   els.saveTranslatorSettings.addEventListener("click", async () => {
     translationSettings = collectTranslationSettings();
     try {
@@ -353,6 +354,21 @@ function syncTranslatorProviderFields() {
     node.classList.toggle("hidden", group !== provider);
   });
   els.testTranslatorSettings.classList.toggle("hidden", provider === "local");
+  syncBaiduCredentialFields();
+}
+
+function syncBaiduCredentialFields() {
+  const type = els.baiduCredentialType?.value === "legacy" ? "legacy" : "apiKey";
+  if (els.baiduCredentialLabel) els.baiduCredentialLabel.textContent = type === "apiKey" ? "百度 API Key" : "百度传统密钥";
+  if (els.baiduTranslateSecret && !translationSettings.hasSecret) {
+    els.baiduTranslateSecret.placeholder = type === "apiKey" ? "请输入百度大模型翻译 API Key" : "请输入百度传统密钥";
+  }
+  if (els.baiduTranslateEndpoint) {
+    els.baiduTranslateEndpoint.value = type === "apiKey"
+      ? "https://fanyi-api.baidu.com/ait/api/aiTextTranslate"
+      : "https://fanyi-api.baidu.com/api/trans/vip/translate";
+    els.baiduTranslateEndpoint.readOnly = true;
+  }
 }
 
 async function applyTranslatorNameToSelectedAsset() {
