@@ -4202,9 +4202,52 @@ button:disabled {
 .prefix-library-add-row input { min-height: 42px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; }
 
 .general-settings-view,
+.api-settings-view,
 .local-search-settings-view { padding: 16px 8px 28px; }
 .general-settings-grid { display: grid; gap: 16px; }
 .general-settings-grid .workspace-migration-card { margin-top: 0; }
+
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.settings-tabs button {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.settings-tabs button:hover { background: var(--surface-soft); color: var(--text); }
+.settings-tabs button.active { background: var(--primary); color: #fff; }
+
+.api-settings-stack { display: grid; gap: 16px; }
+.api-settings-stack > div:empty { display: none; }
+.api-settings-view .knowledge-panel { margin-top: 0; }
+.api-settings-view .translator-settings {
+  display: grid;
+  width: auto;
+  max-width: none;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: none;
+}
+.api-settings-view .translator-api-heading { margin-bottom: 0; }
+.api-settings-view .translator-settings-actions { justify-content: flex-start; }
 .about-download-panel { margin: 0; }
 .local-search-settings-view .local-search-sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .local-search-view .local-search-layout { grid-template-columns: minmax(0, 1fr); }

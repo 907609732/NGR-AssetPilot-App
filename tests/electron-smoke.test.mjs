@@ -86,6 +86,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
       "files",
       "localImageSearch",
       "network",
+      "offlineTranslation",
       "providers",
       "shell",
       "updater",
@@ -250,6 +251,24 @@ test("Electron development app boots with the Dev identity and an isolated rende
       document.querySelector("#generalSettingsView")?.classList.contains("active")
       && Boolean(document.querySelector("#workspaceMigrationCard")?.getClientRects().length)
     ));
+    await window.locator('#generalSettingsView [data-settings-view="apiSettings"]').click();
+    await window.waitForFunction(() => document.querySelector("#apiSettingsView")?.classList.contains("active"));
+    const apiPlacement = await window.evaluate(() => ({
+      aiInApi: document.querySelector("#apiSettingsView")?.contains(document.querySelector(".ai-panel")),
+      translationInApi: document.querySelector("#apiSettingsView")?.contains(document.querySelector("#translatorSettings")),
+      aiInNaming: document.querySelector("#rulesView")?.contains(document.querySelector(".ai-panel")),
+      translationInFloatingPanel: document.querySelector("#translatorPanel")?.contains(document.querySelector("#translatorSettings")),
+      translatorGearExists: Boolean(document.querySelector("#translatorSettingsToggle")),
+      activeTab: document.querySelector('#apiSettingsView [data-settings-view="apiSettings"]')?.getAttribute("aria-current"),
+    }));
+    assert.deepEqual(apiPlacement, {
+      aiInApi: true,
+      translationInApi: true,
+      aiInNaming: false,
+      translationInFloatingPanel: false,
+      translatorGearExists: false,
+      activeTab: "page",
+    });
   } finally {
     await electronApp.close();
     fs.rmSync(runRoot, { recursive: true, force: true });

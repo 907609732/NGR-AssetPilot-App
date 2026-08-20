@@ -52,6 +52,7 @@ export function registerDesktopIpc({
   credentialStore,
   providerRegistry,
   networkClient,
+  offlineTranslation,
   directoryTokens,
   backupService,
   updater,
@@ -108,6 +109,8 @@ export function registerDesktopIpc({
   handle(channels.providersImportLegacy, async (_event, payload) => providerRegistry.importLegacy(payload));
   handle(channels.networkRequest, async (event, payload) => networkClient.request(payload, event.sender.id));
   handle(channels.networkCancel, async (event, payload) => networkClient.cancel(payload, event.sender.id));
+  handle(channels.offlineTranslationGetStatus, async () => offlineTranslation.getStatus());
+  handle(channels.offlineTranslationTranslate, async (_event, payload) => offlineTranslation.translate(payload));
 
   handle(channels.filesSelectExportDirectory, async (event) => {
     const window = getWindow();

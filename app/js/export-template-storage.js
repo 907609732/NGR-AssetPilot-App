@@ -847,8 +847,11 @@ function saveAiSettings(nextSettings, options = {}) {
 }
 
 function collectTranslationSettings() {
+  const provider = els.translatorProvider.value || "local";
+  const providerId = provider === "baidu" ? "baidu"
+      : provider === "model" ? "user-translation-model" : "";
   return normalizeTranslationSettings({
-    provider: els.translatorProvider.value || "local",
+    provider,
     baiduCredentialType: els.baiduCredentialType?.value || "apiKey",
     baiduAppId: els.baiduTranslateAppId.value.trim(),
     baiduSecret: els.baiduTranslateSecret.value.trim(),
@@ -856,8 +859,10 @@ function collectTranslationSettings() {
     textBaseUrl: normalizeBaseUrl(els.textTranslateBaseUrl.value),
     textApiKey: els.textTranslateApiKey.value.trim(),
     textModel: els.textTranslateModel.value.trim(),
-    providerId: typeof translationSettings === "object" ? translationSettings.providerId || "" : "",
-    hasSecret: typeof translationSettings === "object" ? Boolean(translationSettings.hasSecret) : false,
+    providerId,
+    hasSecret: typeof translationSettings === "object"
+      ? providerId === translationSettings.providerId && Boolean(translationSettings.hasSecret)
+      : false,
   });
 }
 

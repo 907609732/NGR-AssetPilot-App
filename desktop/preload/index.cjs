@@ -14,6 +14,8 @@ const channels = Object.freeze({
   providersImportLegacy: "ngr:providers:import-legacy",
   networkRequest: "ngr:network:request",
   networkCancel: "ngr:network:cancel",
+  offlineTranslationGetStatus: "ngr:offline-translation:get-status",
+  offlineTranslationTranslate: "ngr:offline-translation:translate",
   filesSelectExportDirectory: "ngr:files:select-export-directory",
   filesWriteFile: "ngr:files:write-file",
   backupBeginExport: "ngr:backup:begin-export",
@@ -115,6 +117,10 @@ const api = deepFreeze({
     getApplyState: (request) => invoke(channels.backupGetApplyState, request),
     rollbackApply: (request) => invoke(channels.backupRollbackApply, request),
     finalizeApply: (request) => invoke(channels.backupFinalizeApply, request),
+  },
+  offlineTranslation: {
+    getStatus: () => invoke(channels.offlineTranslationGetStatus),
+    translate: (request) => invoke(channels.offlineTranslationTranslate, request),
   },
   updater: {
     check: () => invoke(channels.updaterCheck),

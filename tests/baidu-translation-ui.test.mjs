@@ -10,13 +10,21 @@ const translator = fs.readFileSync(path.join(projectRoot, "app/js/uploads-editor
 const knowledge = fs.readFileSync(path.join(projectRoot, "app/js/naming-knowledge.js"), "utf8");
 const index = fs.readFileSync(path.join(projectRoot, "app/index.html"), "utf8");
 
-test("百度 API 命名模式强制启用百度并且不再静默冒充本地命名", () => {
-  assert.match(workflow, /activateBaiduTranslation\(\{ revealSettings: true \}\)/);
-  assert.match(workflow, /translationSettings\.provider === "baidu"/);
+test("翻译服务命名使用当前已选择的离线、百度或自定义模型且不强制切换服务", () => {
+  assert.match(workflow, /ensureTranslationProviderReady\(\{ revealSettings: true \}\)/);
+  assert.match(workflow, /shouldUseTranslationProvider = !shouldUseAi && useTranslationProvider/);
+  assert.match(workflow, /runTranslationNamingQueue/);
+  assert.doesNotMatch(workflow, /activateBaiduTranslation/);
+  assert.doesNotMatch(translator, /translatorProvider\.value = "baidu"/);
   assert.match(workflow, /forceExternal: true/);
   assert.match(workflow, /requireExternal: true/);
-  assert.match(workflow, /百度翻译 API 有.*调用失败/);
+  assert.match(workflow, /翻译服务有.*调用失败/);
+  assert.match(translator, /provider === "local"/);
+  assert.match(translator, /offlineTranslation\.getStatus\(\)/);
+  assert.match(translator, /provider === "model"/);
   assert.match(knowledge, /if \(options\.requireExternal\) throw error/);
+  assert.match(index, /<option value="translate" selected>翻译服务命名<\/option>/);
+  assert.match(index, />运行翻译服务命名<\/button>/);
 });
 
 test("命名单词翻译支持回车并将 API 错误展示给用户", () => {

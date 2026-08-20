@@ -255,7 +255,6 @@ async function translateFilenameSmart(source, knowledge, options = {}) {
   if (
     options.allowExternal === false ||
     !containsChinese(source) ||
-    translationSettings.provider === "local" ||
     (!options.forceExternal && strictName === pinyinName)
   ) {
     return formatNamingName(pinyinName || strictName);
@@ -285,6 +284,10 @@ function translateTextByDictionary(value, options = {}) {
 }
 
 async function translateFilenameByConfiguredProvider(source) {
+  if (translationSettings.provider === "local") {
+    const offlineText = await translateTextOffline(source, "zh", "en");
+    return cleanNamingName(String(offlineText || "").replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9_]+/g, "_"));
+  }
   if (translationSettings.provider === "baidu") {
     const apiText = await translateTextByApi(source, "zh", "en");
     return cleanNamingName(String(apiText || "").replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9_]+/g, "_"));
@@ -294,6 +297,23 @@ async function translateFilenameByConfiguredProvider(source) {
     return cleanNamingName(String(apiText || "").replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9_]+/g, "_"));
   }
   return "";
+}
+
+async function translateTextOffline(text, from = "zh", to = "en") {
+  const bridge = window.NgrDesktopBridge?.offlineTranslation;
+  if (!bridge?.isAvailable?.()) throw new Error("当前版本未包含离线翻译模型");
+  const query = String(text || "").trim();
+  if (!query) return "";
+  const cacheKey = ["offline", from, to, query].join("\u001f").toLowerCase();
+  if (baiduTextCache.has(cacheKey)) return baiduTextCache.get(cacheKey);
+  const request = bridge.translate({ text: query, from, to })
+    .then((result) => String(result?.text || "").trim())
+    .catch((error) => {
+      baiduTextCache.delete(cacheKey);
+      throw error;
+    });
+  baiduTextCache.set(cacheKey, request);
+  return request;
 }
 
 async function translateTextByApi(text, from, to) {
@@ -322,9 +342,18 @@ async function requestBaiduTranslate(query, from, to) {
       { q: query, from, to },
       { timeoutMs: 30000 },
     );
-    if (!response.ok) throw new Error("接口请求失败：" + response.status);
-    const data = await response.json();
+    let data = null;
+    try {
+      data = await response.json();
+    } catch {
+      // A non-JSON response is never a valid translation proxy response.
+    }
+    if (!response.ok) {
+      throw new Error(String(data?.error || data?.error_msg || `接口请求失败：${response.status}`));
+    }
+    if (!data || typeof data !== "object") throw new Error("翻译服务返回了无效结果");
     if (data.error_code) throw new Error((data.error_code || "") + " " + (data.error_msg || "百度翻译返回错误"));
+    if (!Array.isArray(data.trans_result)) throw new Error("翻译服务返回了无效结果");
     return (data.trans_result || []).map((item) => item.dst).join(" ").trim();
   }
   const salt = String(Date.now());

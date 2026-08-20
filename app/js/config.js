@@ -1,5 +1,5 @@
 /* NGR AssetPilot V2.26 module: config.js */
-const APP_VERSION = "V3.0.7";
+const APP_VERSION = "V3.0.8";
 const APP_VERSION_KEY = "ngr-ai-autoname-app-version";
 const STORAGE_KEY = "ngr-ai-autoname-rules";
 const SCHEME_KEY = "ngr-ai-autoname-rule-schemes";
@@ -38,7 +38,7 @@ const UPLOAD_CONCURRENCY = 4;
 const ASSET_RENDER_BATCH_SIZE = 120;
 const DETECTION_RENDER_BATCH_SIZE = 160;
 const MAX_DUPLICATE_SCAN_ASSETS = 600;
-const BAIDU_NAMING_CONCURRENCY = 3;
+const TRANSLATION_NAMING_CONCURRENCY = 3;
 const NGR_TRAINING_VERSION = 7;
 const YYSLS_TRAINING_VERSION = 1;
 const FORBIDDEN_NAMING_TERMS = ["module", "modules"];

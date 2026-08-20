@@ -4,11 +4,11 @@ async function runNaming() {
 }
 
 async function runLocalNaming() {
-  return runNamingWorkflow({ useAi: false, useExternalTranslation: false });
+  return runNamingWorkflow({ useAi: false, useTranslationProvider: false });
 }
 
 async function runTranslateNaming() {
-  return runNamingWorkflow({ useAi: false, useExternalTranslation: true });
+  return runNamingWorkflow({ useAi: false, useTranslationProvider: true });
 }
 
 async function runSelectedNaming() {
@@ -26,29 +26,29 @@ async function runSelectedNaming() {
 
 function updateNamingRunButton() {
   const labels = {
-    translate: "运行百度翻译API命名",
+    translate: "运行翻译服务命名",
     local: "运行本地知识库命名",
     ai: "运行AI视觉命名",
   };
   els.runSelectedNaming.textContent = labels[els.namingModeSelect.value] || labels.translate;
 }
 
-async function runNamingWorkflow({ useAi, useExternalTranslation = false }) {
+async function runNamingWorkflow({ useAi, useTranslationProvider = false }) {
   if (!assets.length) {
     showToast("请先上传切图文件");
     return;
   }
-  if (useExternalTranslation) {
-    const baiduReady = await activateBaiduTranslation({ revealSettings: true });
-    if (!baiduReady) return;
+  if (useTranslationProvider) {
+    const translationReady = await ensureTranslationProviderReady({ revealSettings: true });
+    if (!translationReady) return;
   }
   const apiKey = aiSettings.apiKey.trim();
   const desktopProviderReady = Boolean(window.NgrDesktopBridge?.isDesktopRuntime() && aiSettings.hasSecret);
   const shouldUseAi = useAi && Boolean(apiKey || desktopProviderReady);
-  const shouldUseExternalTranslation = !shouldUseAi && useExternalTranslation && translationSettings.provider === "baidu";
+  const shouldUseTranslationProvider = !shouldUseAi && useTranslationProvider;
   const knowledge = parseKnowledge();
-  const progressLabel = shouldUseAi ? "AI 命名中 " : shouldUseExternalTranslation ? "翻译命名中 " : "本地命名中 ";
-  const progressStep = shouldUseAi ? 1 : shouldUseExternalTranslation ? 10 : 250;
+  const progressLabel = shouldUseAi ? "AI 命名中 " : shouldUseTranslationProvider ? "翻译命名中 " : "本地命名中 ";
+  const progressStep = shouldUseAi ? 1 : shouldUseTranslationProvider ? 10 : 250;
   stopRequested = false;
   assets.forEach((asset) => {
     asset.namingStatus = "pending";
@@ -58,8 +58,8 @@ async function runNamingWorkflow({ useAi, useExternalTranslation = false }) {
   renderAssetList();
   await yieldToBrowser();
 
-  if (shouldUseExternalTranslation) {
-    const processedAssets = await runExternalTranslationNamingQueue(assets, knowledge, progressLabel);
+  if (shouldUseTranslationProvider) {
+    const processedAssets = await runTranslationNamingQueue(assets, knowledge, progressLabel);
     namingController = null;
     applySemanticSequenceNumbers(processedAssets);
     setRunButtonLoading(false);
@@ -70,8 +70,8 @@ async function runNamingWorkflow({ useAi, useExternalTranslation = false }) {
       stopRequested
         ? "已终止命名"
         : failedCount
-          ? `百度翻译 API 有 ${failedCount} 张调用失败，请查看图片状态`
-          : "已使用百度翻译 API 生成推荐名称",
+          ? `翻译服务有 ${failedCount} 张调用失败，请查看图片状态`
+          : "已使用当前翻译服务生成推荐名称",
     );
     return;
   }
@@ -80,7 +80,7 @@ async function runNamingWorkflow({ useAi, useExternalTranslation = false }) {
   for (let index = 0; index < assets.length; index += 1) {
     if (stopRequested) break;
     const asset = assets[index];
-    const localRecommendations = shouldUseAi ? makeRecommendations(asset, knowledge) : await makeRecommendationsWithTranslation(asset, knowledge, { allowExternal: shouldUseExternalTranslation });
+    const localRecommendations = shouldUseAi ? makeRecommendations(asset, knowledge) : await makeRecommendationsWithTranslation(asset, knowledge, { allowExternal: shouldUseTranslationProvider });
     let recommendations = localRecommendations;
     asset.namingStatus = "running";
     asset.statusMessage = "正在处理第 " + (index + 1) + " 张";
@@ -98,7 +98,7 @@ async function runNamingWorkflow({ useAi, useExternalTranslation = false }) {
       asset.recommendations = recommendations.length ? recommendations : localRecommendations;
       asset.finalBaseName = asset.finalBaseName || asset.recommendations[0];
       asset.namingStatus = "done";
-      asset.statusMessage = shouldUseAi ? "AI 命名完成" : shouldUseExternalTranslation ? "翻译 API 命名完成" : "本地知识库完成";
+      asset.statusMessage = shouldUseAi ? "AI 命名完成" : shouldUseTranslationProvider ? "翻译服务命名完成" : "本地知识库完成";
       processedAssets.push(asset);
     } catch (error) {
       if (stopRequested || error.name === "AbortError") {
@@ -124,14 +124,14 @@ async function runNamingWorkflow({ useAi, useExternalTranslation = false }) {
   setRunButtonLoading(false);
   saveCurrentNamingSession();
   renderAssetList();
-  showToast(stopRequested ? "已终止命名" : shouldUseAi ? "AI 推荐命名已完成" : shouldUseExternalTranslation ? "已使用翻译 API 生成推荐名称" : "已使用本地知识库生成推荐名称");
+  showToast(stopRequested ? "已终止命名" : shouldUseAi ? "AI 推荐命名已完成" : shouldUseTranslationProvider ? "已使用当前翻译服务生成推荐名称" : "已使用本地知识库生成推荐名称");
 }
 
-async function runExternalTranslationNamingQueue(targetAssets, knowledge, progressLabel) {
+async function runTranslationNamingQueue(targetAssets, knowledge, progressLabel) {
   const processedAssets = [];
   let nextIndex = 0;
   let completed = 0;
-  const workerCount = Math.min(BAIDU_NAMING_CONCURRENCY, targetAssets.length);
+  const workerCount = Math.min(TRANSLATION_NAMING_CONCURRENCY, targetAssets.length);
   const runWorker = async () => {
     while (!stopRequested) {
       const index = nextIndex;
@@ -149,13 +149,13 @@ async function runExternalTranslationNamingQueue(targetAssets, knowledge, progre
         asset.recommendations = recommendations.length ? recommendations : makeRecommendations(asset, knowledge);
         asset.finalBaseName = asset.finalBaseName || asset.recommendations[0];
         asset.namingStatus = "done";
-        asset.statusMessage = "翻译 API 命名完成";
+        asset.statusMessage = "翻译服务命名完成";
       } catch (error) {
         const fallback = makeRecommendations(asset, knowledge);
         asset.recommendations = fallback;
         asset.finalBaseName = asset.finalBaseName || fallback[0];
         asset.namingStatus = "failed";
-        asset.statusMessage = `翻译 API 失败：${String(error?.message || "未知错误").slice(0, 80)}`;
+        asset.statusMessage = `翻译服务失败：${String(error?.message || "未知错误").slice(0, 80)}`;
       }
       processedAssets.push(asset);
       completed += 1;

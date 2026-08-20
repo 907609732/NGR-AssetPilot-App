@@ -171,6 +171,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
     "network",
     "files",
     "backup",
+    "offlineTranslation",
     "updater",
     "shell",
     "externalApps",
@@ -183,6 +184,8 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.credentials.set, "undefined");
   assert.equal(typeof exposed.providers.upsert, "function");
   assert.equal(typeof exposed.network.cancel, "function");
+  assert.equal(typeof exposed.offlineTranslation.getStatus, "function");
+  assert.equal(typeof exposed.offlineTranslation.translate, "function");
   assert.equal(typeof exposed.files.writeFile, "function");
   assert.equal(typeof exposed.backup.beginImport, "function");
   assert.equal(typeof exposed.backup.finishImport, "function");
@@ -207,6 +210,8 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.app.onBeforeQuit, "function");
   await exposed.shell.openExternal({ url: "https://example.com" });
   assert.deepEqual(calls.at(-1), [ipcChannels.shellOpenExternal, { url: "https://example.com" }]);
+  await exposed.offlineTranslation.translate({ text: "首页", from: "zh", to: "en" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.offlineTranslationTranslate, { text: "首页", from: "zh", to: "en" }]);
   await exposed.localImageSearch.setActiveModel({ modelId: "custom-model" });
   assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchSetActiveModel, { modelId: "custom-model" }]);
   await exposed.localImageSearch.getModelStatus({ modelId: "builtin-q4" });

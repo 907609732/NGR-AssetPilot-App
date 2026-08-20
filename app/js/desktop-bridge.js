@@ -312,6 +312,12 @@
     revealResult: (request) => invoke("localImageSearch.revealResult", request),
   });
 
+  const offlineTranslation = Object.freeze({
+    isAvailable: () => hasCapability("offlineTranslation.translate"),
+    getStatus: () => invoke("offlineTranslation.getStatus"),
+    translate: (request) => invoke("offlineTranslation.translate", request),
+  });
+
   globalScope.NgrDesktopBridge = Object.freeze({
     isDesktopRuntime,
     hasCapability,
@@ -348,6 +354,7 @@
     readyToQuit,
     openExternal,
     externalApps,
+    offlineTranslation,
     localImageSearch,
   });
   globalScope.ngrFetch = request;

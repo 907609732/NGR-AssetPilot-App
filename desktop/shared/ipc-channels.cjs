@@ -9,6 +9,8 @@ module.exports = Object.freeze({
   providersImportLegacy: "ngr:providers:import-legacy",
   networkRequest: "ngr:network:request",
   networkCancel: "ngr:network:cancel",
+  offlineTranslationGetStatus: "ngr:offline-translation:get-status",
+  offlineTranslationTranslate: "ngr:offline-translation:translate",
   filesSelectExportDirectory: "ngr:files:select-export-directory",
   filesWriteFile: "ngr:files:write-file",
   backupBeginExport: "ngr:backup:begin-export",
