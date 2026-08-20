@@ -82,9 +82,11 @@ test("Electron development app boots with the Dev identity and an isolated rende
       "backup",
       "credentials",
       "environment",
+      "externalApps",
       "files",
       "localImageSearch",
       "network",
+      "offlineTranslation",
       "providers",
       "shell",
       "updater",
@@ -138,6 +140,8 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.equal(await window.locator("#feedbackFormLink").isHidden(), true);
     assert.equal(await window.locator("#workProjectName").inputValue(), "");
     assert.match(await window.locator(".toolbar-download-action").innerText(), /下载命名完成的图片/);
+    await window.locator("#externalAppMenu").waitFor({ state: "visible" });
+    assert.match(await window.locator("#externalAppPrimaryLabel").innerText(), /ArtHub/);
     await window.evaluate(() => {
       const image = new File(
         ['<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#0f766e"/></svg>'],
@@ -247,6 +251,24 @@ test("Electron development app boots with the Dev identity and an isolated rende
       document.querySelector("#generalSettingsView")?.classList.contains("active")
       && Boolean(document.querySelector("#workspaceMigrationCard")?.getClientRects().length)
     ));
+    await window.locator('#generalSettingsView [data-settings-view="apiSettings"]').click();
+    await window.waitForFunction(() => document.querySelector("#apiSettingsView")?.classList.contains("active"));
+    const apiPlacement = await window.evaluate(() => ({
+      aiInApi: document.querySelector("#apiSettingsView")?.contains(document.querySelector(".ai-panel")),
+      translationInApi: document.querySelector("#apiSettingsView")?.contains(document.querySelector("#translatorSettings")),
+      aiInNaming: document.querySelector("#rulesView")?.contains(document.querySelector(".ai-panel")),
+      translationInFloatingPanel: document.querySelector("#translatorPanel")?.contains(document.querySelector("#translatorSettings")),
+      translatorGearExists: Boolean(document.querySelector("#translatorSettingsToggle")),
+      activeTab: document.querySelector('#apiSettingsView [data-settings-view="apiSettings"]')?.getAttribute("aria-current"),
+    }));
+    assert.deepEqual(apiPlacement, {
+      aiInApi: true,
+      translationInApi: true,
+      aiInNaming: false,
+      translationInFloatingPanel: false,
+      translatorGearExists: false,
+      activeTab: "page",
+    });
   } finally {
     await electronApp.close();
     fs.rmSync(runRoot, { recursive: true, force: true });

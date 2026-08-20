@@ -151,6 +151,7 @@
     translationSettings = normalizeTranslationSettings({
       ...translationSettings,
       providerId: translation?.id || translationProviderId(translationSettings),
+      baiduCredentialType: translation?.apiFormat === "baidu-ai" ? "apiKey" : translationSettings.baiduCredentialType,
       baiduAppId: "",
       baiduSecret: "",
       textApiKey: "",
@@ -197,7 +198,10 @@
             ? Boolean(translationSettings.baiduAppId && translationSettings.baiduSecret)
             : Boolean(translationSettings.textApiKey);
           const result = await globalScope.NgrDesktopBridge.upsertProvider({
-            provider: isBaidu ? { id: "baidu" } : {
+            provider: isBaidu ? {
+              id: "baidu",
+              apiFormat: translationSettings.baiduCredentialType === "apiKey" ? "baidu-ai" : "baidu",
+            } : {
               id: translationId,
               service: "translation",
               name: "自定义翻译模型",
@@ -207,7 +211,11 @@
             },
             secretAction: secretPresent ? "replace" : "keep",
             secret: isBaidu
-              ? { appId: translationSettings.baiduAppId, secret: translationSettings.baiduSecret }
+              ? {
+                  appId: translationSettings.baiduAppId,
+                  credentialType: translationSettings.baiduCredentialType,
+                  [translationSettings.baiduCredentialType === "apiKey" ? "apiKey" : "secret"]: translationSettings.baiduSecret,
+                }
               : { apiKey: translationSettings.textApiKey },
           });
           translationSettings.providerId = translationId;

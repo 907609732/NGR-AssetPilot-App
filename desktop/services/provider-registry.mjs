@@ -9,6 +9,8 @@ const REGISTRY_VERSION = 1;
 const MAX_REGISTRY_BYTES = 512 * 1024;
 const IMPORT_JOURNAL_VERSION = 1;
 const CUSTOM_PROVIDER_IDS = new Set(["user-ai", "user-translation-model"]);
+const BAIDU_AI_ENDPOINT = "https://fanyi-api.baidu.com/ait/api/aiTextTranslate";
+const BAIDU_LEGACY_ENDPOINT = "https://fanyi-api.baidu.com/api/trans/vip/translate";
 
 const BUILTIN_PROVIDERS = Object.freeze([
   Object.freeze({
@@ -37,8 +39,8 @@ const BUILTIN_PROVIDERS = Object.freeze([
     id: "baidu",
     name: "百度翻译",
     service: "translation",
-    baseUrl: "https://fanyi-api.baidu.com/api/trans/vip/translate",
-    apiFormat: "baidu",
+    baseUrl: BAIDU_AI_ENDPOINT,
+    apiFormat: "baidu-ai",
     model: "",
     builtin: true,
     trust: "builtin",
@@ -122,14 +124,16 @@ function normalizeProvider(input, existing) {
   const id = String(input.id || "").trim();
   const builtin = BUILTIN_PROVIDERS.find((provider) => provider.id === id);
   if (builtin) {
+    const baiduApiFormat = input.apiFormat === "baidu" ? "baidu" : "baidu-ai";
     return {
       ...builtin,
       apiFormat: builtin.id === "baidu"
-        ? "baidu"
+        ? baiduApiFormat
         : input.apiFormat === "chat" ? "chat"
           : input.apiFormat === "responses" ? "responses"
             : existing?.apiFormat || builtin.apiFormat,
       model: String(input.model || existing?.model || builtin.model).trim().slice(0, 256),
+      baseUrl: builtin.id === "baidu" && baiduApiFormat === "baidu" ? BAIDU_LEGACY_ENDPOINT : builtin.baseUrl,
     };
   }
   if (!CUSTOM_PROVIDER_IDS.has(id)) {
@@ -157,11 +161,12 @@ function normalizeSecret(provider, value) {
   if (provider.id === "baidu") {
     if (!isPlainRecord(value)) throw new DesktopError("PROVIDER_SECRET_INVALID", "百度翻译凭据无效");
     const appId = String(value.appId || "").trim();
+    const apiKey = String(value.apiKey || "").trim();
     const secret = String(value.secret || "").trim();
-    if (!appId || !secret || appId.length > 1024 || secret.length > 4096) {
+    if (!appId || (!apiKey && !secret) || (apiKey && secret) || appId.length > 1024 || Math.max(apiKey.length, secret.length) > 4096) {
       throw new DesktopError("PROVIDER_SECRET_INVALID", "百度翻译 App ID 或密钥无效");
     }
-    return { appId, secret };
+    return apiKey ? { appId, apiKey } : { appId, secret };
   }
   const apiKey = typeof value === "string" ? value.trim() : String(value?.apiKey || "").trim();
   if (!apiKey || apiKey.length > 16 * 1024 || /[\r\n]/.test(apiKey)) {
@@ -206,6 +211,25 @@ function baiduSignedUrl(provider, secret, body) {
   const url = new URL(provider.baseUrl);
   url.search = new URLSearchParams({ q: query, from, to, appid: secret.appId, salt, sign }).toString();
   return url;
+}
+
+function baiduAiRequest(secret, body) {
+  if (!isPlainRecord(body)) throw new DesktopError("NETWORK_BODY_INVALID", "百度翻译请求数据无效");
+  const query = String(body.q || "").trim();
+  const from = String(body.from || "auto").trim();
+  const to = String(body.to || "zh").trim();
+  if (!query || query.length > 6000 || !/^[a-z]{2,8}$/i.test(from) || !/^[a-z]{2,8}$/i.test(to)) {
+    throw new DesktopError("NETWORK_BODY_INVALID", "百度翻译请求数据无效");
+  }
+  return {
+    url: new URL(BAIDU_AI_ENDPOINT),
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${secret.apiKey}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({ q: query, from, to, appid: secret.appId, model_type: "llm" }).toString(),
+  };
 }
 
 export class ProviderRegistry {
@@ -387,7 +411,9 @@ export class ProviderRegistry {
     }
     const translation = [legacy.translation, legacy.baidu].find((value) => isPlainRecord(value)) || {};
     if (String(translation.baiduAppId || translation.appId || "").trim() && String(translation.baiduSecret || translation.secret || "").trim()) {
-      migratedSecrets.baidu = normalizeSecret(this.providers.get("baidu"), {
+      const legacyProvider = normalizeProvider({ id: "baidu", apiFormat: "baidu" }, this.providers.get("baidu"));
+      this.providers.set("baidu", legacyProvider);
+      migratedSecrets.baidu = normalizeSecret(legacyProvider, {
         appId: translation.baiduAppId || translation.appId,
         secret: translation.baiduSecret || translation.secret,
       });
@@ -527,7 +553,7 @@ export class ProviderRegistry {
       imported = true;
     }
     if (String(translation.baiduAppId || "").trim() && String(translation.baiduSecret || "").trim()) {
-      const provider = normalizeProvider({ id: "baidu" }, nextProviders.get("baidu"));
+      const provider = normalizeProvider({ id: "baidu", apiFormat: "baidu" }, nextProviders.get("baidu"));
       apply(provider, normalizeSecret(provider, {
         appId: translation.baiduAppId,
         secret: translation.baiduSecret,
@@ -585,6 +611,17 @@ export class ProviderRegistry {
     if (!secret) throw new DesktopError("PROVIDER_SECRET_MISSING", "模型服务凭据尚未配置");
     if (provider.id === "baidu") {
       if (input.operation !== "translate") throw new DesktopError("PROVIDER_OPERATION_NOT_ALLOWED", "模型服务操作未获授权");
+      if (secret.apiKey) {
+        const request = baiduAiRequest(secret, input.body);
+        return {
+          provider: { ...provider, baseUrl: BAIDU_AI_ENDPOINT, apiFormat: "baidu-ai" },
+          url: request.url,
+          method: "POST",
+          headers: request.headers,
+          body: request.body,
+          maximumTimeout: 30_000,
+        };
+      }
       return {
         provider,
         url: baiduSignedUrl(provider, secret, input.body),

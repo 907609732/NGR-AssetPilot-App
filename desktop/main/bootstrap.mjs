@@ -8,7 +8,9 @@ import { errorCodeOnly } from "../shared/core.mjs";
 import { BackupFileService } from "../services/backup-files.mjs";
 import { CredentialStore } from "../services/credential-store.mjs";
 import { DirectoryTokenStore } from "../services/directory-tokens.mjs";
+import { ExternalAppRegistry } from "../services/external-app-registry.mjs";
 import { NetworkClient } from "../services/network-client.mjs";
+import { OfflineTranslationService } from "../services/offline-translation/service.mjs";
 import { ProviderRegistry } from "../services/provider-registry.mjs";
 import { RuntimeLogger } from "../services/runtime-logger.mjs";
 import { UpdaterController } from "../services/updater-controller.mjs";
@@ -145,7 +147,6 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   await installAppProtocol({ protocol, appRoot });
   writeStartupLog(app, "protocol-ready");
   hardenSession(session.defaultSession);
-
   const credentialStore = new CredentialStore({ safeStorage, userDataPath: app.getPath("userData") });
   const providerRegistry = new ProviderRegistry({
     credentialStore,
@@ -172,9 +173,21 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
       : null,
   });
   const directoryTokens = new DirectoryTokenStore();
+  const externalApps = new ExternalAppRegistry({
+    userDataPath: app.getPath("userData"),
+    dialog,
+    shell,
+    getWindow: () => mainWindow,
+  });
+  await externalApps.initialize();
   const networkClient = new NetworkClient({
     fetchImpl: net.fetch.bind(net),
     providerRegistry,
+  });
+  const offlineTranslation = new OfflineTranslationService({
+    modelLibraryRoot: app.isPackaged
+      ? path.join(process.resourcesPath, "offline-translation")
+      : path.resolve(moduleDirectory, "../../build/generated/offline-translation"),
   });
   const lifecycle = new QuitCoordinator({ app, channel: channels.appBeforeQuit });
   const backupService = new BackupFileService({
@@ -211,6 +224,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     const results = await Promise.allSettled([
       Promise.resolve().then(() => localImageSearch.dispose()),
       Promise.resolve().then(() => networkClient.dispose()),
+      Promise.resolve().then(() => offlineTranslation.dispose()),
       Promise.resolve().then(() => backupService.dispose?.()),
       Promise.resolve().then(() => updater.dispose()),
     ]);
@@ -249,12 +263,14 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     credentialStore,
     providerRegistry,
     networkClient,
+    offlineTranslation,
     directoryTokens,
     backupService,
     updater,
     lifecycle,
     environmentInfo,
     localImageSearch,
+    externalApps,
     runtimeLogger,
   });
 

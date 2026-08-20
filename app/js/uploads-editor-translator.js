@@ -161,12 +161,8 @@ function bindTranslator() {
   bindTranslatorDragging();
   els.translatorToggle.addEventListener("click", openTranslatorPanel);
   els.translatorClose.addEventListener("click", closeTranslatorPanel);
-  els.translatorSettingsToggle.addEventListener("click", () => {
-    const isHidden = els.translatorSettings.classList.toggle("hidden");
-    els.translatorSettingsToggle.setAttribute("aria-expanded", String(!isHidden));
-    requestAnimationFrame(constrainTranslatorPanelToViewport);
-  });
   els.translatorProvider.addEventListener("change", syncTranslatorProviderFields);
+  els.baiduCredentialType?.addEventListener("change", syncBaiduCredentialFields);
   els.saveTranslatorSettings.addEventListener("click", async () => {
     translationSettings = collectTranslationSettings();
     try {
@@ -185,15 +181,11 @@ function bindTranslator() {
       showToast(`清除翻译密钥失败：${error?.message || "未知错误"}`);
     }
   });
-  els.translatorToName.addEventListener("click", async () => {
-    const source = normalizeSourceName(els.translatorInput.value);
-    if (!source) {
-      els.translatorOutput.textContent = "请输入中文文件名、英文命名或单词";
-      return;
-    }
-    els.translatorOutput.textContent = "翻译中...";
-    const translated = await translateToNamingWord(source);
-    els.translatorOutput.textContent = translated ? "命名词：" + translated + "\n中文含义：" + await explainNameWithTranslation(translated) : "没有匹配到可用命名词";
+  els.translatorToName.addEventListener("click", runTranslatorNaming);
+  els.translatorInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    void runTranslatorNaming();
   });
   els.translatorApplyName.addEventListener("click", applyTranslatorNameToSelectedAsset);
   els.translatorExplain.addEventListener("click", async () => {
@@ -202,6 +194,79 @@ function bindTranslator() {
     if (source) els.translatorOutput.textContent = await explainNameWithTranslation(source);
   });
   syncTranslatorProviderFields();
+}
+
+async function runTranslatorNaming() {
+  const source = normalizeSourceName(els.translatorInput.value);
+  if (!source) {
+    els.translatorOutput.textContent = "请输入中文文件名、英文命名或单词";
+    return;
+  }
+  els.translatorToName.disabled = true;
+  els.translatorOutput.textContent = "翻译中...";
+  try {
+    const translated = await translateToNamingWord(source, { requireConfiguredProvider: true });
+    els.translatorOutput.textContent = translated
+      ? "命名词：" + translated + "\n中文含义：" + await explainNameWithTranslation(translated)
+      : "没有匹配到可用命名词";
+  } catch (error) {
+    els.translatorOutput.textContent = `翻译失败：${error?.message || "未知错误"}`;
+    showToast("翻译 API 调用失败");
+  } finally {
+    els.translatorToName.disabled = false;
+  }
+}
+
+function revealTranslatorSettings() {
+  openSettingsView("apiSettings", currentViewName);
+  requestAnimationFrame(() => {
+    const provider = translationSettings.provider || "local";
+    if (provider === "baidu") els.baiduTranslateAppId?.focus();
+    else if (provider === "model") els.textTranslateBaseUrl?.focus();
+    else els.testTranslatorSettings?.focus();
+  });
+}
+
+async function ensureTranslationProviderReady(options = {}) {
+  const isDesktop = Boolean(window.NgrDesktopBridge?.isDesktopRuntime());
+  const provider = translationSettings.provider || "local";
+  if (provider === "local") {
+    try {
+      if (!isDesktop || !window.NgrDesktopBridge?.offlineTranslation?.isAvailable?.()) {
+        throw new Error("当前环境不支持内置离线翻译");
+      }
+      const status = await window.NgrDesktopBridge.offlineTranslation.getStatus();
+      if (status?.ready) return true;
+      throw new Error("内置离线翻译模型不完整，请重新安装软件");
+    } catch (error) {
+      if (options.revealSettings) revealTranslatorSettings();
+      els.translatorOutput.textContent = error?.message || "内置离线翻译模型不可用";
+      showToast("内置离线翻译模型不可用");
+      return false;
+    }
+  }
+  if (provider === "baidu") {
+    const desktopReady = Boolean(isDesktop && translationSettings.hasSecret);
+    const browserReady = Boolean(translationSettings.baiduAppId && translationSettings.baiduSecret);
+    if (desktopReady || browserReady) return true;
+    if (options.revealSettings) revealTranslatorSettings();
+    els.translatorOutput.textContent = "请填写百度翻译凭据，保存并测试成功后再开始命名。";
+    showToast("请先配置百度翻译凭据");
+    return false;
+  }
+  if (provider === "model") {
+    const desktopReady = Boolean(isDesktop && translationSettings.hasSecret);
+    const browserReady = Boolean(translationSettings.textBaseUrl && translationSettings.textApiKey && translationSettings.textModel);
+    if (desktopReady || browserReady) return true;
+    if (options.revealSettings) revealTranslatorSettings();
+    els.translatorOutput.textContent = "请填写文本翻译模型地址、模型名和 API Key，保存并测试成功后再开始命名。";
+    showToast("请先配置文本翻译模型");
+    return false;
+  }
+  if (options.revealSettings) revealTranslatorSettings();
+  els.translatorOutput.textContent = "当前翻译服务配置无效，请重新选择。";
+  showToast("请选择可用的翻译服务");
+  return false;
 }
 
 function openTranslatorPanel(options = {}) {
@@ -309,7 +374,23 @@ function syncTranslatorProviderFields() {
     const group = node.dataset.providerGroup;
     node.classList.toggle("hidden", group !== provider);
   });
-  els.testTranslatorSettings.classList.toggle("hidden", provider === "local");
+  els.testTranslatorSettings.classList.remove("hidden");
+  els.clearTranslatorCredential?.classList.toggle("hidden", provider === "local");
+  syncBaiduCredentialFields();
+}
+
+function syncBaiduCredentialFields() {
+  const type = els.baiduCredentialType?.value === "legacy" ? "legacy" : "apiKey";
+  if (els.baiduCredentialLabel) els.baiduCredentialLabel.textContent = type === "apiKey" ? "百度 API Key" : "百度传统密钥";
+  if (els.baiduTranslateSecret && !translationSettings.hasSecret) {
+    els.baiduTranslateSecret.placeholder = type === "apiKey" ? "请输入百度大模型翻译 API Key" : "请输入百度传统密钥";
+  }
+  if (els.baiduTranslateEndpoint) {
+    els.baiduTranslateEndpoint.value = type === "apiKey"
+      ? "https://fanyi-api.baidu.com/ait/api/aiTextTranslate"
+      : "https://fanyi-api.baidu.com/api/trans/vip/translate";
+    els.baiduTranslateEndpoint.readOnly = true;
+  }
 }
 
 async function applyTranslatorNameToSelectedAsset() {
@@ -348,7 +429,14 @@ function getTranslatorTargetAsset() {
   return assets.find((asset) => asset.id === selectedId) || assets.find((asset) => asset.checked) || assets[0];
 }
 
-async function translateToNamingWord(source) {
+async function translateToNamingWord(source, options = {}) {
+  if (options.requireConfiguredProvider && translationSettings.provider !== "local") {
+    return translateFilenameSmart(source, parseKnowledge(), {
+      allowExternal: true,
+      forceExternal: true,
+      requireExternal: true,
+    });
+  }
   return translateFilenameSmart(source, parseKnowledge());
 }
 
@@ -369,12 +457,19 @@ async function testTranslationSettings() {
   await saveTranslationSettings(translationSettings);
   els.translatorOutput.textContent = "正在测试翻译 API...";
   if (translationSettings.provider === "local") {
-    els.translatorOutput.textContent = "当前使用本地词库，不需要测试 API。";
-    showToast("当前使用本地词库");
+    try {
+      const result = await translateTextOffline("测试", "zh", "en");
+      els.translatorOutput.textContent = "离线模型测试成功：测试 -> " + result;
+      showToast("离线翻译模型可用");
+    } catch (error) {
+      els.translatorOutput.textContent = "离线模型不可用，命名时将使用词库和拼音兜底：" + error.message;
+      showToast("离线翻译模型不可用");
+    }
     return;
   }
   try {
-    const result = translationSettings.provider === "baidu" ? await translateTextByApi("测试", "zh", "en") : await translateTextByModel("测试");
+    const result = translationSettings.provider === "baidu"
+      ? await translateTextByApi("测试", "zh", "en") : await translateTextByModel("测试");
     els.translatorOutput.textContent = "测试成功：测试 -> " + result;
     showToast("翻译 API 测试成功");
   } catch (error) {

@@ -89,7 +89,13 @@ module.exports = {
     "!**/*.map",
     "!**/.DS_Store",
   ],
-  extraResources: [],
+  extraResources: [
+    {
+      from: path.join(projectRoot, "build", "generated", "offline-translation"),
+      to: "offline-translation",
+      filter: ["**/*"],
+    },
+  ],
   win: {
     icon: path.join(projectRoot, "build", "icon.ico"),
     target: windowsTargets,

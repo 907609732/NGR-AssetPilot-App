@@ -9,6 +9,13 @@ NGR AssetPilot 的“本地 AI 搜图”模块使用以下开源运行时。完�
 - `fflate` 0.8.3 — MIT License（工作区备份 ZIP 与有界分块处理）
 - `electron-log` 5.4.4 — MIT License（仅主进程本地轮转诊断日志，不上传日志）
 
+安装包内置以下中译英模型，用于断网环境下的文件名翻译。运行时禁止远程模型访问：
+
+- `Xenova/opus-mt-zh-en`，revision `39d480d52a9ea3065a1f117adfe4dbc55de10e6f`（Transformers.js ONNX 导出）
+- 原始模型 `Helsinki-NLP/opus-mt-zh-en` — Creative Commons Attribution 4.0 International（CC BY 4.0）
+- 模型卡：https://huggingface.co/Xenova/opus-mt-zh-en
+- 原始模型与许可：https://huggingface.co/Helsinki-NLP/opus-mt-zh-en
+
 首次使用时，应用会在用户明确确认后从 Hugging Face 下载模型，不将模型文件打入安装包，也不自动升级模型：
 
 - `Xenova/clip-vit-base-patch32`，revision `d15189d7028b43f1d3e65039190477f6af591c2a`

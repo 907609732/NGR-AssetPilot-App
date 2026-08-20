@@ -3,6 +3,7 @@ let currentViewName = "home";
 let settingsReturnView = "home";
 function init() {
   initializeFeatureSettingsLayout();
+  initializeSettingsNavigation();
   bindPrefixLibraryControls();
   bindNavigation();
   bindRules();
@@ -29,6 +30,7 @@ function init() {
   renderAssetList();
   initializeWorkspaceMigration();
   void initLocalImageSearch();
+  void window.NgrExternalAppLauncher?.init();
   void window.initializeUpdates();
 }
 
@@ -38,6 +40,39 @@ function initializeFeatureSettingsLayout() {
   }
   if (els.localSearchSettingsSlot && els.localSearchSidebar) {
     els.localSearchSettingsSlot.appendChild(els.localSearchSidebar);
+  }
+  if (els.apiSettingsAiSlot && els.aiSettingsPanel) {
+    els.apiSettingsAiSlot.appendChild(els.aiSettingsPanel);
+  }
+  if (els.apiSettingsTranslationSlot && els.translatorSettings) {
+    els.apiSettingsTranslationSlot.appendChild(els.translatorSettings);
+    els.translatorSettings.classList.remove("hidden");
+  }
+}
+
+function initializeSettingsNavigation() {
+  const settingsViews = [
+    ["generalSettings", "数据与关于"],
+    ["rules", "命名规则"],
+    ["detectionSettings", "切图检测"],
+    ["localImageSearchSettings", "本地搜图"],
+    ["apiSettings", "API"],
+  ];
+  for (const [viewName] of settingsViews) {
+    const view = els.views[viewName];
+    if (!view || view.querySelector(":scope > .settings-tabs")) continue;
+    const navigation = document.createElement("nav");
+    navigation.className = "settings-tabs";
+    navigation.setAttribute("aria-label", "设置分类");
+    for (const [target, label] of settingsViews) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.settingsView = target;
+      button.textContent = label;
+      button.addEventListener("click", () => showView(target));
+      navigation.appendChild(button);
+    }
+    view.prepend(navigation);
   }
 }
 
@@ -257,18 +292,25 @@ function showView(name) {
   Object.entries(els.views).forEach(([key, node]) => node.classList.toggle("active", key === name));
   els.backButton.classList.toggle("hidden", name === "home");
   els.feedbackFormLink?.classList.toggle("hidden", name !== "home");
-  const settingsViews = new Set(["rules", "detectionSettings", "generalSettings", "localImageSearchSettings"]);
+  const settingsViews = new Set(["rules", "detectionSettings", "generalSettings", "localImageSearchSettings", "apiSettings"]);
   els.rulesEntry.classList.toggle("hidden", settingsViews.has(name));
+  document.querySelectorAll("[data-settings-view]").forEach((button) => {
+    const active = button.dataset.settingsView === name;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
   updateContextSettingsLabel(name);
   const hints = {
     home: "批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。",
-    rules: "配置命名规则、AI 接入、方案模板和工作区迁移备份。",
+    rules: "配置项目命名规则、知识库和方案模板；API 服务在独立页签管理。",
     work: "填写当前界面工程名，上传切图后可在每张图片旁边直接改名。",
     detect: "上传切图文件夹，按项目组规则检测分辨率是否符合规范。",
     detectionSettings: "单独配置 UI 切图检测项目组和分辨率参数。",
     localImageSearch: "截图粘贴、图片或中英文文字搜索本地相似素材；图片和查询均不上传。",
     generalSettings: "管理软件版本、官方下载安装入口与工作区迁移备份。",
     localImageSearchSettings: "管理本地 AI 模型与只读图库索引。",
+    apiSettings: "统一配置视觉命名、百度翻译和 OpenAI 兼容服务。",
   };
   els.pageHint.textContent = hints[name];
   if (name === "localImageSearch") globalScope.showLocalImageSearchGuide?.();
@@ -291,7 +333,7 @@ function openContextSettings() {
 }
 
 function navigateBack() {
-  if (["rules", "detectionSettings", "generalSettings", "localImageSearchSettings"].includes(currentViewName)) {
+  if (["rules", "detectionSettings", "generalSettings", "localImageSearchSettings", "apiSettings"].includes(currentViewName)) {
     showView(settingsReturnView || "home");
     return;
   }
@@ -385,7 +427,7 @@ const guideSteps = [
     view: "work",
     selector: ".work-toolbar .toolbar-actions",
     title: "运行命名",
-    text: "先选择命名模式，再点击运行按钮。支持百度翻译 API、本地知识库和 AI 视觉命名，命名过程中可随时终止。",
+    text: "先选择命名模式，再点击运行按钮。支持当前翻译服务、本地知识库和 AI 视觉命名，命名过程中可随时终止。",
   },
   {
     view: "work",

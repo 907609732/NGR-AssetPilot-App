@@ -46,6 +46,17 @@ async function verifyTarget(target) {
       info: await window.ngrDesktop.environment.getInfo(),
       credentials: await window.ngrDesktop.credentials.getStatus(),
       model: await window.ngrDesktop.localImageSearch.getModelStatus(),
+      offlineTranslationStatus: await window.ngrDesktop.offlineTranslation.getStatus(),
+      offlineTranslationResult: await window.ngrDesktop.offlineTranslation.translate({
+        text: "下载按钮",
+        from: "zh",
+        to: "en",
+      }),
+      apiSettingsPlacement: {
+        aiInApi: document.querySelector("#apiSettingsView")?.contains(document.querySelector(".ai-panel")),
+        translationInApi: document.querySelector("#apiSettingsView")?.contains(document.querySelector("#translatorSettings")),
+        translatorGearExists: Boolean(document.querySelector("#translatorSettingsToggle")),
+      },
       badge: document.querySelector("#editionBadge")?.textContent,
       badgeHidden: document.querySelector("#editionBadge")?.classList.contains("hidden"),
       appVersionTexts: [...document.querySelectorAll("[data-app-version]")].map((node) => node.textContent),
@@ -70,6 +81,15 @@ async function verifyTarget(target) {
     assert.equal(state.credentials.available, true);
     assert.equal(state.credentials.configured, false);
     assert.equal(typeof state.model.ready, "boolean");
+    assert.equal(state.offlineTranslationStatus.ready, true);
+    assert.equal(state.offlineTranslationStatus.missingFile, null);
+    assert.equal(state.offlineTranslationStatus.totalBytes, 122855036);
+    assert.match(state.offlineTranslationResult.text, /Download/i);
+    assert.deepEqual(state.apiSettingsPlacement, {
+      aiInApi: true,
+      translationInApi: true,
+      translatorGearExists: false,
+    });
 
     let portableBytes = null;
     if (target.artifact) {

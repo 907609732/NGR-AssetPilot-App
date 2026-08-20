@@ -11,6 +11,7 @@ import vm from "node:vm";
 
 import { CredentialStore } from "../desktop/services/credential-store.mjs";
 import { DirectoryTokenStore, validateRelativeExportPath } from "../desktop/services/directory-tokens.mjs";
+import { ExternalAppRegistry } from "../desktop/services/external-app-registry.mjs";
 import { NetworkClient, validateNetworkUrl } from "../desktop/services/network-client.mjs";
 import { ProviderRegistry, validateProviderBaseUrl } from "../desktop/services/provider-registry.mjs";
 import { BackupFileService } from "../desktop/services/backup-files.mjs";
@@ -40,6 +41,51 @@ async function withTempDirectory(run) {
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+test("external app registry detects ArtHub, hides paths, and only launches registered ids", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const artHubPath = path.join(userDataPath, "ArtHub.exe");
+    const customPath = path.join(userDataPath, "Uploader.exe");
+    await writeFile(artHubPath, "test executable");
+    await writeFile(customPath, "test executable");
+    const opened = [];
+    let selectedPath = customPath;
+    const registry = new ExternalAppRegistry({
+      userDataPath,
+      artHubCandidates: [artHubPath],
+      getWindow: () => null,
+      dialog: {
+        async showOpenDialog() { return { canceled: false, filePaths: [selectedPath] }; },
+      },
+      shell: {
+        async openPath(executablePath) { opened.push(executablePath); return ""; },
+      },
+    });
+    const initialized = await registry.initialize();
+    assert.deepEqual(initialized.apps, [{
+      id: "arthub", name: "ArtHub", builtin: true, configured: true, available: true,
+    }]);
+    assert.doesNotMatch(JSON.stringify(initialized), /ArtHub\.exe/);
+    assert.deepEqual(await registry.launch({ appId: "arthub" }), { opened: true, appId: "arthub", name: "ArtHub" });
+    assert.deepEqual(opened, [artHubPath]);
+    await assert.rejects(() => registry.launch({ appId: "missing" }), { code: "APP_NOT_FOUND" });
+
+    const added = await registry.choose();
+    const custom = added.apps.find((app) => !app.builtin);
+    assert.equal(custom.name, "Uploader");
+    assert.equal(custom.available, true);
+    assert.doesNotMatch(JSON.stringify(added), /Uploader\.exe/);
+    await registry.launch({ appId: custom.id });
+    assert.deepEqual(opened, [artHubPath, customPath]);
+    const removed = await registry.remove({ appId: custom.id });
+    assert.equal(removed.apps.length, 1);
+    await assert.rejects(() => registry.remove({ appId: "arthub" }), { code: "BUILTIN_APP_REQUIRED" });
+
+    selectedPath = path.join(userDataPath, "not-an-app.txt");
+    await writeFile(selectedPath, "no");
+    await assert.rejects(() => registry.choose({ appId: "arthub" }), { code: "APP_EXECUTABLE_INVALID" });
+  });
+});
 
 test("custom scheme resolves only app-hosted resources and adds a strict CSP", async () => {
   await withTempDirectory(async (appRoot) => {
@@ -125,8 +171,10 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
     "network",
     "files",
     "backup",
+    "offlineTranslation",
     "updater",
     "shell",
+    "externalApps",
     "localImageSearch",
     "app",
   ]);
@@ -136,6 +184,8 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.credentials.set, "undefined");
   assert.equal(typeof exposed.providers.upsert, "function");
   assert.equal(typeof exposed.network.cancel, "function");
+  assert.equal(typeof exposed.offlineTranslation.getStatus, "function");
+  assert.equal(typeof exposed.offlineTranslation.translate, "function");
   assert.equal(typeof exposed.files.writeFile, "function");
   assert.equal(typeof exposed.backup.beginImport, "function");
   assert.equal(typeof exposed.backup.finishImport, "function");
@@ -160,6 +210,8 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.app.onBeforeQuit, "function");
   await exposed.shell.openExternal({ url: "https://example.com" });
   assert.deepEqual(calls.at(-1), [ipcChannels.shellOpenExternal, { url: "https://example.com" }]);
+  await exposed.offlineTranslation.translate({ text: "首页", from: "zh", to: "en" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.offlineTranslationTranslate, { text: "首页", from: "zh", to: "en" }]);
   await exposed.localImageSearch.setActiveModel({ modelId: "custom-model" });
   assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchSetActiveModel, { modelId: "custom-model" }]);
   await exposed.localImageSearch.getModelStatus({ modelId: "builtin-q4" });
@@ -304,6 +356,24 @@ test("provider registry keeps secrets in DPAPI storage and exposes metadata only
     });
     assert.equal(resolved.url.href, "https://api.openai.com/v1/responses");
     assert.equal(resolved.headers.authorization, "Bearer provider-secret-test-only");
+    await registry.upsert({
+      provider: { id: "baidu", apiFormat: "baidu-ai" },
+      secretAction: "replace",
+      secret: { appId: "baidu-test-app", apiKey: "baidu-api-key-test-only" },
+    });
+    const baiduRequest = await registry.resolveRequest({
+      providerId: "baidu",
+      operation: "translate",
+      body: { q: "测试", from: "zh", to: "en" },
+    });
+    assert.equal(baiduRequest.url.href, "https://fanyi-api.baidu.com/ait/api/aiTextTranslate");
+    assert.equal(baiduRequest.method, "POST");
+    assert.equal(baiduRequest.headers.authorization, "Bearer baidu-api-key-test-only");
+    assert.equal(baiduRequest.headers["content-type"], "application/x-www-form-urlencoded");
+    assert.match(baiduRequest.body, /q=%E6%B5%8B%E8%AF%95/);
+    assert.match(baiduRequest.body, /appid=baidu-test-app/);
+    assert.match(baiduRequest.body, /model_type=llm/);
+    assert.equal(JSON.stringify(await registry.list()).includes("baidu-api-key-test-only"), false);
     assert.equal(validateProviderBaseUrl("http://127.0.0.1:11434/v1").allowLoopback, true);
     assert.throws(() => validateProviderBaseUrl("http://127.0.0.1/v1"), { code: "PROVIDER_PORT_REQUIRED" });
     assert.throws(() => validateProviderBaseUrl("https://192.0.2.8/v1"), { code: "PROVIDER_IP_NOT_ALLOWED" });

@@ -277,6 +277,14 @@
     return true;
   }
 
+  const externalApps = Object.freeze({
+    isAvailable: () => hasCapability("externalApps.list"),
+    list: () => invoke("externalApps.list"),
+    choose: (request) => invoke("externalApps.choose", request),
+    remove: (request) => invoke("externalApps.remove", request),
+    launch: (request) => invoke("externalApps.launch", request),
+  });
+
   const localImageSearch = Object.freeze({
     isAvailable: () => hasCapability("localImageSearch.getModelStatus"),
     getModelStatus: (request) => invoke("localImageSearch.getModelStatus", request),
@@ -302,6 +310,12 @@
     getThumbnail: (request) => invoke("localImageSearch.getThumbnail", request),
     openResult: (request) => invoke("localImageSearch.openResult", request),
     revealResult: (request) => invoke("localImageSearch.revealResult", request),
+  });
+
+  const offlineTranslation = Object.freeze({
+    isAvailable: () => hasCapability("offlineTranslation.translate"),
+    getStatus: () => invoke("offlineTranslation.getStatus"),
+    translate: (request) => invoke("offlineTranslation.translate", request),
   });
 
   globalScope.NgrDesktopBridge = Object.freeze({
@@ -339,6 +353,8 @@
     onBeforeQuit,
     readyToQuit,
     openExternal,
+    externalApps,
+    offlineTranslation,
     localImageSearch,
   });
   globalScope.ngrFetch = request;

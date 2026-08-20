@@ -34,6 +34,7 @@ test("桌面依赖版本全部精确锁定", () => {
   assert.equal(packageJson.scripts["build:prod"], "node scripts/run-build.mjs prod");
   assert.equal(packageJson.scripts["build:dev"], "node scripts/run-build.mjs dev");
   assert.equal(packageJson.scripts["build:test"], "node scripts/run-build.mjs test");
+  assert.equal(packageJson.scripts["prepare:offline-translation"], "node scripts/prepare-offline-translation-model.mjs");
   const builderConfig = fs.readFileSync(path.join(projectRoot, "build", "electron-builder.config.cjs"), "utf8");
   assert.match(builderConfig, /"app\/\*\*\/\*"/);
   assert.equal(fs.existsSync(path.join(projectRoot, "app", "js", "workspace-backup-stream-worker.js")), true);
@@ -58,7 +59,7 @@ test("应用版本、界面标识和静态资源缓存版本保持一致", () =>
   assert.deepEqual([...new Set(visibleVersions)], [packageJson.version]);
 
   const cacheVersions = [...appIndex.matchAll(/[?&]v=V(\d+\.\d+\.\d+)/g)].map((match) => match[1]);
-  assert.equal(cacheVersions.length, 22);
+  assert.equal(cacheVersions.length, 23);
   assert.deepEqual([...new Set(cacheVersions)], [packageJson.version]);
 });
 
@@ -93,7 +94,9 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
   assert.ok(dev.nsis.artifactName.includes(`NGR-AssetPilot-Dev-${packageJson.version}`));
   assert.ok(testConfig.nsis.artifactName.includes(`NGR-AssetPilot-Test-${packageJson.version}`));
   for (const config of [prod, dev, testConfig]) {
-    assert.deepEqual(config.extraResources, []);
+    assert.equal(config.extraResources.length, 1);
+    const offlineTranslation = config.extraResources.find(({ to }) => to === "offline-translation");
+    assert.match(offlineTranslation.from, /build[\\/]generated[\\/]offline-translation$/);
     assert.ok(config.files.includes("!build/generated/**/*"));
     assert.ok(config.files.includes("!app/API配置文件/**/*"));
     assert.ok(config.files.includes("!desktop/services/test-secrets.mjs"));

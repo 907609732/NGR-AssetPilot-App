@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.7" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.8" />
   </head>
   <body>
     <div id="app">
@@ -15,7 +15,7 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.7</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.8</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
@@ -65,7 +65,7 @@
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.7</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.8</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
@@ -74,6 +74,19 @@
               </div>
             </section>
             <div id="generalSettingsMigrationSlot"></div>
+          </div>
+        </section>
+
+        <section class="view api-settings-view" id="apiSettingsView">
+          <div class="section-head">
+            <div>
+              <h2>API 服务</h2>
+              <p>统一管理视觉命名、在线翻译和兼容模型服务；密钥只保存在 Windows 安全存储中。</p>
+            </div>
+          </div>
+          <div class="api-settings-stack">
+            <div id="apiSettingsAiSlot"></div>
+            <div id="apiSettingsTranslationSlot"></div>
           </div>
         </section>
 
@@ -280,8 +293,8 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.7</span><time class="version-date" datetime="2026-08-21">更新于 2026-08-21</time></h2>
-            <p>配置命名规则、AI 接入、方案模板和工作区备份；更改会自动保存。</p>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.8</span><time class="version-date" datetime="2026-08-21">更新于 2026-08-21</time></h2>
+            <p>配置命名规则、方案模板和项目知识库；在线服务统一在“API”页签管理。</p>
           </div>
 
           <form id="rulesForm" class="rules-grid">
@@ -396,8 +409,8 @@
           <div class="knowledge-panel ai-panel">
             <div class="section-head compact-head">
               <div>
-                <h2>AI 接入</h2>
-                <p>支持 OpenAI 官方、OpenAI 兼容平台和自定义接口；留空 API Key 时使用本地知识库推荐。</p>
+                <h2>视觉命名服务</h2>
+                <p>用于图片视觉理解和批量命名；支持 OpenAI 官方、Moonshot、兼容平台与已登记的自定义接口。</p>
               </div>
             </div>
             <div class="ai-grid">
@@ -515,13 +528,30 @@
               <label class="toolbar-select naming-mode-field">
                 <span>命名模式</span>
                 <select id="namingModeSelect">
-                  <option value="translate" selected>百度翻译API命名</option>
+                  <option value="translate" selected>翻译服务命名</option>
                   <option value="local">本地知识库命名</option>
                   <option value="ai">AI视觉命名</option>
                 </select>
               </label>
-              <button id="runSelectedNaming" class="primary-action" type="button">运行百度翻译API命名</button>
+              <button id="runSelectedNaming" class="primary-action" type="button">运行翻译服务命名</button>
               <button id="stopNaming" class="danger-action hidden" type="button">终止命名</button>
+              <details id="externalAppMenu" class="compact-action-menu external-app-menu">
+                <summary id="externalAppPrimary" class="external-app-trigger" aria-label="打开快捷应用菜单" title="快速打开 ArtHub 或其他电脑软件">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5H5v14h14v-3M11 13 20 4m0 0h-6m6 0v6" /></svg>
+                  <span id="externalAppPrimaryLabel">打开 ArtHub</span>
+                  <svg class="menu-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+                </summary>
+                <div class="compact-menu-panel external-app-menu-panel">
+                  <div class="external-app-menu-head">
+                    <div><strong>快速打开应用</strong><small>命名完成后直接拉起上传工具</small></div>
+                    <button id="externalAppAdd" class="ghost-action compact-button" type="button">＋ 添加</button>
+                  </div>
+                  <div id="externalAppList" class="external-app-list" role="list">
+                    <p class="external-app-empty">正在读取电脑应用…</p>
+                  </div>
+                  <p id="externalAppStatus" class="external-app-status" aria-live="polite"></p>
+                </div>
+              </details>
               <details id="exportMenu" class="compact-action-menu export-action-menu">
                 <summary class="toolbar-download-action" aria-label="打开导出菜单" title="下载命名完成的图片">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -844,17 +874,29 @@
               <strong id="translatorTitle">命名单词翻译</strong>
             </div>
             <div class="translator-head-actions">
-              <button id="translatorSettingsToggle" type="button" aria-label="翻译 API 设置" aria-controls="translatorSettings" aria-expanded="false" title="翻译 API 设置">⚙</button>
               <button id="translatorClose" type="button" aria-label="收起翻译面板">×</button>
             </div>
           </div>
           <div class="translator-settings hidden" id="translatorSettings">
+            <div class="section-head compact-head translator-api-heading">
+              <div>
+                <h2>翻译服务</h2>
+                <p>选择内置离线翻译、百度翻译或 OpenAI 兼容文本模型。</p>
+              </div>
+            </div>
             <label>
               <span>翻译方式</span>
               <select id="translatorProvider">
-                <option value="local">本地词库</option>
-                <option value="baidu">百度翻译 API</option>
+                <option value="local">内置离线 AI 翻译</option>
+                <option value="baidu">自有百度翻译 API</option>
                 <option value="model">OpenAI兼容文本模型</option>
+              </select>
+            </label>
+            <label data-provider-group="baidu">
+              <span>百度鉴权方式</span>
+              <select id="baiduCredentialType">
+                <option value="apiKey">新版 API Key（推荐）</option>
+                <option value="legacy">App ID + 传统密钥</option>
               </select>
             </label>
             <label data-provider-group="baidu">
@@ -862,8 +904,8 @@
               <input id="baiduTranslateAppId" type="text" placeholder="请输入百度翻译 App ID" />
             </label>
             <label data-provider-group="baidu">
-              <span>百度密钥</span>
-              <input id="baiduTranslateSecret" type="password" placeholder="请输入百度翻译密钥" />
+              <span id="baiduCredentialLabel">百度 API Key</span>
+              <input id="baiduTranslateSecret" type="password" placeholder="请输入百度大模型翻译 API Key" />
             </label>
             <label data-provider-group="baidu">
               <span>接口地址</span>
@@ -881,13 +923,13 @@
               <span>模型名称</span>
               <input id="textTranslateModel" type="text" placeholder="例如：gpt-4.1-mini" />
             </label>
-            <p class="translator-provider-note" data-provider-group="local">当前使用本地词库和拼音兜底，不需要额外 API。</p>
+            <p class="translator-provider-note" data-provider-group="local">内置离线中译英模型，断网可用；词库和拼音作为自动兜底，不需要 API Key。</p>
             <div class="translator-settings-actions">
               <button id="saveTranslatorSettings" class="primary-action" type="button">保存翻译设置</button>
-              <button id="testTranslatorSettings" class="ghost-action" type="button">测试 API</button>
+              <button id="testTranslatorSettings" class="ghost-action" type="button">测试翻译</button>
               <button id="clearTranslatorCredential" class="ghost-action desktop-credential-action" type="button">清除已保存密钥</button>
             </div>
-            <small>翻译配置只处理文本文件名，不会上传图片。若接口失败，会自动使用本地词库和拼音兜底。</small>
+            <small>离线模式不会上传文字或图片。在线接口失败时，也会自动使用内置词库和拼音兜底。</small>
           </div>
           <label class="sr-only" for="translatorInput">需要翻译或解释的命名单词</label>
           <input class="translator-input" id="translatorInput" type="text" placeholder="输入中文文件名、英文命名或单词" autocomplete="off" spellcheck="false" />
@@ -1162,26 +1204,27 @@
       <div id="toast" class="toast hidden" role="status"></div>
     </div>
 
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.7"></script>
-    <script src="historical-knowledge.js?v=V3.0.7"></script>
-    <script src="js/config.js?v=V3.0.7"></script>
-    <script src="js/prefix-library.js?v=V3.0.7"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.7"></script>
-    <script src="js/updates.js?v=V3.0.7"></script>
-    <script src="js/workspace-backup.js?v=V3.0.7"></script>
-    <script src="js/state-dom.js?v=V3.0.7"></script>
-    <script src="js/local-image-browser.js?v=V3.0.7"></script>
-    <script src="js/local-image-search.js?v=V3.0.7"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.7"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.7"></script>
-    <script src="js/ai-workflow.js?v=V3.0.7"></script>
-    <script src="js/assets-detection.js?v=V3.0.7"></script>
-    <script src="js/rendering.js?v=V3.0.7"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.7"></script>
-    <script src="js/export-template-storage.js?v=V3.0.7"></script>
-    <script src="js/toast.js?v=V3.0.7"></script>
-    <script src="js/workspace-storage.js?v=V3.0.7"></script>
-    <script src="js/workspace-migration.js?v=V3.0.7"></script>
-    <script src="js/main.js?v=V3.0.7"></script>
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.8"></script>
+    <script src="historical-knowledge.js?v=V3.0.8"></script>
+    <script src="js/config.js?v=V3.0.8"></script>
+    <script src="js/prefix-library.js?v=V3.0.8"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.8"></script>
+    <script src="js/external-app-launcher.js?v=V3.0.8"></script>
+    <script src="js/updates.js?v=V3.0.8"></script>
+    <script src="js/workspace-backup.js?v=V3.0.8"></script>
+    <script src="js/state-dom.js?v=V3.0.8"></script>
+    <script src="js/local-image-browser.js?v=V3.0.8"></script>
+    <script src="js/local-image-search.js?v=V3.0.8"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.8"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.8"></script>
+    <script src="js/ai-workflow.js?v=V3.0.8"></script>
+    <script src="js/assets-detection.js?v=V3.0.8"></script>
+    <script src="js/rendering.js?v=V3.0.8"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.8"></script>
+    <script src="js/export-template-storage.js?v=V3.0.8"></script>
+    <script src="js/toast.js?v=V3.0.8"></script>
+    <script src="js/workspace-storage.js?v=V3.0.8"></script>
+    <script src="js/workspace-migration.js?v=V3.0.8"></script>
+    <script src="js/main.js?v=V3.0.8"></script>
   </body>
 </html>

@@ -847,27 +847,35 @@ function saveAiSettings(nextSettings, options = {}) {
 }
 
 function collectTranslationSettings() {
+  const provider = els.translatorProvider.value || "local";
+  const providerId = provider === "baidu" ? "baidu"
+      : provider === "model" ? "user-translation-model" : "";
   return normalizeTranslationSettings({
-    provider: els.translatorProvider.value || "local",
+    provider,
+    baiduCredentialType: els.baiduCredentialType?.value || "apiKey",
     baiduAppId: els.baiduTranslateAppId.value.trim(),
     baiduSecret: els.baiduTranslateSecret.value.trim(),
     baiduEndpoint: normalizeTranslateEndpoint(els.baiduTranslateEndpoint.value),
     textBaseUrl: normalizeBaseUrl(els.textTranslateBaseUrl.value),
     textApiKey: els.textTranslateApiKey.value.trim(),
     textModel: els.textTranslateModel.value.trim(),
-    providerId: typeof translationSettings === "object" ? translationSettings.providerId || "" : "",
-    hasSecret: typeof translationSettings === "object" ? Boolean(translationSettings.hasSecret) : false,
+    providerId,
+    hasSecret: typeof translationSettings === "object"
+      ? providerId === translationSettings.providerId && Boolean(translationSettings.hasSecret)
+      : false,
   });
 }
 
 function fillTranslationSettings() {
   els.translatorProvider.value = translationSettings.provider;
+  if (els.baiduCredentialType) els.baiduCredentialType.value = translationSettings.baiduCredentialType;
   els.baiduTranslateAppId.value = translationSettings.baiduAppId;
   els.baiduTranslateSecret.value = translationSettings.baiduSecret;
   els.baiduTranslateAppId.placeholder = translationSettings.provider === "baidu" && translationSettings.hasSecret
     ? "已安全保存；留空表示保持不变" : "请输入百度翻译 App ID";
   els.baiduTranslateSecret.placeholder = translationSettings.provider === "baidu" && translationSettings.hasSecret
-    ? "已安全保存；留空表示保持不变" : "请输入百度翻译密钥";
+    ? "已安全保存；留空表示保持不变"
+    : translationSettings.baiduCredentialType === "apiKey" ? "请输入百度大模型翻译 API Key" : "请输入百度传统密钥";
   els.baiduTranslateEndpoint.value = translationSettings.baiduEndpoint;
   els.textTranslateBaseUrl.value = translationSettings.textBaseUrl;
   els.textTranslateApiKey.value = translationSettings.textApiKey;
@@ -913,6 +921,9 @@ function normalizeTranslationSettings(nextSettings = {}) {
   const provider = ["local", "baidu", "model"].includes(nextSettings.provider) ? nextSettings.provider : "local";
   return {
     provider,
+    baiduCredentialType: nextSettings.baiduCredentialType === "apiKey"
+      ? "apiKey"
+      : nextSettings.baiduCredentialType === "legacy" || nextSettings.baiduSecret ? "legacy" : "apiKey",
     baiduAppId: nextSettings.baiduAppId || "",
     baiduSecret: nextSettings.baiduSecret || "",
     baiduEndpoint: normalizeTranslateEndpoint(nextSettings.baiduEndpoint || "https://fanyi-api.baidu.com/api/trans/vip/translate"),

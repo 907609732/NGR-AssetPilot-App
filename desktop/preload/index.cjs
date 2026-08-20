@@ -14,6 +14,8 @@ const channels = Object.freeze({
   providersImportLegacy: "ngr:providers:import-legacy",
   networkRequest: "ngr:network:request",
   networkCancel: "ngr:network:cancel",
+  offlineTranslationGetStatus: "ngr:offline-translation:get-status",
+  offlineTranslationTranslate: "ngr:offline-translation:translate",
   filesSelectExportDirectory: "ngr:files:select-export-directory",
   filesWriteFile: "ngr:files:write-file",
   backupBeginExport: "ngr:backup:begin-export",
@@ -37,6 +39,10 @@ const channels = Object.freeze({
   updaterGetState: "ngr:updater:get-state",
   updaterStateChanged: "ngr:updater:state-changed",
   shellOpenExternal: "ngr:shell:open-external",
+  externalAppsList: "ngr:external-apps:list",
+  externalAppsChoose: "ngr:external-apps:choose",
+  externalAppsRemove: "ngr:external-apps:remove",
+  externalAppsLaunch: "ngr:external-apps:launch",
   localImageSearchGetModelStatus: "ngr:local-image-search:get-model-status",
   localImageSearchListModels: "ngr:local-image-search:list-models",
   localImageSearchValidateModel: "ngr:local-image-search:validate-model",
@@ -112,6 +118,10 @@ const api = deepFreeze({
     rollbackApply: (request) => invoke(channels.backupRollbackApply, request),
     finalizeApply: (request) => invoke(channels.backupFinalizeApply, request),
   },
+  offlineTranslation: {
+    getStatus: () => invoke(channels.offlineTranslationGetStatus),
+    translate: (request) => invoke(channels.offlineTranslationTranslate, request),
+  },
   updater: {
     check: () => invoke(channels.updaterCheck),
     download: () => invoke(channels.updaterDownload),
@@ -130,6 +140,12 @@ const api = deepFreeze({
         channels.shellOpenExternal,
         typeof urlOrRequest === "string" ? { url: urlOrRequest } : urlOrRequest,
       ),
+  },
+  externalApps: {
+    list: () => invoke(channels.externalAppsList),
+    choose: (request) => invoke(channels.externalAppsChoose, request),
+    remove: (request) => invoke(channels.externalAppsRemove, request),
+    launch: (request) => invoke(channels.externalAppsLaunch, request),
   },
   localImageSearch: {
     getModelStatus: (request) => invoke(channels.localImageSearchGetModelStatus, request),
