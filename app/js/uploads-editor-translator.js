@@ -26,8 +26,13 @@ function bindUploads() {
   });
   els.uploadDropZone.addEventListener("drop", async (event) => {
     els.uploadDropZone.classList.remove("drag-over");
-    const files = await collectDroppedFiles(event.dataTransfer);
-    addFiles(files);
+    try {
+      const files = await collectDroppedFiles(event.dataTransfer);
+      await addFiles(files);
+    } catch (error) {
+      console.warn("Folder drop import failed", error);
+      showToast("文件夹读取失败，请重试或点击“选择文件夹”导入");
+    }
   });
   els.referenceInput.addEventListener("change", (event) => {
     const file = event.target.files[0];
@@ -100,8 +105,13 @@ function bindDetection() {
   });
   els.detectionDropZone.addEventListener("drop", async (event) => {
     els.detectionDropZone.classList.remove("drag-over");
-    const files = await collectDroppedFiles(event.dataTransfer);
-    addDetectionFiles(files);
+    try {
+      const files = await collectDroppedFiles(event.dataTransfer);
+      await addDetectionFiles(files);
+    } catch (error) {
+      console.warn("Detection folder drop import failed", error);
+      showToast("文件夹读取失败，请重试或点击“选择文件夹”导入");
+    }
   });
   els.detectionProfileSelect.addEventListener("change", () => {
     switchDetectionProfile(els.detectionProfileSelect.value);
@@ -157,12 +167,24 @@ function bindTranslator() {
     requestAnimationFrame(constrainTranslatorPanelToViewport);
   });
   els.translatorProvider.addEventListener("change", syncTranslatorProviderFields);
-  els.saveTranslatorSettings.addEventListener("click", () => {
+  els.saveTranslatorSettings.addEventListener("click", async () => {
     translationSettings = collectTranslationSettings();
-    saveTranslationSettings(translationSettings);
-    showToast("翻译 API 设置已保存");
+    try {
+      await saveTranslationSettings(translationSettings);
+      showToast("翻译 API 设置已保存");
+    } catch (error) {
+      showToast(`翻译 API 设置保存失败：${error?.message || "未知错误"}`);
+    }
   });
   els.testTranslatorSettings.addEventListener("click", testTranslationSettings);
+  els.clearTranslatorCredential?.addEventListener("click", async () => {
+    try {
+      const cleared = await clearActiveTranslationCredential();
+      showToast(cleared ? "已清除当前翻译服务密钥" : "本地词库没有需要清除的密钥");
+    } catch (error) {
+      showToast(`清除翻译密钥失败：${error?.message || "未知错误"}`);
+    }
+  });
   els.translatorToName.addEventListener("click", async () => {
     const source = normalizeSourceName(els.translatorInput.value);
     if (!source) {
@@ -344,7 +366,7 @@ async function explainNameWithTranslation(name) {
 
 async function testTranslationSettings() {
   translationSettings = collectTranslationSettings();
-  saveTranslationSettings(translationSettings);
+  await saveTranslationSettings(translationSettings);
   els.translatorOutput.textContent = "正在测试翻译 API...";
   if (translationSettings.provider === "local") {
     els.translatorOutput.textContent = "当前使用本地词库，不需要测试 API。";
@@ -373,32 +395,65 @@ async function collectDroppedFiles(dataTransfer) {
   const items = [...(dataTransfer.items || [])];
   const fallbackFiles = [...(dataTransfer.files || [])];
   if (!items.length) return fallbackFiles;
-  const files = (await Promise.all(items.map(readDroppedItem))).flat().filter(Boolean);
+  // Both APIs require their entry/handle to be requested synchronously during
+  // the drop event. Capture both before awaiting either one so the legacy
+  // directory fallback remains usable when getAsFileSystemHandle() rejects.
+  const droppedItems = items
+    .filter((item) => !item.kind || item.kind === "file")
+    .map(captureDroppedItem);
+  const files = (await Promise.all(droppedItems.map(readDroppedItem))).flat().filter(Boolean);
   return files.length ? files : fallbackFiles;
 }
 
-async function readDroppedItem(item) {
-  if (item.getAsFileSystemHandle) {
-    const handle = await item.getAsFileSystemHandle().catch(() => null);
-    if (handle) return readFileSystemHandleFiles(handle);
+function captureDroppedItem(item) {
+  let handlePromise = null;
+  let entry = null;
+  let file = null;
+  try {
+    handlePromise = item.getAsFileSystemHandle?.() || null;
+  } catch {}
+  try {
+    entry = item.webkitGetAsEntry?.() || null;
+  } catch {}
+  try {
+    file = item.getAsFile?.() || null;
+  } catch {}
+  return { handlePromise, entry, file };
+}
+
+async function readDroppedItem({ handlePromise, entry, file }) {
+  if (handlePromise) {
+    const handle = await Promise.resolve(handlePromise).catch(() => null);
+    if (handle) return readFileSystemHandleFiles(handle, []);
   }
-  const entry = item.webkitGetAsEntry?.();
   if (entry) return readEntryFiles(entry);
-  const file = item.getAsFile?.();
   return file ? [file] : [];
 }
 
-async function readFileSystemHandleFiles(handle) {
+async function readFileSystemHandleFiles(handle, parentParts = []) {
   if (handle.kind === "file") {
     const file = await handle.getFile().catch(() => null);
-    return file ? [file] : [];
+    return file ? [applyDroppedRelativePath(file, [...parentParts, file.name])] : [];
   }
   if (handle.kind !== "directory") return [];
   const files = [];
+  const directoryParts = [...parentParts, handle.name].filter(Boolean);
   for await (const child of handle.values()) {
-    files.push(...await readFileSystemHandleFiles(child));
+    files.push(...await readFileSystemHandleFiles(child, directoryParts));
   }
   return files;
+}
+
+function applyDroppedRelativePath(file, parts) {
+  if (!file || file.webkitRelativePath || parts.length < 2) return file;
+  try {
+    Object.defineProperty(file, "webkitRelativePath", {
+      configurable: true,
+      enumerable: true,
+      value: parts.join("/"),
+    });
+  } catch {}
+  return file;
 }
 
 function readEntryFiles(entry) {

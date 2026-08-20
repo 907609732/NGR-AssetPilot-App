@@ -59,23 +59,37 @@
     };
   }
 
-  function raceAbort(operation, signal) {
-    if (!signal) return operation;
-    if (signal.aborted) return Promise.reject(new DOMException("请求已终止", "AbortError"));
-    return new Promise((resolve, reject) => {
-      const onAbort = () => reject(new DOMException("请求已终止", "AbortError"));
-      signal.addEventListener("abort", onAbort, { once: true });
-      operation.then(
-        (value) => {
-          signal.removeEventListener("abort", onAbort);
-          resolve(value);
-        },
-        (error) => {
-          signal.removeEventListener("abort", onAbort);
-          reject(error);
-        },
-      );
-    });
+  function createRequestId() {
+    if (globalScope.crypto?.randomUUID) return globalScope.crypto.randomUUID();
+    return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`;
+  }
+
+  async function requestProvider(providerId, operation, body, options = {}) {
+    if (!hasCapability("network.request")) throw new Error("桌面模型服务能力不可用");
+    const requestId = createRequestId();
+    const signal = options.signal;
+    if (signal?.aborted) throw new DOMException("请求已终止", "AbortError");
+    const onAbort = () => {
+      if (hasCapability("network.cancel")) void invoke("network.cancel", { requestId }).catch(() => {});
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      const result = await invoke("network.request", {
+        requestId,
+        providerId: String(providerId || ""),
+        operation: String(operation || ""),
+        body,
+        timeoutMs: Number(options.timeoutMs || 0) || undefined,
+      });
+      return createDesktopResponse(result);
+    } catch (error) {
+      if (signal?.aborted || error?.code === "NETWORK_CANCELED") {
+        throw new DOMException("请求已终止", "AbortError");
+      }
+      throw error;
+    } finally {
+      signal?.removeEventListener("abort", onAbort);
+    }
   }
 
   async function request(url, options = {}) {
@@ -84,37 +98,7 @@
       return browserFetch(url, options);
     }
 
-    const headers = {};
-    if (options.headers instanceof Headers) options.headers.forEach((value, key) => { headers[key] = value; });
-    else Object.assign(headers, options.headers || {});
-    const requestUrl = String(url);
-    let service;
-    if (options.service !== undefined) {
-      if (!(["ai", "translation"].includes(options.service))) throw new TypeError("不支持的桌面网络服务类型");
-      service = options.service;
-    } else {
-      service = "ai";
-      try {
-        const hostname = new URL(requestUrl).hostname.toLowerCase();
-        if (hostname === "fanyi-api.baidu.com") service = "translation";
-      } catch {
-        // The main process performs the authoritative URL validation.
-      }
-    }
-    const operation = invoke("network.request", {
-      service,
-      url: requestUrl,
-      method: String(options.method || "GET").toUpperCase(),
-      headers,
-      body: options.body == null ? null : String(options.body),
-      timeoutMs: Number(options.timeoutMs || 0) || undefined,
-    });
-    return createDesktopResponse(await raceAbort(operation, options.signal));
-  }
-
-  async function getCredentials() {
-    if (!hasCapability("credentials.get")) return null;
-    return invoke("credentials.get");
+    throw new Error("桌面网络请求必须使用已保存并明确授权的模型服务");
   }
 
   async function getCredentialStatus() {
@@ -122,16 +106,24 @@
     return invoke("credentials.getStatus");
   }
 
-  async function setCredentials(credentials) {
-    if (!hasCapability("credentials.set")) return false;
-    await invoke("credentials.set", credentials || {});
-    return true;
+  async function listProviders() {
+    if (!hasCapability("providers.list")) return [];
+    return invoke("providers.list");
   }
 
-  async function clearCredentials() {
-    if (!hasCapability("credentials.clear")) return false;
-    await invoke("credentials.clear");
-    return true;
+  async function upsertProvider(request) {
+    if (!hasCapability("providers.upsert")) throw new Error("桌面模型服务配置能力不可用");
+    return invoke("providers.upsert", request);
+  }
+
+  async function removeProvider(providerId) {
+    if (!hasCapability("providers.remove")) throw new Error("桌面模型服务配置能力不可用");
+    return invoke("providers.remove", { providerId });
+  }
+
+  async function importLegacyProviders(payload) {
+    if (!hasCapability("providers.importLegacy")) return { imported: false, reason: "unsupported" };
+    return invoke("providers.importLegacy", payload || {});
   }
 
   async function selectExportDirectory() {
@@ -169,18 +161,76 @@
     }
   }
 
-  async function saveBackup(suggestedName, bytes, options = {}) {
-    if (!hasCapability("backup.save")) return null;
-    return invoke("backup.save", {
-      suggestedName,
-      data: bytes instanceof Uint8Array ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : bytes,
-      automatic: Boolean(options.automatic),
+  async function beginBackupStream(suggestedName) {
+    if (!hasCapability("backup.beginExport")) throw new Error("桌面流式备份能力不可用");
+    return invoke("backup.beginExport", { suggestedName, expectedSize: null });
+  }
+
+  async function writeBackupStreamChunk(sessionId, offset, data) {
+    return invoke("backup.writeExportChunk", { sessionId, offset, data });
+  }
+
+  async function finishBackupStream(sessionId) {
+    return invoke("backup.finishExport", { sessionId });
+  }
+
+  async function cancelBackupStream(sessionId) {
+    return invoke("backup.cancelExport", { sessionId });
+  }
+
+  async function beginBackupImport() {
+    if (!hasCapability("backup.beginImport")) throw new Error("桌面流式导入能力不可用");
+    return invoke("backup.beginImport");
+  }
+
+  async function readBackupImportChunk(sessionId, offset, length = FILE_WRITE_CHUNK_SIZE) {
+    if (!hasCapability("backup.readImportChunk")) throw new Error("桌面流式导入能力不可用");
+    return invoke("backup.readImportChunk", {
+      sessionId,
+      offset,
+      length: Math.min(Number(length || FILE_WRITE_CHUNK_SIZE), FILE_WRITE_CHUNK_SIZE),
     });
   }
 
-  async function openBackup() {
-    if (!hasCapability("backup.open")) return null;
-    return invoke("backup.open");
+  async function finishBackupImport(sessionId) {
+    if (!hasCapability("backup.finishImport")) throw new Error("桌面流式导入提交能力不可用");
+    return invoke("backup.finishImport", { sessionId });
+  }
+
+  async function cancelBackupImport(sessionId) {
+    if (hasCapability("backup.cancelImport")) return invoke("backup.cancelImport", { sessionId });
+    if (hasCapability("backup.closeImport")) return invoke("backup.closeImport", { sessionId });
+    return { canceled: true, sessionId };
+  }
+
+  async function beginBackupApply() {
+    if (!hasCapability("backup.beginApply")) throw new Error("桌面迁移事务能力不可用");
+    return invoke("backup.beginApply");
+  }
+
+  async function importBackupLegacySecrets(transactionId, data, password) {
+    if (!hasCapability("backup.importLegacySecrets")) throw new Error("桌面凭据迁移能力不可用");
+    return invoke("backup.importLegacySecrets", { transactionId, data, password });
+  }
+
+  async function commitBackupApply(transactionId) {
+    if (!hasCapability("backup.commitApply")) throw new Error("桌面迁移事务能力不可用");
+    return invoke("backup.commitApply", { transactionId });
+  }
+
+  async function getBackupApplyState(transactionId) {
+    if (!hasCapability("backup.getApplyState")) throw new Error("桌面迁移恢复能力不可用");
+    return invoke("backup.getApplyState", { transactionId });
+  }
+
+  async function rollbackBackupApply(transactionId) {
+    if (!hasCapability("backup.rollbackApply")) throw new Error("桌面迁移回滚能力不可用");
+    return invoke("backup.rollbackApply", { transactionId });
+  }
+
+  async function finalizeBackupApply(transactionId) {
+    if (!hasCapability("backup.finalizeApply")) throw new Error("桌面迁移事务清理能力不可用");
+    return invoke("backup.finalizeApply", { transactionId });
   }
 
   async function getUpdateState() {
@@ -229,17 +279,19 @@
 
   const localImageSearch = Object.freeze({
     isAvailable: () => hasCapability("localImageSearch.getModelStatus"),
-    getModelStatus: () => invoke("localImageSearch.getModelStatus"),
-    downloadModel: () => invoke("localImageSearch.downloadModel"),
-    cancelModelDownload: () => invoke("localImageSearch.cancelModelDownload"),
+    getModelStatus: (request) => invoke("localImageSearch.getModelStatus", request),
+    downloadModel: (request) => invoke("localImageSearch.downloadModel", request),
+    cancelModelDownload: (request) => invoke("localImageSearch.cancelModelDownload", request),
     listModels: () => invoke("localImageSearch.listModels"),
     validateModel: (request) => invoke("localImageSearch.validateModel", request),
     importModel: (request) => invoke("localImageSearch.importModel", request),
-    exportModel: () => invoke("localImageSearch.exportModel"),
+    exportModel: (request) => invoke("localImageSearch.exportModel", request),
     removeModel: (request) => invoke("localImageSearch.removeModel", request),
     setActiveModel: (request) => invoke("localImageSearch.setActiveModel", request),
     getEngineStatus: (request) => invoke("localImageSearch.getEngineStatus", request),
     listLibraries: () => invoke("localImageSearch.listLibraries"),
+    listAssetFolders: (request) => invoke("localImageSearch.listAssetFolders", request),
+    listAssets: (request) => invoke("localImageSearch.listAssets", request),
     createLibrary: () => invoke("localImageSearch.createLibrary"),
     removeLibrary: (request) => invoke("localImageSearch.removeLibrary", request),
     startIndex: (request) => invoke("localImageSearch.startIndex", request),
@@ -257,14 +309,28 @@
     hasCapability,
     getInfo,
     request,
-    getCredentials,
+    requestProvider,
     getCredentialStatus,
-    setCredentials,
-    clearCredentials,
+    listProviders,
+    upsertProvider,
+    removeProvider,
+    importLegacyProviders,
     selectExportDirectory,
     writeFileInChunks,
-    saveBackup,
-    openBackup,
+    beginBackupStream,
+    writeBackupStreamChunk,
+    finishBackupStream,
+    cancelBackupStream,
+    beginBackupImport,
+    readBackupImportChunk,
+    finishBackupImport,
+    cancelBackupImport,
+    beginBackupApply,
+    importBackupLegacySecrets,
+    commitBackupApply,
+    getBackupApplyState,
+    rollbackBackupApply,
+    finalizeBackupApply,
     getUpdateState,
     checkForUpdates,
     downloadUpdate,

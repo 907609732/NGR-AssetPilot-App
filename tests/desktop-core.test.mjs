@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, pbkdf2Sync, randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +12,9 @@ import vm from "node:vm";
 import { CredentialStore } from "../desktop/services/credential-store.mjs";
 import { DirectoryTokenStore, validateRelativeExportPath } from "../desktop/services/directory-tokens.mjs";
 import { NetworkClient, validateNetworkUrl } from "../desktop/services/network-client.mjs";
+import { ProviderRegistry, validateProviderBaseUrl } from "../desktop/services/provider-registry.mjs";
+import { BackupFileService } from "../desktop/services/backup-files.mjs";
+import { RuntimeLogger } from "../desktop/services/runtime-logger.mjs";
 import {
   decryptTestSecretsBlob,
   TEST_SECRETS_AAD,
@@ -19,6 +22,7 @@ import {
 import { UpdaterController, updaterMetadata } from "../desktop/services/updater-controller.mjs";
 import { installAppProtocol, resolveAppResource } from "../desktop/main/protocol.mjs";
 import { registerDesktopIpc } from "../desktop/main/ipc.mjs";
+import { QuitCoordinator } from "../desktop/main/lifecycle.mjs";
 import {
   createSecureWindowOptions,
   isAllowedExternalUrl,
@@ -74,6 +78,10 @@ test("window settings and navigation helpers enforce the renderer boundary", () 
   assert.equal(isTrustedAppUrl("ngr-assetpilot://other/js/main.js"), false);
   assert.equal(isAllowedExternalUrl("https://ngr.lttlt.top/help"), true);
   assert.equal(isAllowedExternalUrl("https://github.com/907609732/NGR-AssetPilot-App/releases"), true);
+  assert.equal(isAllowedExternalUrl("https://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=1"), true);
+  assert.equal(isAllowedExternalUrl("https://doc.weixin.qq.com/forms/a-different-form?page=1"), false);
+  assert.equal(isAllowedExternalUrl("https://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=2"), false);
+  assert.equal(isAllowedExternalUrl("http://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=1"), false);
   assert.equal(isAllowedExternalUrl("https://example.com/help"), false);
   assert.equal(isAllowedExternalUrl("http://example.com/help"), false);
   assert.equal(isAllowedExternalUrl("https://user:pass@example.com/help"), false);
@@ -113,6 +121,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.deepEqual(Object.keys(exposed), [
     "environment",
     "credentials",
+    "providers",
     "network",
     "files",
     "backup",
@@ -123,8 +132,22 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   ]);
   assert.equal(Object.isFrozen(exposed), true);
   assert.doesNotMatch(preloadSource, /require\(["']\.\.?[\\/]/, "sandboxed preload must be self-contained");
-  assert.equal(typeof exposed.credentials.set, "function");
+  assert.equal(typeof exposed.credentials.get, "undefined");
+  assert.equal(typeof exposed.credentials.set, "undefined");
+  assert.equal(typeof exposed.providers.upsert, "function");
+  assert.equal(typeof exposed.network.cancel, "function");
   assert.equal(typeof exposed.files.writeFile, "function");
+  assert.equal(typeof exposed.backup.beginImport, "function");
+  assert.equal(typeof exposed.backup.finishImport, "function");
+  assert.equal(typeof exposed.backup.cancelImport, "function");
+  assert.equal(typeof exposed.backup.save, "undefined");
+  assert.equal(typeof exposed.backup.open, "undefined");
+  assert.equal(typeof exposed.backup.beginApply, "function");
+  assert.equal(typeof exposed.backup.importLegacySecrets, "function");
+  assert.equal(typeof exposed.backup.commitApply, "function");
+  assert.equal(typeof exposed.backup.getApplyState, "function");
+  assert.equal(typeof exposed.backup.rollbackApply, "function");
+  assert.equal(typeof exposed.backup.finalizeApply, "function");
   assert.equal(typeof exposed.localImageSearch.searchByImage, "function");
   assert.equal(typeof exposed.localImageSearch.importModel, "function");
   assert.equal(typeof exposed.localImageSearch.exportModel, "function");
@@ -132,16 +155,35 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.localImageSearch.validateModel, "function");
   assert.equal(typeof exposed.localImageSearch.setActiveModel, "function");
   assert.equal(typeof exposed.localImageSearch.getEngineStatus, "function");
+  assert.equal(typeof exposed.localImageSearch.listAssetFolders, "function");
+  assert.equal(typeof exposed.localImageSearch.listAssets, "function");
   assert.equal(typeof exposed.app.onBeforeQuit, "function");
   await exposed.shell.openExternal({ url: "https://example.com" });
   assert.deepEqual(calls.at(-1), [ipcChannels.shellOpenExternal, { url: "https://example.com" }]);
   await exposed.localImageSearch.setActiveModel({ modelId: "custom-model" });
   assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchSetActiveModel, { modelId: "custom-model" }]);
+  await exposed.localImageSearch.getModelStatus({ modelId: "builtin-q4" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchGetModelStatus, { modelId: "builtin-q4" }]);
+  await exposed.localImageSearch.downloadModel({ modelId: "builtin-q4" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchDownloadModel, { modelId: "builtin-q4" }]);
+  await exposed.localImageSearch.cancelModelDownload({ modelId: "builtin-q4" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchCancelModelDownload, { modelId: "builtin-q4" }]);
+  await exposed.localImageSearch.exportModel({ modelId: "builtin-q4" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchExportModel, { modelId: "builtin-q4" }]);
+  await exposed.localImageSearch.listAssetFolders({ libraryId: "library-1", parentPrefix: "ui" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchListAssetFolders, { libraryId: "library-1", parentPrefix: "ui" }]);
+  await exposed.localImageSearch.listAssets({ libraryId: "library-1", page: 2, pageSize: 100 });
+  assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchListAssets, { libraryId: "library-1", page: 2, pageSize: 100 }]);
+  await exposed.backup.finishImport({ sessionId: "import-session" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.backupFinishImport, { sessionId: "import-session" }]);
+  await exposed.backup.beginApply();
+  assert.deepEqual(calls.at(-1), [ipcChannels.backupBeginApply, undefined]);
 });
 
 test("IPC handlers reject non-main-frame and non-app senders", async () => {
   const handlers = new Map();
   const listeners = new Map();
+  const runtimeEvents = [];
   const ipcMain = {
     handle(channel, handler) { handlers.set(channel, handler); },
     removeHandler(channel) { handlers.delete(channel); },
@@ -157,12 +199,17 @@ test("IPC handlers reject non-main-frame and non-app senders", async () => {
     shell: {},
     getWindow: () => window,
     credentialStore: {},
-    networkClient: {},
+    providerRegistry: {},
+    networkClient: { request: async (payload) => ({ requestId: payload.requestId, ok: true }) },
     directoryTokens: {},
     backupService: {},
     updater: {},
     lifecycle: {},
     environmentInfo: () => ({ safe: true }),
+    runtimeLogger: {
+      info(stage, details) { runtimeEvents.push({ level: "info", stage, details }); },
+      warn(stage, _error, details) { runtimeEvents.push({ level: "warn", stage, details }); },
+    },
   });
   const handler = handlers.get(ipcChannels.environmentGetInfo);
   assert.deepEqual(await handler({ sender: webContents, senderFrame: mainFrame }), { safe: true });
@@ -174,6 +221,13 @@ test("IPC handlers reject non-main-frame and non-app senders", async () => {
     () => handler({ sender: webContents, senderFrame: { routingId: 10, url: "https://evil.example/" } }),
     { code: "IPC_SENDER_REJECTED" },
   );
+  const networkHandler = handlers.get(ipcChannels.networkRequest);
+  assert.deepEqual(
+    await networkHandler({ sender: webContents, senderFrame: mainFrame }, { requestId: "request-1" }),
+    { requestId: "request-1", ok: true },
+  );
+  assert.deepEqual(runtimeEvents.map(({ stage }) => stage), ["network-request:start", "network-request:complete"]);
+  assert.equal(runtimeEvents[1].details.operationId, "request-1");
   dispose();
   assert.equal(handlers.size, 0);
   assert.equal(listeners.size, 0);
@@ -192,7 +246,7 @@ test("safeStorage credential repository never falls back to plaintext", async ()
     };
     const store = new CredentialStore({ safeStorage: fakeSafeStorage, userDataPath });
     await store.set({ kimi: { apiKey: "unit-test-only", model: "mock" } });
-    const disk = await readFile(path.join(userDataPath, "credentials.v1.json"), "utf8");
+    const disk = await readFile(path.join(userDataPath, "credentials.v2.json"), "utf8");
     assert.doesNotMatch(disk, /unit-test-only/);
     assert.deepEqual(JSON.parse(JSON.stringify(await store.get())), {
       kimi: { apiKey: "unit-test-only", model: "mock" },
@@ -209,6 +263,259 @@ test("safeStorage credential repository never falls back to plaintext", async ()
       userDataPath,
     });
     await assert.rejects(() => unavailable.set({ value: "no" }), { code: "CREDENTIAL_STORAGE_UNAVAILABLE" });
+  });
+});
+
+test("provider registry keeps secrets in DPAPI storage and exposes metadata only", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const fakeSafeStorage = {
+      isEncryptionAvailable: () => true,
+      encryptString: (value) => Buffer.from(`protected:${value}`, "utf8"),
+      decryptString: (value) => value.toString("utf8").slice("protected:".length),
+    };
+    const credentialStore = new CredentialStore({ safeStorage: fakeSafeStorage, userDataPath });
+    const registry = new ProviderRegistry({ credentialStore, userDataPath });
+    await registry.initialize();
+    await registry.upsert({
+      provider: { id: "openai", apiFormat: "responses", model: "gpt-test" },
+      secretAction: "replace",
+      secret: { apiKey: "provider-secret-test-only" },
+    });
+    await registry.upsert({
+      provider: {
+        id: "user-ai",
+        service: "ai",
+        baseUrl: "http://127.0.0.1:11434/v1",
+        apiFormat: "chat",
+        model: "local-model",
+      },
+      secretAction: "replace",
+      secret: { apiKey: "local-secret-test-only" },
+    });
+    const publicProviders = await registry.list();
+    assert.equal(publicProviders.find((provider) => provider.id === "openai").hasSecret, true);
+    assert.equal(JSON.stringify(publicProviders).includes("provider-secret-test-only"), false);
+    assert.doesNotMatch(await readFile(path.join(userDataPath, "credentials.v2.json"), "utf8"), /provider-secret-test-only/);
+    assert.doesNotMatch(await readFile(path.join(userDataPath, "providers.v1.json"), "utf8"), /secret-test-only/);
+    const resolved = await registry.resolveRequest({
+      providerId: "openai",
+      operation: "responses",
+      body: { model: "gpt-test", input: [] },
+    });
+    assert.equal(resolved.url.href, "https://api.openai.com/v1/responses");
+    assert.equal(resolved.headers.authorization, "Bearer provider-secret-test-only");
+    assert.equal(validateProviderBaseUrl("http://127.0.0.1:11434/v1").allowLoopback, true);
+    assert.throws(() => validateProviderBaseUrl("http://127.0.0.1/v1"), { code: "PROVIDER_PORT_REQUIRED" });
+    assert.throws(() => validateProviderBaseUrl("https://192.0.2.8/v1"), { code: "PROVIDER_IP_NOT_ALLOWED" });
+    assert.throws(() => validateProviderBaseUrl("https://user:pass@example.com/v1"), { code: "PROVIDER_URL_INVALID" });
+    assert.throws(() => validateProviderBaseUrl("https://localhost.evil.example/v1"), { code: "PROVIDER_HOST_SPOOFED" });
+    const localProvider = publicProviders.find((provider) => provider.id === "user-ai");
+    assert.equal(registry.isRedirectAuthorized(localProvider, new URL("http://127.0.0.1:11434/v1/models")), true);
+    assert.equal(registry.isRedirectAuthorized(localProvider, new URL("http://127.0.0.1:11434/admin")), false);
+    assert.equal(registry.isRedirectAuthorized(localProvider, new URL("http://user@127.0.0.1:11434/v1/models")), false);
+  });
+});
+
+test("legacy credential migration verifies v2 then archives the recoverable v1 file", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const fakeSafeStorage = {
+      isEncryptionAvailable: () => true,
+      encryptString: (value) => Buffer.from(`protected:${value}`, "utf8"),
+      decryptString: (value) => value.toString("utf8").slice("protected:".length),
+    };
+    const legacy = { kimi: { provider: "kimi", apiKey: "legacy-secret-test-only", apiFormat: "chat" } };
+    await writeFile(path.join(userDataPath, "credentials.v1.json"), JSON.stringify({
+      version: 1,
+      protection: "electron-safe-storage",
+      ciphertext: fakeSafeStorage.encryptString(JSON.stringify(legacy)).toString("base64"),
+    }));
+    const credentialStore = new CredentialStore({ safeStorage: fakeSafeStorage, userDataPath });
+    const registry = new ProviderRegistry({ credentialStore, userDataPath });
+    await registry.initialize();
+    assert.equal((await registry.list()).find((provider) => provider.id === "moonshot").hasSecret, true);
+    assert.equal((await credentialStore.getProviderSecret("moonshot")).apiKey, "legacy-secret-test-only");
+    await access(path.join(userDataPath, "credentials.v1.json.migrated-backup"));
+    await assert.rejects(() => access(path.join(userDataPath, "credentials.v1.json")));
+    const restarted = new ProviderRegistry({ credentialStore, userDataPath });
+    await restarted.initialize();
+    assert.equal((await restarted.list()).find((provider) => provider.id === "moonshot").hasSecret, true);
+  });
+});
+
+test("provider registry remains usable when Windows credential encryption is temporarily unavailable", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const credentialStore = new CredentialStore({
+      safeStorage: {
+        isEncryptionAvailable: () => false,
+        encryptString() { throw new Error("unavailable"); },
+        decryptString() { throw new Error("unavailable"); },
+      },
+      userDataPath,
+    });
+    const registry = new ProviderRegistry({ credentialStore, userDataPath });
+    await registry.initialize();
+    const providers = await registry.list();
+    assert.ok(providers.some((provider) => provider.id === "openai"));
+    assert.equal(providers.every((provider) => provider.hasSecret === false), true);
+    await assert.rejects(() => registry.upsert({
+      provider: { id: "openai" },
+      secretAction: "replace",
+      secret: { apiKey: "cannot-save" },
+    }), { code: "CREDENTIAL_STORAGE_UNAVAILABLE" });
+  });
+});
+
+test("provider registry compensates secret changes when metadata persistence fails", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const fakeSafeStorage = {
+      isEncryptionAvailable: () => true,
+      encryptString: (value) => Buffer.from(`protected:${value}`, "utf8"),
+      decryptString: (value) => value.toString("utf8").slice("protected:".length),
+    };
+    const credentialStore = new CredentialStore({ safeStorage: fakeSafeStorage, userDataPath });
+    const registry = new ProviderRegistry({ credentialStore, userDataPath });
+    await registry.initialize();
+    await registry.upsert({
+      provider: { id: "user-ai", service: "ai", baseUrl: "https://models.example/v1", apiFormat: "chat", model: "before" },
+      secretAction: "replace",
+      secret: { apiKey: "before-secret" },
+    });
+    await rm(path.join(userDataPath, "providers.v1.json"));
+    await mkdir(path.join(userDataPath, "providers.v1.json"));
+    await assert.rejects(() => registry.upsert({
+      provider: { id: "user-ai", service: "ai", baseUrl: "https://models.example/v2", apiFormat: "chat", model: "after" },
+      secretAction: "replace",
+      secret: { apiKey: "after-secret" },
+    }), { code: "PROVIDER_REGISTRY_WRITE_FAILED" });
+    assert.equal((await credentialStore.getProviderSecret("user-ai")).apiKey, "before-secret");
+    assert.equal((await registry.list()).find((provider) => provider.id === "user-ai").model, "before");
+  });
+});
+
+test("provider backup import replaces all supplied secrets or restores the prior state", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const fakeSafeStorage = {
+      isEncryptionAvailable: () => true,
+      encryptString: (value) => Buffer.from(`protected:${value}`, "utf8"),
+      decryptString: (value) => value.toString("utf8").slice("protected:".length),
+    };
+    const credentialStore = new CredentialStore({ safeStorage: fakeSafeStorage, userDataPath });
+    const registry = new ProviderRegistry({ credentialStore, userDataPath });
+    await registry.initialize();
+    await registry.upsert({
+      provider: { id: "openai", apiFormat: "responses", model: "before" },
+      secretAction: "replace",
+      secret: { apiKey: "before-secret" },
+    });
+    await rm(path.join(userDataPath, "providers.v1.json"));
+    await mkdir(path.join(userDataPath, "providers.v1.json"));
+    await assert.rejects(() => registry.importLegacy({
+      onlyIfEmpty: false,
+      ai: { provider: "openai", apiFormat: "responses", model: "after", apiKey: "after-secret" },
+      translation: {
+        provider: "baidu",
+        baiduAppId: "after-app-id",
+        baiduSecret: "after-baidu-secret",
+      },
+    }), { code: "PROVIDER_REGISTRY_WRITE_FAILED" });
+    assert.equal((await credentialStore.getProviderSecret("openai")).apiKey, "before-secret");
+    assert.equal(await credentialStore.getProviderSecret("baidu"), null);
+    assert.equal((await registry.list()).find((provider) => provider.id === "openai").model, "before");
+  });
+});
+
+test("streamed backup secrets decrypt only in main and provider transaction survives crashes", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const fakeSafeStorage = {
+      isEncryptionAvailable: () => true,
+      encryptString: (value) => Buffer.from(`protected:${value}`, "utf8"),
+      decryptString: (value) => value.toString("utf8").slice("protected:".length),
+    };
+    const credentialStore = new CredentialStore({ safeStorage: fakeSafeStorage, userDataPath });
+    const registry = new ProviderRegistry({ credentialStore, userDataPath });
+    await registry.initialize();
+    await registry.upsert({
+      provider: { id: "openai", apiFormat: "responses", model: "before" },
+      secretAction: "replace",
+      secret: { apiKey: "before-secret" },
+    });
+    const dialog = {
+      async showSaveDialog() { return { canceled: true }; },
+      async showOpenDialog() { return { canceled: true }; },
+    };
+    const service = new BackupFileService({
+      dialog,
+      getWindow: () => null,
+      userDataPath,
+      providerRegistry: registry,
+    });
+    const password = "test-password-123";
+    const credentials = {
+      ai: { provider: "openai", apiFormat: "responses", model: "after", apiKey: "after-secret" },
+      translation: {},
+    };
+    const salt = randomBytes(16);
+    const iv = randomBytes(12);
+    const key = pbkdf2Sync(password, salt, 600_000, 32, "sha256");
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const plaintext = Buffer.from(JSON.stringify({
+      format: "NGR_ASSETPILOT_SECRETS",
+      version: 1,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      credentials,
+    }));
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]);
+    const encryptedBlock = Buffer.from(JSON.stringify({
+      format: "NGR_ASSETPILOT_SECRETS",
+      version: 1,
+      kdf: { algorithm: "PBKDF2", hash: "SHA-256", iterations: 600_000, salt: salt.toString("base64") },
+      cipher: { algorithm: "AES-256-GCM", iv: iv.toString("base64"), ciphertext: ciphertext.toString("base64") },
+    }));
+    key.fill(0);
+    plaintext.fill(0);
+
+    const transaction = await service.beginApply(31);
+    await assert.rejects(() => registry.upsert({
+      provider: { id: "openai", apiFormat: "responses", model: "concurrent" },
+      secretAction: "keep",
+    }), { code: "PROVIDER_IMPORT_BUSY" });
+    await assert.rejects(
+      () => service.importLegacySecrets({ transactionId: transaction.transactionId, data: encryptedBlock, password }, 32),
+      { code: "BACKUP_APPLY_INVALID" },
+    );
+    await assert.rejects(
+      () => service.importLegacySecrets({ transactionId: transaction.transactionId, data: encryptedBlock, password: "wrong-password-123" }, 31),
+      { code: "DECRYPTION_FAILED" },
+    );
+    const imported = await service.importLegacySecrets({
+      transactionId: transaction.transactionId,
+      data: encryptedBlock,
+      password,
+    }, 31);
+    assert.equal(imported.imported, true);
+    assert.equal(JSON.stringify(imported).includes("after-secret"), false);
+    assert.equal((await credentialStore.getProviderSecret("openai")).apiKey, "after-secret");
+    const journalText = await readFile(path.join(userDataPath, "provider-import-transaction.v1.json"), "utf8");
+    assert.doesNotMatch(journalText, /before-secret|after-secret|test-password/);
+
+    await service.rollbackApply({ transactionId: transaction.transactionId }, 31);
+    assert.equal((await credentialStore.getProviderSecret("openai")).apiKey, "before-secret");
+    await service.finalizeApply({ transactionId: transaction.transactionId }, 31);
+
+    const crashTransaction = await service.beginApply(31);
+    await service.importLegacySecrets({
+      transactionId: crashTransaction.transactionId,
+      data: encryptedBlock,
+      password,
+    }, 31);
+    assert.equal((await credentialStore.getProviderSecret("openai")).apiKey, "after-secret");
+    const restartedCredentialStore = new CredentialStore({ safeStorage: fakeSafeStorage, userDataPath });
+    const restartedRegistry = new ProviderRegistry({ credentialStore: restartedCredentialStore, userDataPath });
+    await restartedRegistry.initialize();
+    assert.equal((await restartedCredentialStore.getProviderSecret("openai")).apiKey, "before-secret");
+    assert.equal((await restartedRegistry.getImportTransactionState(crashTransaction.transactionId)).phase, "rolled-back");
+    await restartedRegistry.finalizeImportTransaction(crashTransaction.transactionId);
+    encryptedBlock.fill(0);
   });
 });
 
@@ -310,6 +617,255 @@ test("network client enforces service allowlists, redirects, timeouts, and respo
   );
 });
 
+test("network cancellation is registered before provider resolution completes", async () => {
+  let releaseResolution;
+  let resolutionStarted;
+  let fetchCalls = 0;
+  const started = new Promise((resolve) => { resolutionStarted = resolve; });
+  const providerRegistry = {
+    async resolveRequest() {
+      resolutionStarted();
+      return new Promise((resolve) => { releaseResolution = resolve; });
+    },
+    isRedirectAuthorized: () => true,
+  };
+  const client = new NetworkClient({
+    providerRegistry,
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return new Response("unexpected");
+    },
+  });
+  const pending = client.request({
+    requestId: "resolve_cancel_01",
+    providerId: "openai",
+    operation: "responses",
+    body: {},
+  }, 42);
+  await started;
+  assert.deepEqual(client.cancel({ requestId: "resolve_cancel_01" }, 42), {
+    canceled: true,
+    requestId: "resolve_cancel_01",
+  });
+  releaseResolution({
+    provider: { id: "openai", service: "ai" },
+    url: new URL("https://api.openai.com/v1/responses"),
+    method: "POST",
+    headers: { authorization: "Bearer test-only" },
+    body: {},
+    maximumTimeout: 120_000,
+  });
+  await assert.rejects(pending, { code: "NETWORK_CANCELED" });
+  assert.equal(fetchCalls, 0);
+});
+
+test("network body AbortError maps to cancel and timeout public error codes", async () => {
+  function createBlockedFetch() {
+    let readStarted;
+    const started = new Promise((resolve) => { readStarted = resolve; });
+    return {
+      started,
+      fetchImpl: async (_url, options) => {
+        let streamController;
+        const stream = new ReadableStream({
+          start(controller) {
+            streamController = controller;
+          },
+          pull() {
+            readStarted();
+          },
+        });
+        options.signal.addEventListener("abort", () => {
+          streamController.error(new DOMException("aborted", "AbortError"));
+        }, { once: true });
+        return new Response(stream, { status: 200 });
+      },
+    };
+  }
+
+  const canceledFetch = createBlockedFetch();
+  const canceledClient = new NetworkClient({ fetchImpl: canceledFetch.fetchImpl });
+  const canceled = canceledClient.request({
+    requestId: "body_cancel_01",
+    service: "ai",
+    url: "https://api.openai.com/v1/responses",
+  }, 7);
+  await canceledFetch.started;
+  assert.equal(canceledClient.cancel({ requestId: "body_cancel_01" }, 7).canceled, true);
+  await assert.rejects(canceled, { code: "NETWORK_CANCELED" });
+
+  const timedFetch = createBlockedFetch();
+  const timedClient = new NetworkClient({ fetchImpl: timedFetch.fetchImpl });
+  const timed = timedClient.request({
+    requestId: "body_timeout_01",
+    service: "ai",
+    url: "https://api.openai.com/v1/responses",
+    timeoutMs: 1_000,
+  }, 7);
+  await timedFetch.started;
+  await assert.rejects(timed, { code: "NETWORK_TIMEOUT" });
+});
+
+test("backup sessions are owner-bound, chunked, atomic, and recover known journal parts", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const finalPath = path.join(userDataPath, "workspace.ngrap");
+    let saveTarget = finalPath;
+    const dialog = {
+      async showSaveDialog() { return { canceled: false, filePath: saveTarget }; },
+      async showOpenDialog() { return { canceled: false, filePaths: [finalPath] }; },
+    };
+    const service = new BackupFileService({ dialog, getWindow: () => null, userDataPath });
+    const begin = await service.beginExport({ suggestedName: "workspace.ngrap", expectedSize: 11 }, 9);
+    const first = new TextEncoder().encode("hello ");
+    await service.writeExportChunk({ sessionId: begin.sessionId, offset: 0, data: first }, 9);
+    await assert.rejects(
+      () => service.writeExportChunk({ sessionId: begin.sessionId, offset: 6, data: new Uint8Array(0) }, 10),
+      { code: "BACKUP_SESSION_INVALID" },
+    );
+    const second = new TextEncoder().encode("world");
+    await service.writeExportChunk({ sessionId: begin.sessionId, offset: 6, data: second }, 9);
+    const finished = await service.finishExport({ sessionId: begin.sessionId }, 9);
+    assert.equal(finished.bytesWritten, 11);
+    assert.equal(await readFile(finalPath, "utf8"), "hello world");
+
+    const opened = await service.beginImport(9);
+    const activeJournal = JSON.parse(await readFile(path.join(userDataPath, "backup-sessions.v2.json"), "utf8"));
+    assert.deepEqual(activeJournal.sessions.map((session) => session.type), ["import"]);
+    const firstRead = await service.readImportChunk({ sessionId: opened.sessionId, offset: 0, length: 5 }, 9);
+    assert.equal(new TextDecoder().decode(firstRead.data), "hello");
+    await assert.rejects(
+      () => service.readImportChunk({ sessionId: opened.sessionId, offset: 0, length: 5 }, 9),
+      { code: "BACKUP_CHUNK_INVALID" },
+    );
+    const rest = await service.readImportChunk({ sessionId: opened.sessionId, offset: 5, length: 20 }, 9);
+    assert.equal(new TextDecoder().decode(rest.data), " world");
+    assert.equal(rest.done, true);
+    assert.equal((await service.finishImport({ sessionId: opened.sessionId }, 9)).bytesRead, 11);
+    assert.deepEqual(JSON.parse(await readFile(path.join(userDataPath, "backup-sessions.v2.json"), "utf8")).sessions, []);
+
+    saveTarget = path.join(userDataPath, "streamed.ngrap");
+    const streamed = await service.beginExport({ suggestedName: "streamed.ngrap", expectedSize: null }, 9);
+    await service.writeExportChunk({ sessionId: streamed.sessionId, offset: 0, data: new TextEncoder().encode("stream") }, 9);
+    assert.equal((await service.finishExport({ sessionId: streamed.sessionId }, 9)).bytesWritten, 6);
+    assert.equal(await readFile(saveTarget, "utf8"), "stream");
+    await service.dispose();
+
+    const stalePart = path.join(userDataPath, "old.ngrap.ngr-backup-00000000-0000-4000-8000-000000000000.part");
+    const unrelatedPart = path.join(userDataPath, "keep.part");
+    await writeFile(stalePart, "stale");
+    await writeFile(unrelatedPart, "keep");
+    await writeFile(path.join(userDataPath, "backup-sessions.v2.json"), JSON.stringify({
+      version: 2,
+      sessions: [{
+        type: "export",
+        sessionId: "00000000-0000-4000-8000-000000000000",
+        finalPath: path.join(userDataPath, "old.ngrap"),
+        partPath: stalePart,
+      }, {
+        type: "export",
+        sessionId: "10000000-0000-4000-8000-000000000000",
+        finalPath: path.join(userDataPath, "different.ngrap"),
+        partPath: unrelatedPart,
+      }, {
+        type: "import",
+        sessionId: "20000000-0000-4000-8000-000000000000",
+        sourceSize: 42,
+      }],
+    }));
+    const restarted = new BackupFileService({ dialog, getWindow: () => null, userDataPath });
+    await restarted.initialize();
+    await assert.rejects(() => access(stalePart));
+    assert.equal(await readFile(unrelatedPart, "utf8"), "keep");
+    assert.deepEqual(JSON.parse(await readFile(path.join(userDataPath, "backup-sessions.v2.json"), "utf8")).sessions, []);
+  });
+});
+
+test("quit coordinator runs finalizers in parallel with renderer persistence and stays bounded", async () => {
+  const app = new EventEmitter();
+  let quitCalls = 0;
+  app.quit = () => { quitCalls += 1; };
+  const window = new EventEmitter();
+  let quitPayload;
+  window.isDestroyed = () => false;
+  window.webContents = {
+    isDestroyed: () => false,
+    send(_channel, payload) { quitPayload = payload; },
+  };
+  let releaseFinalizer;
+  let finalizerCalls = 0;
+  const coordinator = new QuitCoordinator({ app, channel: "before-quit-test", timeoutMs: 200 });
+  coordinator.attachWindow(window);
+  coordinator.addFinalizer("slow", async () => {
+    finalizerCalls += 1;
+    await new Promise((resolve) => { releaseFinalizer = resolve; });
+  });
+  const event = { prevented: false, preventDefault() { this.prevented = true; } };
+  app.emit("before-quit", event);
+  assert.equal(event.prevented, true);
+  assert.equal(finalizerCalls, 1, "finalizer must start before the renderer acknowledges quit");
+  assert.equal(coordinator.ready(quitPayload.requestId), true);
+  assert.equal(quitCalls, 0, "quit waits until subsystem finalizers finish");
+  releaseFinalizer();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(quitCalls, 1);
+  coordinator.dispose();
+
+  const unresponsiveApp = new EventEmitter();
+  let boundedQuitCalls = 0;
+  unresponsiveApp.quit = () => { boundedQuitCalls += 1; };
+  const unresponsiveWindow = new EventEmitter();
+  unresponsiveWindow.isDestroyed = () => false;
+  unresponsiveWindow.webContents = { isDestroyed: () => false, send() {} };
+  let unresponsiveFinalizers = 0;
+  const bounded = new QuitCoordinator({ app: unresponsiveApp, channel: "before-quit-test", timeoutMs: 25 });
+  bounded.attachWindow(unresponsiveWindow);
+  bounded.addFinalizer("always-runs", async () => { unresponsiveFinalizers += 1; });
+  unresponsiveApp.emit("before-quit", { preventDefault() {} });
+  assert.equal(unresponsiveFinalizers, 1);
+  await new Promise((resolve) => setTimeout(resolve, 45));
+  assert.equal(boundedQuitCalls, 1, "deadline must release quit when renderer never responds");
+  bounded.dispose();
+});
+
+test("runtime logger rotates locally, redacts paths and secrets, and tracks clean shutdown", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const messages = [];
+    const logger = {
+      transports: { file: {}, remote: {} },
+      initialize() {},
+      info(message) { messages.push(message); },
+      warn(message) { messages.push(message); },
+      error(message) { messages.push(message); },
+    };
+    const runtime = new RuntimeLogger({
+      app: { getPath: (name) => name === "userData" ? userDataPath : "" },
+      logger,
+      edition: "dev",
+    });
+    const initialized = await runtime.initialize();
+    assert.equal(initialized.previousCleanShutdown, true);
+    assert.equal(logger.transports.file.maxSize, 5 * 1024 * 1024);
+    assert.equal(logger.transports.remote.level, false);
+    runtime.error("renderer-process-gone", { code: "RENDERER_GONE", message: "secret body" }, {
+      providerId: "openai",
+      reason: "C:\\Users\\private\\query.png",
+      prompt: "must-not-log",
+      secret: "must-not-log",
+    });
+    const joined = messages.join("\n");
+    assert.doesNotMatch(joined, /private|query\.png|must-not-log|secret body/);
+    assert.match(joined, /\[redacted\]/);
+    const restarted = new RuntimeLogger({
+      app: { getPath: (name) => name === "userData" ? userDataPath : "" },
+      logger,
+      edition: "dev",
+    });
+    assert.equal((await restarted.initialize()).previousCleanShutdown, false);
+    await restarted.markCleanShutdown();
+    assert.equal(JSON.parse(await readFile(path.join(userDataPath, "runtime-state.json"), "utf8")).cleanShutdown, true);
+  });
+});
+
 test("test-secret binary format decrypts only after hash, key-share, and GCM validation", () => {
   const plaintext = Buffer.from(JSON.stringify({ kimi: { apiKey: "fixture-not-real" } }), "utf8");
   const key = randomBytes(32);
@@ -374,6 +930,7 @@ test("updater is disabled for non-installer builds and uses an explicit download
     autoUpdater: fake,
     enabled: true,
     currentVersion: "3.0.1",
+    installLaunchDelayMs: 0,
     channel: "latest",
     feed: { provider: "github", owner: "907609732", repo: "NGR-AssetPilot-App" },
   });
@@ -395,8 +952,8 @@ test("updater is disabled for non-installer builds and uses an explicit download
   });
   assert.equal((await updater.download()).phase, "downloaded");
   assert.equal(updater.install().accepted, true);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(fake.quitAndInstallArgs, [true, true]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(fake.quitAndInstallArgs, [false, true]);
   assert.ok(states.some((state) => state.phase === "downloading"));
   unsubscribe();
   updater.dispose();

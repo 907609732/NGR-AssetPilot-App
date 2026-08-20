@@ -4,14 +4,17 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { createIndexExecutionProfile } from "../desktop/services/local-image-search/execution-profile.mjs";
 
-const [engine, worker, probe] = await Promise.all([
+const [engine, worker, probe, executionProfile] = await Promise.all([
   readFile(new URL("../desktop/services/local-image-search/engine.mjs", import.meta.url), "utf8"),
   readFile(new URL("../desktop/services/local-image-search/engine-worker.mjs", import.meta.url), "utf8"),
   readFile(new URL("../desktop/services/local-image-search/directml-probe.mjs", import.meta.url), "utf8"),
+  readFile(new URL("../desktop/services/local-image-search/execution-profile.mjs", import.meta.url), "utf8"),
 ]);
 
 test("DirectML 会话遵守顺序执行与禁用 memory pattern 的官方约束", () => {
+  assert.match(worker, /function cpuSessionOptions[\s\S]*?graphOptimizationLevel:\s*"basic"/);
   assert.match(worker, /executionProviders:\s*\[\{ name: "dml", deviceId \}\]/);
   assert.match(worker, /graphOptimizationLevel:\s*"basic"/);
   assert.match(worker, /executionMode:\s*"sequential"/);
@@ -23,11 +26,53 @@ test("DirectML 会话遵守顺序执行与禁用 memory pattern 的官方约束"
 
 test("GPU 探测按模型与驱动缓存，并限制超时和缓存条目", () => {
   assert.match(engine, /const PROBE_TIMEOUT_MS = 8_000/);
+  assert.match(engine, /const PROBE_TOTAL_TIMEOUT_MS = 8_000/);
   assert.match(engine, /modelFingerprint:\s*probeSpec\.fingerprint/);
   assert.match(engine, /driver:\s*driver\.fingerprint/);
-  assert.match(engine, /for \(let deviceId = 0; deviceId < 4; deviceId \+= 1\)/);
+  assert.match(engine, /Promise\.all\(Array\.from\(\{ length: 4 \}/);
+  assert.match(engine, /deadlineAt - Date\.now\(\)/);
+  assert.match(engine, /CONTROL_REQUEST_CPU/);
   assert.match(engine, /\.slice\(0, 16\)/);
   assert.match(engine, /probeDirectML\(\{[\s\S]*?modelConfig[\s\S]*?\}\)/);
+  assert.match(engine, /driverFingerprint: driver\.fingerprint/);
+});
+
+test("索引、查询和状态使用隔离 Worker，切换查询范围会终止旧查询进程释放缓存", () => {
+  assert.match(engine, /return "query"/);
+  assert.match(engine, /return "status"/);
+  assert.match(engine, /return "index"/);
+  assert.match(engine, /this\.workers = new Map\(\)/);
+  assert.match(engine, /LOCAL_SEARCH_CACHE_INVALIDATED/);
+  assert.match(engine, /await worker\.terminate\(\)/);
+  assert.match(engine, /this\.queryScope !== scope/);
+  assert.match(engine, /this\.queryRequestTail/);
+  assert.match(worker, /if \(action === "cancel"\)[\s\S]*?void run\(\)/);
+  assert.doesNotMatch(worker, /\["cancel", "invalidate", "dispose"\]\.includes/);
+});
+
+test("执行配置对驱动、设备、批量和模型指纹变化敏感", () => {
+  const base = {
+    modelFingerprint: "model-a",
+    preprocessingVersion: "prep-1",
+    preprocessing: { width: 224, height: 224, layout: "NCHW" },
+    provider: "dml",
+    batchSize: 16,
+    deviceId: 0,
+    driverFingerprint: "driver-a",
+    onnxRuntimeVersion: "1.24.3",
+    architecture: "x64",
+  };
+  const profile = createIndexExecutionProfile(base);
+  assert.match(profile, /^execution-v2:[a-f0-9]{64}$/);
+  for (const change of [
+    { modelFingerprint: "model-b" },
+    { driverFingerprint: "driver-b" },
+    { deviceId: 1 },
+    { batchSize: 8 },
+    { preprocessingVersion: "prep-2" },
+  ]) {
+    assert.notEqual(createIndexExecutionProfile({ ...base, ...change }), profile);
+  }
 });
 
 test("索引采用批量降级、有界预处理、批事务和单活动模型会话", () => {
@@ -40,11 +85,37 @@ test("索引采用批量降级、有界预处理、批事务和单活动模型�
   assert.match(worker, /await releaseState\(state\);[\s\S]*?sessionStates\.delete\(existingKey\)/);
   assert.match(worker, /state\.gpuDisabled = true;[\s\S]*?state\.visionProvider = "cpu"/);
   assert.match(worker, /MODEL_TEXT_INPUT_MISSING/);
-  assert.match(worker, /INDEX_EXECUTION_PROFILE_VERSION = "batched-v1"/);
+  assert.match(executionProfile, /INDEX_EXECUTION_PROFILE_VERSION = "execution-v2"/);
+  assert.match(worker, /modelFingerprint: state\.model\.fingerprint/);
+  assert.match(worker, /driverFingerprint:/);
+  assert.match(worker, /onnxRuntimeVersion: ORT_VERSION/);
+  assert.match(worker, /architecture: process\.arch/);
   assert.match(worker, /execution_profile/);
   assert.match(worker, /INDEX_EXECUTION_PROFILE_CHANGED/);
   assert.match(worker, /MAX_EXECUTION_PROFILE_RESTARTS = 1/);
-  assert.match(worker, /DELETE FROM image_embeddings[\s\S]*?model_fingerprint = \?/);
+  assert.match(worker, /INSERT INTO index_staging_images/);
+  assert.match(worker, /DELETE FROM image_embeddings[\s\S]*?model_fingerprint=\?/);
+});
+
+test("扫描只有完整完成令牌才能清理旧图片，目录读取失败会暂停而不剪枝", () => {
+  assert.match(worker, /throw scanIncomplete\(error\)/);
+  assert.match(worker, /error\.code = "INDEX_SCAN_INCOMPLETE"/);
+  assert.match(worker, /scanCompleteToken !== SCAN_COMPLETE_TOKEN/);
+  assert.match(worker, /finishIndex\(\{[\s\S]*?scanCompleteToken/);
+  assert.match(worker, /SELECT \* FROM index_staging_jobs WHERE job_id=\?/);
+  assert.match(worker, /DELETE FROM index_staging_jobs WHERE job_id=\?/);
+  assert.match(worker, /catalog_status='paused'/);
+  const scanStart = worker.indexOf("for await (const scannedFile of walkImages(library.root_path))");
+  const beginState = worker.indexOf("generations = beginIndexState", scanStart);
+  assert.ok(scanStart >= 0 && beginState > scanStart, "必须在完整枚举目录后才改变代次或重建 profile");
+});
+
+test("向量缓存使用 iterate 流式复制并在 300 MiB 后切换分块精确搜索", () => {
+  assert.match(worker, /MAX_VECTOR_CACHE_BYTES = 300 \* 1024 \* 1024/);
+  assert.match(worker, /new Float64Array\(count\)/);
+  assert.match(worker, /statement\.iterate\(\.\.\.argumentsList\)/);
+  assert.match(worker, /mode: "chunked"/);
+  assert.match(worker, /chunkedTopK/);
 });
 
 test("新图库的 SHA 去重查询固定先走内容索引，避免随向量数量线性退化", () => {

@@ -292,7 +292,8 @@ async function translateFilenameByConfiguredProvider(source) {
 
 async function translateTextByApi(text, from, to) {
   if (translationSettings.provider !== "baidu") return "";
-  if (!translationSettings.baiduAppId || !translationSettings.baiduSecret) {
+  const desktopCredential = window.NgrDesktopBridge?.isDesktopRuntime() && translationSettings.hasSecret;
+  if (!desktopCredential && (!translationSettings.baiduAppId || !translationSettings.baiduSecret)) {
     throw new Error("请先填写百度翻译 App ID 和密钥");
   }
   const query = String(text || "").trim();
@@ -308,6 +309,18 @@ async function translateTextByApi(text, from, to) {
 }
 
 async function requestBaiduTranslate(query, from, to) {
+  if (window.NgrDesktopBridge?.isDesktopRuntime()) {
+    const response = await window.NgrDesktopBridge.requestProvider(
+      translationSettings.providerId || "baidu",
+      "translate",
+      { q: query, from, to },
+      { timeoutMs: 30000 },
+    );
+    if (!response.ok) throw new Error("接口请求失败：" + response.status);
+    const data = await response.json();
+    if (data.error_code) throw new Error((data.error_code || "") + " " + (data.error_msg || "百度翻译返回错误"));
+    return (data.trans_result || []).map((item) => item.dst).join(" ").trim();
+  }
   const salt = String(Date.now());
   const sign = md5(translationSettings.baiduAppId + query + salt + translationSettings.baiduSecret);
   const params = new URLSearchParams({
@@ -360,7 +373,8 @@ function translateTextByBaiduJsonp(params) {
 
 async function translateTextByModel(text) {
   if (translationSettings.provider !== "model") return "";
-  if (!translationSettings.textApiKey) throw new Error("请先填写文本翻译模型 API Key");
+  const desktopCredential = window.NgrDesktopBridge?.isDesktopRuntime() && translationSettings.hasSecret;
+  if (!desktopCredential && !translationSettings.textApiKey) throw new Error("请先填写文本翻译模型 API Key");
   const endpoint = buildTextModelEndpoint(translationSettings.textBaseUrl);
   const prompt = [
     "你是 UI 切图命名翻译助手。",
@@ -370,14 +384,7 @@ async function translateTextByModel(text) {
     "用户自定义提示文本：" + (rules.aiPromptText || "无"),
     "原始文件名：" + String(text || "").trim(),
   ].join("\n");
-  const response = await ngrFetch(endpoint, {
-    service: "ai",
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + translationSettings.textApiKey,
-    },
-    body: JSON.stringify({
+  const body = {
       model: translationSettings.textModel || "gpt-4.1-mini",
       messages: [
         {
@@ -386,8 +393,23 @@ async function translateTextByModel(text) {
         },
       ],
       temperature: 0.2,
-    }),
-  });
+    };
+  const response = window.NgrDesktopBridge?.isDesktopRuntime()
+    ? await window.NgrDesktopBridge.requestProvider(
+        translationSettings.providerId || "user-translation-model",
+        "chat",
+        body,
+        { timeoutMs: 30000 },
+      )
+    : await ngrFetch(endpoint, {
+        service: "ai",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + translationSettings.textApiKey,
+        },
+        body: JSON.stringify(body),
+      });
   if (!response.ok) throw new Error("文本模型请求失败：" + response.status);
   const data = await response.json();
   return extractTextModelResponse(data);
@@ -455,7 +477,8 @@ function getMeaningKey(name) {
 
 function scheduleBaiduMeaningTranslation(name, key = getMeaningKey(name)) {
   if (!key || meaningCache[key] || pendingMeaningNames.has(key)) return;
-  if (translationSettings.provider !== "baidu" || !translationSettings.baiduAppId || !translationSettings.baiduSecret) return;
+  const desktopCredential = window.NgrDesktopBridge?.isDesktopRuntime() && translationSettings.hasSecret;
+  if (translationSettings.provider !== "baidu" || (!desktopCredential && (!translationSettings.baiduAppId || !translationSettings.baiduSecret))) return;
   pendingMeaningNames.add(key);
   meaningQueue.push({ name, key });
   runMeaningQueue();

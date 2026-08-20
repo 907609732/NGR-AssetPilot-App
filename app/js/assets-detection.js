@@ -347,18 +347,18 @@ async function addFiles(files) {
 }
 
 async function addDetectionFiles(files) {
-  const imageFiles = files.filter(isSupportedImage);
-  if (!imageFiles.length) {
-    showToast("未发现可检测的图片文件");
+  const detectionFiles = files.filter(isDetectionCandidate);
+  if (!detectionFiles.length) {
+    showToast("未发现可检测的文件");
     return;
   }
 
   const seen = new Set(detectionAssets.map((asset) => asset.key));
   let loadedCount = 0;
   let issueCount = 0;
-  showToast("开始检测 " + imageFiles.length + " 张图片，正在分批处理");
-  for (let start = 0; start < imageFiles.length; start += UPLOAD_PROCESS_BATCH_SIZE) {
-    const batch = imageFiles.slice(start, start + UPLOAD_PROCESS_BATCH_SIZE);
+  showToast("开始检测 " + detectionFiles.length + " 个文件，正在分批处理");
+  for (let start = 0; start < detectionFiles.length; start += UPLOAD_PROCESS_BATCH_SIZE) {
+    const batch = detectionFiles.slice(start, start + UPLOAD_PROCESS_BATCH_SIZE);
     const additions = await mapWithConcurrency(batch, fileToDetectionAsset, UPLOAD_CONCURRENCY);
     additions.forEach((asset) => {
       if (seen.has(asset.key)) return;
@@ -367,9 +367,9 @@ async function addDetectionFiles(files) {
       loadedCount += 1;
       if (asset.hasIssue) issueCount += 1;
     });
-    if (start === 0 || start + batch.length >= imageFiles.length || loadedCount % (DETECTION_RENDER_BATCH_SIZE * 2) === 0) {
+    if (start === 0 || start + batch.length >= detectionFiles.length || loadedCount % (DETECTION_RENDER_BATCH_SIZE * 2) === 0) {
       renderDetectionList();
-      els.detectionCount.textContent = detectionAssets.length + " 张 / 正在检测 " + Math.min(start + batch.length, imageFiles.length) + "/" + imageFiles.length;
+      els.detectionCount.textContent = detectionAssets.length + " 张 / 正在检测 " + Math.min(start + batch.length, detectionFiles.length) + "/" + detectionFiles.length;
     }
     await yieldToBrowser();
   }
@@ -380,6 +380,81 @@ async function addDetectionFiles(files) {
 
 function isSupportedImage(file) {
   return IMAGE_TYPES.includes(file.type) || /\.(png|jpe?g|webp|gif|svg)$/i.test(file.name);
+}
+
+const DETECTION_PNG_ERROR_MESSAGE = "注意导出切图格式，NGR只允许png格式，不允许其他格式";
+const PNG_FILE_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function isDetectionCandidate(file) {
+  return Boolean(file && typeof file.name === "string" && file.name.trim());
+}
+
+function hasByteSequence(bytes, offset, expected) {
+  if (bytes.length < offset + expected.length) return false;
+  return expected.every((value, index) => bytes[offset + index] === value);
+}
+
+function asciiFromBytes(bytes, start, length) {
+  return String.fromCharCode(...bytes.slice(start, start + length));
+}
+
+function detectImageFormatFromBytes(bytes) {
+  if (hasByteSequence(bytes, 0, PNG_FILE_SIGNATURE)) {
+    const hasValidHeader = bytes.length >= 33
+      && hasByteSequence(bytes, 8, [0x00, 0x00, 0x00, 0x0d])
+      && asciiFromBytes(bytes, 12, 4) === "IHDR"
+      && bytes.slice(16, 20).some((value) => value !== 0)
+      && bytes.slice(20, 24).some((value) => value !== 0);
+    return hasValidHeader ? "PNG" : "损坏的 PNG";
+  }
+  if (hasByteSequence(bytes, 0, [0xff, 0xd8, 0xff])) return "JPEG";
+  if (asciiFromBytes(bytes, 0, 6) === "GIF87a" || asciiFromBytes(bytes, 0, 6) === "GIF89a") return "GIF";
+  if (asciiFromBytes(bytes, 0, 4) === "RIFF" && asciiFromBytes(bytes, 8, 4) === "WEBP") return "WebP";
+  if (asciiFromBytes(bytes, 0, 2) === "BM") return "BMP";
+  if (hasByteSequence(bytes, 0, [0x49, 0x49, 0x2a, 0x00]) || hasByteSequence(bytes, 0, [0x4d, 0x4d, 0x00, 0x2a])) return "TIFF";
+  if (hasByteSequence(bytes, 0, [0x00, 0x00, 0x01, 0x00])) return "ICO";
+  if (asciiFromBytes(bytes, 4, 4) === "ftyp") {
+    const brand = asciiFromBytes(bytes, 8, 4).toLowerCase();
+    if (["avif", "avis"].includes(brand)) return "AVIF";
+    if (["heic", "heix", "hevc", "hevx", "mif1", "msf1"].includes(brand)) return "HEIC/HEIF";
+  }
+  const textHeader = new TextDecoder("utf-8").decode(bytes).replace(/^\uFEFF/, "").trimStart();
+  if (/^(?:<\?xml[\s\S]*?\?>\s*)?<svg(?:\s|>)/i.test(textHeader)) return "SVG";
+  return "未知格式";
+}
+
+async function inspectDetectionFileFormat(file) {
+  try {
+    const bytes = new Uint8Array(await file.slice(0, 512).arrayBuffer());
+    return detectImageFormatFromBytes(bytes);
+  } catch {
+    return "无法读取";
+  }
+}
+
+async function validateDetectionFormat(file) {
+  const detectedFormat = await inspectDetectionFileFormat(file);
+  const hasPngExtension = /\.png$/i.test(file.name);
+  const valid = hasPngExtension && detectedFormat === "PNG";
+  if (valid) return { valid: true, detectedFormat, messages: [] };
+
+  let detail = "检测到 " + detectedFormat;
+  if (detectedFormat === "PNG" && !hasPngExtension) detail = "文件内容为 PNG，但扩展名必须是 .png";
+  if (detectedFormat === "未知格式" && hasPngExtension) detail = "文件内容不是有效的 PNG";
+  return {
+    valid: false,
+    detectedFormat,
+    messages: [DETECTION_PNG_ERROR_MESSAGE + "（" + detail + "）"],
+  };
+}
+
+function mergeDetectionValidation(dimensionValidation, formatValidation = {}) {
+  const formatMessages = Array.isArray(formatValidation.messages) ? formatValidation.messages : [];
+  return {
+    ...dimensionValidation,
+    messages: [...(dimensionValidation.messages || []), ...formatMessages],
+    hasIssue: Boolean(dimensionValidation.hasIssue || formatMessages.length),
+  };
 }
 
 async function mapWithConcurrency(items, mapper, limit = UPLOAD_CONCURRENCY) {
@@ -437,12 +512,11 @@ async function fileToDetectionAsset(file) {
   const url = URL.createObjectURL(file);
   const dimensions = await readImageDimensions(url).catch(() => ({ width: 0, height: 0 }));
   URL.revokeObjectURL(url);
-  const result = validateDetectionDimensions(dimensions, getActiveDetectionProfile());
-  const formatMessages = validateDetectionFormat(file);
-  if (formatMessages.length) {
-    result.messages = [...(result.messages || []), ...formatMessages];
-    result.hasIssue = true;
-  }
+  const formatValidation = await validateDetectionFormat(file);
+  const result = mergeDetectionValidation(
+    validateDetectionDimensions(dimensions, getActiveDetectionProfile()),
+    formatValidation,
+  );
   const duplicateConfig = getDuplicateSensitivityConfig(getActiveDetectionProfile().duplicateSensitivity);
   const fingerprint = duplicateConfig.disabled ? null : await imageFileToFingerprint(file).catch(() => null);
   const id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random();
@@ -455,6 +529,8 @@ async function fileToDetectionAsset(file) {
     name: file.webkitRelativePath || file.name,
     dimensions,
     fingerprint,
+    detectedFormat: formatValidation.detectedFormat,
+    formatMessages: formatValidation.messages,
     ...result,
   };
 }
@@ -468,10 +544,6 @@ function revokeAssetPreviewUrl(asset) {
   if (!asset?.url) return;
   URL.revokeObjectURL(asset.url);
   asset.url = "";
-}
-
-function validateDetectionFormat(file) {
-  return /\.png$/i.test(file.name) ? [] : ["注意导出切图格式，NGR只允许png格式，不允许其他格式"];
 }
 
 const NGR_2048_RISK_MESSAGE = "NGR原则上不支持1024分辨率以上的图片进引擎，单边2048的图片无法直接上传，需要通过走白名单审批，P4需要选择对应同意的owner进行审批。";

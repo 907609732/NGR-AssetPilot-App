@@ -242,6 +242,8 @@ function fillAiSettings() {
   els.aiApiFormat.value = aiSettings.apiFormat;
   els.aiBaseUrl.value = aiSettings.baseUrl;
   els.openaiApiKey.value = aiSettings.apiKey;
+  els.openaiApiKey.placeholder = aiSettings.hasSecret
+    ? "已安全保存；留空表示保持不变" : "sk-...";
   els.openaiModel.value = aiSettings.model;
   els.aiProviderNote.value = aiSettings.providerNote;
 }
@@ -663,10 +665,17 @@ function deleteDetectionProfile() {
 
 function revalidateDetectionAssets() {
   const profile = getActiveDetectionProfile();
-  detectionAssets = detectionAssets.map((asset) => ({
-    ...asset,
-    ...validateDetectionDimensions(asset.dimensions, profile),
-  }));
+  detectionAssets = detectionAssets.map((asset) => {
+    const dimensionValidation = validateDetectionDimensions(asset.dimensions, profile);
+    const formatMessages = Array.isArray(asset.formatMessages)
+      ? asset.formatMessages
+      : (asset.messages || []).filter((message) => message.startsWith(DETECTION_PNG_ERROR_MESSAGE));
+    return {
+      ...asset,
+      formatMessages,
+      ...mergeDetectionValidation(dimensionValidation, { messages: formatMessages }),
+    };
+  });
   updateSimilarResourceWarnings();
   renderDetectionList();
 }
@@ -813,6 +822,8 @@ function collectAiSettings() {
     apiFormat: els.aiApiFormat.value || "responses",
     baseUrl: normalizeBaseUrl(els.aiBaseUrl.value) || "https://api.openai.com/v1",
     apiKey: els.openaiApiKey.value.trim(),
+    providerId: typeof aiSettings === "object" ? aiSettings.providerId || "" : "",
+    hasSecret: typeof aiSettings === "object" ? Boolean(aiSettings.hasSecret) : false,
     model: els.openaiModel.value.trim() || "gpt-4.1-mini",
     providerNote: els.aiProviderNote.value.trim(),
   };
@@ -826,12 +837,13 @@ function loadAiSettings() {
   }
 }
 
-function saveAiSettings(nextSettings) {
+function saveAiSettings(nextSettings, options = {}) {
   const storedSettings = window.NgrDesktopBridge?.isDesktopRuntime()
     ? { ...nextSettings, apiKey: "" }
     : nextSettings;
   localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(storedSettings));
-  if (window.NgrDesktopBridge?.isDesktopRuntime()) queueDesktopCredentialSave();
+  if (window.NgrDesktopBridge?.isDesktopRuntime() && !options.skipDesktopSync) return queueDesktopCredentialSave();
+  return Promise.resolve(true);
 }
 
 function collectTranslationSettings() {
@@ -843,6 +855,8 @@ function collectTranslationSettings() {
     textBaseUrl: normalizeBaseUrl(els.textTranslateBaseUrl.value),
     textApiKey: els.textTranslateApiKey.value.trim(),
     textModel: els.textTranslateModel.value.trim(),
+    providerId: typeof translationSettings === "object" ? translationSettings.providerId || "" : "",
+    hasSecret: typeof translationSettings === "object" ? Boolean(translationSettings.hasSecret) : false,
   });
 }
 
@@ -850,9 +864,15 @@ function fillTranslationSettings() {
   els.translatorProvider.value = translationSettings.provider;
   els.baiduTranslateAppId.value = translationSettings.baiduAppId;
   els.baiduTranslateSecret.value = translationSettings.baiduSecret;
+  els.baiduTranslateAppId.placeholder = translationSettings.provider === "baidu" && translationSettings.hasSecret
+    ? "已安全保存；留空表示保持不变" : "请输入百度翻译 App ID";
+  els.baiduTranslateSecret.placeholder = translationSettings.provider === "baidu" && translationSettings.hasSecret
+    ? "已安全保存；留空表示保持不变" : "请输入百度翻译密钥";
   els.baiduTranslateEndpoint.value = translationSettings.baiduEndpoint;
   els.textTranslateBaseUrl.value = translationSettings.textBaseUrl;
   els.textTranslateApiKey.value = translationSettings.textApiKey;
+  els.textTranslateApiKey.placeholder = translationSettings.provider === "model" && translationSettings.hasSecret
+    ? "已安全保存；留空表示保持不变" : "请输入文本翻译模型 API Key";
   els.textTranslateModel.value = translationSettings.textModel;
   if (typeof syncTranslatorProviderFields === "function") syncTranslatorProviderFields();
 }
@@ -866,12 +886,13 @@ function loadTranslationSettings() {
   }
 }
 
-function saveTranslationSettings(nextSettings) {
+function saveTranslationSettings(nextSettings, options = {}) {
   const storedSettings = window.NgrDesktopBridge?.isDesktopRuntime()
     ? { ...nextSettings, baiduAppId: "", baiduSecret: "", textApiKey: "" }
     : nextSettings;
   localStorage.setItem(TRANSLATION_SETTINGS_KEY, JSON.stringify(storedSettings));
-  if (window.NgrDesktopBridge?.isDesktopRuntime()) queueDesktopCredentialSave();
+  if (window.NgrDesktopBridge?.isDesktopRuntime() && !options.skipDesktopSync) return queueDesktopCredentialSave();
+  return Promise.resolve(true);
 }
 
 function loadMeaningCache() {
@@ -898,6 +919,8 @@ function normalizeTranslationSettings(nextSettings = {}) {
     textBaseUrl: normalizeBaseUrl(nextSettings.textBaseUrl || "https://api.openai.com/v1"),
     textApiKey: nextSettings.textApiKey || "",
     textModel: nextSettings.textModel || "gpt-4.1-mini",
+    providerId: nextSettings.providerId || "",
+    hasSecret: Boolean(nextSettings.hasSecret),
   };
 }
 
@@ -911,6 +934,8 @@ function normalizeAiSettings(nextSettings = {}) {
     apiFormat: nextSettings.apiFormat || "responses",
     baseUrl: normalizeBaseUrl(nextSettings.baseUrl || "https://api.openai.com/v1"),
     apiKey: nextSettings.apiKey || "",
+    providerId: nextSettings.providerId || "",
+    hasSecret: Boolean(nextSettings.hasSecret),
     model: nextSettings.model || "gpt-4.1-mini",
     providerNote: nextSettings.providerNote || "",
   };

@@ -6,6 +6,8 @@ NGR AssetPilot 的“本地 AI 搜图”模块使用以下开源运行时。完�
 - `onnxruntime-node` 1.24.3 — MIT License
 - `sharp` 0.35.3 — Apache License 2.0
 - `adm-zip` 0.6.0 — MIT License（仅用于生成和读取经严格清单校验的 `.ngrmodel` 离线模型包）
+- `fflate` 0.8.3 — MIT License（工作区备份 ZIP 与有界分块处理）
+- `electron-log` 5.4.4 — MIT License（仅主进程本地轮转诊断日志，不上传日志）
 
 首次使用时，应用会在用户明确确认后从 Hugging Face 下载模型，不将模型文件打入安装包，也不自动升级模型：
 

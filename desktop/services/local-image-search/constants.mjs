@@ -1,6 +1,7 @@
-export const LOCAL_IMAGE_SEARCH_VERSION = "clip-b32-multilingual-v1";
+export const LEGACY_LOCAL_IMAGE_SEARCH_VERSION = "clip-b32-multilingual-v1";
+export const LOCAL_IMAGE_SEARCH_VERSION = "clip-b32-multilingual-q4f16-v1";
 export const MODEL_PACKAGE_FORMAT = "ngr-assetpilot-local-ai-model";
-export const MODEL_PACKAGE_VERSION = 1;
+export const MODEL_PACKAGE_VERSION = 2;
 export const MODEL_PACKAGE_EXTENSION = "ngrmodel";
 export const EMBEDDING_DIMENSIONS = 512;
 export const QUERY_MAX_BYTES = 25 * 1024 * 1024;
@@ -10,7 +11,7 @@ export const SUPPORTED_IMAGE_EXTENSIONS = new Set([
   ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff",
 ]);
 
-export const MODEL_FILES = Object.freeze([
+const SHARED_VISION_FILES = [
   {
     model: "vision",
     relativePath: "config.json",
@@ -25,13 +26,9 @@ export const MODEL_FILES = Object.freeze([
     sha256: "6f638fb9401a6d6296feff533ee7efe657b787c49f954f82f5906b36ef2a1b1f",
     url: "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/preprocessor_config.json",
   },
-  {
-    model: "vision",
-    relativePath: "onnx/vision_model_quantized.onnx",
-    size: 89117001,
-    sha256: "583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299",
-    url: "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/onnx/vision_model_quantized.onnx",
-  },
+];
+
+const SHARED_TEXT_FILES = [
   {
     model: "text",
     relativePath: "config.json",
@@ -81,6 +78,30 @@ export const MODEL_FILES = Object.freeze([
     sha256: "dc112f9666c31b9a9e7c0e49de2b4c7422c2e1dff86d79a5c47015fed5066b40",
     url: "https://huggingface.co/aurantium/clip-ViT-B-32-multilingual-v1/resolve/143c7bc5489174177859c03641bcf69a4622b42c/onnx/model_quantized.onnx",
   },
+];
+
+export const MODEL_FILES = Object.freeze([
+  ...SHARED_VISION_FILES,
+  {
+    model: "vision",
+    relativePath: "onnx/vision_model_q4f16.onnx",
+    size: 53_267_374,
+    sha256: "d238c4e0afe798c47c5991a046b923c5bcbeed19c2d75d7c0db845ba73bb7b87",
+    url: "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/onnx/vision_model_q4f16.onnx",
+  },
+  ...SHARED_TEXT_FILES,
+]);
+
+export const LEGACY_MODEL_FILES = Object.freeze([
+  ...SHARED_VISION_FILES,
+  {
+    model: "vision",
+    relativePath: "onnx/vision_model_quantized.onnx",
+    size: 89_117_001,
+    sha256: "583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299",
+    url: "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/d15189d7028b43f1d3e65039190477f6af591c2a/onnx/vision_model_quantized.onnx",
+  },
+  ...SHARED_TEXT_FILES,
 ]);
 
 export const MODEL_TOTAL_BYTES = MODEL_FILES.reduce((sum, file) => sum + file.size, 0);

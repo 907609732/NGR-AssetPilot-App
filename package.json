@@ -1,6 +1,6 @@
 {
   "name": "ngr-assetpilot-desktop",
-  "version": "3.0.5",
+  "version": "3.0.6",
   "private": true,
   "description": "NGR AssetPilot Windows desktop application",
   "license": "MIT",
@@ -34,7 +34,9 @@
   "dependencies": {
     "@huggingface/transformers": "4.2.0",
     "adm-zip": "0.6.0",
+    "electron-log": "5.4.4",
     "electron-updater": "6.8.9",
+    "fflate": "0.8.3",
     "onnxruntime-node": "1.24.3",
     "sharp": "0.35.3"
   },

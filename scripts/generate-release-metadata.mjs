@@ -52,7 +52,14 @@ function generateSbom(outputPath) {
   if (result.status !== 0 || !result.stdout.trim().startsWith("{")) {
     throw new Error("npm SBOM 生成失败；请先执行 npm ci 并确认 package-lock.json 有效");
   }
-  fs.writeFileSync(outputPath, result.stdout, "utf8");
+  const sbom = JSON.parse(result.stdout);
+  const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+  if (sbom.metadata?.component) {
+    // npm derives this field from the checkout folder on Windows. Keep the
+    // CycloneDX root component aligned with its npm purl and bom-ref instead.
+    sbom.metadata.component.name = packageJson.name;
+  }
+  fs.writeFileSync(outputPath, `${JSON.stringify(sbom, null, 2)}\n`, "utf8");
 }
 
 export function generateReleaseMetadata(edition) {

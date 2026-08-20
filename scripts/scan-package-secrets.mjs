@@ -121,16 +121,18 @@ export function scanArtifacts({ edition, env = process.env } = {}) {
   const findings = [];
   for (const filePath of files) {
     const relativeFile = path.relative(artifactDirectory, filePath);
-    const isBuilderDebugMetadata = relativeFile === "builder-debug.yml";
+    const isBuilderMetadata = relativeFile === "builder-debug.yml"
+      || relativeFile === "builder-effective-config.yaml";
     if (forbiddenFileNames.has(path.basename(filePath).toLowerCase())) {
       findings.push({ label: "测试密钥文件路径", file: relativeFile });
     }
     for (const [label, needle] of forbidden) {
-      // electron-builder records the configured exclusion rules in this local
-      // debug file. Keep scanning it for real credential values and the binary
-      // magic, but do not treat the names inside explicit `!…` rules as a leak.
+      // electron-builder records configured exclusion rules in its debug and
+      // effective-config metadata. Keep scanning those files for real secret
+      // values and binary magic, but do not treat excluded test-module names as
+      // a packaged credential leak.
       if (
-        isBuilderDebugMetadata
+        isBuilderMetadata
         && ["测试密钥文件名", "测试密钥模块名", "测试密钥加载器名"].includes(label)
       ) {
         continue;

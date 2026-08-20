@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.5" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.6" />
   </head>
   <body>
     <div id="app">
@@ -15,13 +15,17 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.5</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.6</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
         <button class="settings-button tutorial-button" id="tutorialEntry" type="button" aria-label="UI切图检测教程" title="UI切图检测教程">教程</button>
         <button class="settings-button guide-button" id="guideEntry" type="button" aria-label="操作指引" title="操作指引">?</button>
         <button class="update-available-button hidden" id="updateAvailableButton" type="button">发现新版本</button>
+        <button class="feedback-form-button" id="feedbackFormLink" type="button" aria-label="打开反馈与建议表单" title="反馈与建议">
+          <span aria-hidden="true">✦</span>
+          <span>反馈与建议</span>
+        </button>
         <button class="settings-button" id="rulesEntry" type="button" aria-label="设置" title="设置">⚙</button>
       </header>
 
@@ -61,7 +65,7 @@
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.5</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.6</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
@@ -89,7 +93,15 @@
               <h2>本地 AI 搜图 <span class="version-badge">离线</span></h2>
               <p>原图目录保持只读；模型、索引和缩略图仅保存在本机应用数据目录。</p>
             </div>
-            <span class="local-search-runtime" id="localSearchRuntimeStatus">正在检查桌面能力…</span>
+            <div class="local-search-heading-actions">
+              <label class="local-search-quick-library">
+                <span>当前图库</span>
+                <select id="localSearchQuickLibrarySelect" aria-label="快速切换当前图库" disabled>
+                  <option value="">尚未创建图库</option>
+                </select>
+              </label>
+              <span class="local-search-runtime" id="localSearchRuntimeStatus">正在检查桌面能力…</span>
+            </div>
           </div>
 
           <div class="local-search-web-only hidden" id="localSearchWebOnly">
@@ -209,10 +221,58 @@
 
               <section class="local-search-results-section">
                 <div class="local-search-results-head">
-                  <strong>搜索结果</strong><span id="localSearchResultCount">默认返回前 50 项</span>
+                  <div>
+                    <strong id="localSearchContentTitle" tabindex="-1">素材库</strong>
+                    <span id="localSearchResultCount">分析图库后可快速浏览全部图片</span>
+                  </div>
+                  <button class="ghost-action hidden" id="localSearchReturnToLibrary" type="button">返回素材库</button>
                 </div>
-                <div class="local-search-results" id="localSearchResults"></div>
-                <div class="local-search-empty" id="localSearchResultsEmpty">粘贴截图、选择图片或输入文字开始搜索</div>
+                <div class="local-search-browser" id="localSearchBrowser">
+                  <aside class="local-search-folder-pane" aria-label="素材文件夹">
+                    <div class="local-search-folder-pane-head">
+                      <strong>文件夹</strong>
+                      <button class="ghost-action" id="localSearchAssetRefresh" type="button">刷新列表</button>
+                    </div>
+                    <nav class="local-search-breadcrumb" id="localSearchAssetBreadcrumb" aria-label="当前文件夹"></nav>
+                    <div class="local-search-folder-tree" id="localSearchAssetFolders" role="tree"></div>
+                  </aside>
+                  <div class="local-search-asset-content">
+                    <div class="local-search-asset-toolbar">
+                      <label>
+                        <span>名称或路径</span>
+                        <input id="localSearchAssetFilter" type="search" maxlength="100" placeholder="筛选素材（不调用 AI）" />
+                      </label>
+                      <label>
+                        <span>排序</span>
+                        <select id="localSearchAssetSort">
+                          <option value="path-asc">路径 A–Z</option>
+                          <option value="modified-desc">最新修改</option>
+                          <option value="modified-asc">最早修改</option>
+                          <option value="size-desc">文件从大到小</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div class="local-search-asset-grid" id="localSearchAssetGrid" role="list" aria-busy="false"></div>
+                    <div class="local-search-empty local-search-asset-empty" id="localSearchAssetEmpty">
+                      <strong>尚未建立素材目录</strong>
+                      <span>完成一次图库分析后，这里会按文件夹展示全部已分析图片。</span>
+                      <div class="action-row compact-actions">
+                        <button class="primary-action" id="localSearchAssetStartIndex" type="button">开始分析</button>
+                        <button class="ghost-action" id="localSearchAssetOpenSettings" type="button">打开设置</button>
+                      </div>
+                    </div>
+                    <div class="local-search-pagination hidden" id="localSearchAssetPagination" aria-label="素材分页">
+                      <button class="ghost-action" id="localSearchAssetPrevious" type="button">上一页</button>
+                      <span>第 <strong id="localSearchAssetPage">1</strong> / <strong id="localSearchAssetPageCount">1</strong> 页</span>
+                      <label>跳转到 <input id="localSearchAssetPageJump" type="number" min="1" value="1" /> 页</label>
+                      <button class="ghost-action" id="localSearchAssetNext" type="button">下一页</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="local-search-search-surface hidden" id="localSearchSearchSurface">
+                  <div class="local-search-results" id="localSearchResults"></div>
+                  <div class="local-search-empty" id="localSearchResultsEmpty">正在准备搜索…</div>
+                </div>
               </section>
             </div>
           </div>
@@ -220,7 +280,7 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.5</span><time class="version-date" datetime="2026-08-20">更新于 2026-08-20</time></h2>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.6</span><time class="version-date" datetime="2026-08-20">更新于 2026-08-20</time></h2>
             <p>配置命名规则、AI 接入、方案模板和工作区备份；更改会自动保存。</p>
           </div>
 
@@ -377,6 +437,7 @@
             <div class="action-row compact-actions">
               <button id="saveAiSettings" class="primary-action" type="button">保存 AI 配置</button>
               <button id="testAiSettings" class="ghost-action" type="button">测试 API</button>
+              <button id="clearAiCredential" class="ghost-action desktop-credential-action" type="button">清除已保存密钥</button>
               <button id="exportAiSettings" class="ghost-action" type="button">导出 API 配置</button>
               <label class="file-action ghost-action">
                 导入 API 配置
@@ -659,12 +720,12 @@
           <div class="upload-grid detection-upload-grid" id="detectionDropZone">
             <label class="upload-panel">
               <span>上传检测文件夹</span>
-              <small>支持 PNG、JPG、JPEG、WebP、GIF、SVG，可拖入文件夹</small>
+              <small>仅 PNG 格式可通过检测；其他格式会标记错误，可拖入文件夹</small>
               <input id="detectionFolderInput" type="file" webkitdirectory multiple accept="image/*,.svg" />
             </label>
             <label class="upload-panel">
               <span>补充上传单张图片</span>
-              <small>支持 PNG、JPG、JPEG、WebP、GIF、SVG</small>
+              <small>仅 PNG 格式可通过检测；其他格式会标记错误</small>
               <input id="detectionSingleInput" type="file" multiple accept="image/*,.svg" />
             </label>
           </div>
@@ -681,7 +742,7 @@
             <p>NGR切图规范：所有图片宽高必须是双数；背景图规范尺寸为 3440x1440，左右两边不要忘记加带鱼屏渐变；效果图规范尺寸为 PC 2560x1440、移动端 2340x1080；NGR 不允许 1024 分辨率以上的普通切图进引擎，分辨率单边不能超过 1024；单边 2048 的图片无法直接上传，需要走白名单审批；单边超过 512 的大图需要是 4 的倍数；512 以下图集只要不是单数即可。</p>
             <p>策划配置切图规范：不能有 4 倍图片，宽高都需要是 2 的幂次，例如 32、64、128、256、512、1024。</p>
             <p>图标尺寸检测规范：Icon 只允许正方形，尺寸只允许 32x32、64x64、128x128、256x256、512x512、1024x1024。</p>
-            <p>格式规范：NGR 只允许 .png 格式图片；如果上传 JPG、JPEG、WebP、GIF、SVG 等格式，会提示“注意导出切图格式，NGR只允许png格式，不允许其他格式”。</p>
+            <p>格式规范：NGR 只允许有效的 .png 格式图片；系统同时校验扩展名和 PNG 文件内容。JPG、JPEG、WebP、GIF、SVG、BMP、TIFF、AVIF、HEIC、ICO、损坏文件或伪装成 .png 的其他格式都会报错。</p>
             <p>重复资源检测：默认关闭。开启后系统会对上传图片生成缩略像素指纹，像素比较接近的资源会标黄提示为疑似重复资源；高档更容易发现相似资源，也更可能出现误报。</p>
           </div>
 
@@ -824,6 +885,7 @@
             <div class="translator-settings-actions">
               <button id="saveTranslatorSettings" class="primary-action" type="button">保存翻译设置</button>
               <button id="testTranslatorSettings" class="ghost-action" type="button">测试 API</button>
+              <button id="clearTranslatorCredential" class="ghost-action desktop-credential-action" type="button">清除已保存密钥</button>
             </div>
             <small>翻译配置只处理文本文件名，不会上传图片。若接口失败，会自动使用本地词库和拼音兜底。</small>
           </div>
@@ -874,9 +936,28 @@
             <strong>新版介绍</strong>
             <pre id="updateReleaseNotes">暂无更新说明</pre>
           </div>
-          <div class="update-progress-wrap hidden" id="updateProgressWrap">
-            <progress id="updateProgress" max="100" value="0"></progress>
-            <span id="updateProgressText">等待下载</span>
+          <div class="update-progress-wrap hidden" id="updateProgressWrap" aria-live="polite">
+            <div class="update-progress-head">
+              <div class="update-progress-orb" aria-hidden="true"><span>↻</span></div>
+              <div class="update-progress-copy">
+                <strong id="updateProgressTitle">正在准备更新</strong>
+                <span id="updateProgressText">等待下载</span>
+              </div>
+              <strong class="update-progress-percent" id="updateProgressPercent">0%</strong>
+            </div>
+            <div class="update-progress-track" id="updateProgressTrack" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <span class="update-progress-bar" id="updateProgressBar"></span>
+              <i aria-hidden="true"></i>
+            </div>
+            <div class="update-progress-meta">
+              <span id="updateProgressDetail">正在连接更新服务器…</span>
+              <span id="updateProgressSpeed"></span>
+            </div>
+            <ol class="update-stage-list" id="updateStageList">
+              <li data-update-stage="download"><span>1</span><div><strong>下载安装包</strong><small>实时显示下载速度</small></div></li>
+              <li data-update-stage="verify"><span>2</span><div><strong>验证文件</strong><small>检查大小和完整性</small></div></li>
+              <li data-update-stage="install"><span>3</span><div><strong>启动安装向导</strong><small>由你确认后开始安装</small></div></li>
+            </ol>
           </div>
           <div class="action-row update-dialog-actions">
             <button class="primary-action" id="updatePrimaryAction" type="button">下载更新</button>
@@ -909,7 +990,7 @@
             <button class="settings-button" id="localSearchGuideClose" type="button" aria-label="关闭本地搜图引导">×</button>
           </div>
           <ol class="local-search-guide-list">
-            <li><strong>准备模型</strong>：可下载约 225MB 内置模型，也可导入 .ngrmodel 或经过验证的本地 ONNX 特征模型。</li>
+            <li><strong>准备模型</strong>：可下载约 190MB 内置模型，也可导入 .ngrmodel 或经过验证的本地 ONNX 特征模型。</li>
             <li><strong>创建图库</strong>：选择一个本地图片文件夹作为图库。</li>
             <li><strong>开始分析</strong>：递归扫描并生成向量索引，生成后可持续增量更新。</li>
             <li><strong>搜索测试</strong>：图文模型可测试截图、图片和中英文文字搜索；图像单塔只提供图片搜索。</li>
@@ -1081,25 +1162,26 @@
       <div id="toast" class="toast hidden" role="status"></div>
     </div>
 
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.5"></script>
-    <script src="historical-knowledge.js?v=V3.0.5"></script>
-    <script src="js/config.js?v=V3.0.5"></script>
-    <script src="js/prefix-library.js?v=V3.0.5"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.5"></script>
-    <script src="js/updates.js?v=V3.0.5"></script>
-    <script src="js/workspace-backup.js?v=V3.0.5"></script>
-    <script src="js/state-dom.js?v=V3.0.5"></script>
-    <script src="js/local-image-search.js?v=V3.0.5"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.5"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.5"></script>
-    <script src="js/ai-workflow.js?v=V3.0.5"></script>
-    <script src="js/assets-detection.js?v=V3.0.5"></script>
-    <script src="js/rendering.js?v=V3.0.5"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.5"></script>
-    <script src="js/export-template-storage.js?v=V3.0.5"></script>
-    <script src="js/toast.js?v=V3.0.5"></script>
-    <script src="js/workspace-storage.js?v=V3.0.5"></script>
-    <script src="js/workspace-migration.js?v=V3.0.5"></script>
-    <script src="js/main.js?v=V3.0.5"></script>
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.6"></script>
+    <script src="historical-knowledge.js?v=V3.0.6"></script>
+    <script src="js/config.js?v=V3.0.6"></script>
+    <script src="js/prefix-library.js?v=V3.0.6"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.6"></script>
+    <script src="js/updates.js?v=V3.0.6"></script>
+    <script src="js/workspace-backup.js?v=V3.0.6"></script>
+    <script src="js/state-dom.js?v=V3.0.6"></script>
+    <script src="js/local-image-browser.js?v=V3.0.6"></script>
+    <script src="js/local-image-search.js?v=V3.0.6"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.6"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.6"></script>
+    <script src="js/ai-workflow.js?v=V3.0.6"></script>
+    <script src="js/assets-detection.js?v=V3.0.6"></script>
+    <script src="js/rendering.js?v=V3.0.6"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.6"></script>
+    <script src="js/export-template-storage.js?v=V3.0.6"></script>
+    <script src="js/toast.js?v=V3.0.6"></script>
+    <script src="js/workspace-storage.js?v=V3.0.6"></script>
+    <script src="js/workspace-migration.js?v=V3.0.6"></script>
+    <script src="js/main.js?v=V3.0.6"></script>
   </body>
 </html>

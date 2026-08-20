@@ -34,10 +34,16 @@ async function assertFile(filePath, expected) {
 }
 
 function expectedManifest(files) {
+  const packageModel = workerData.packageModel && typeof workerData.packageModel === "object"
+    ? workerData.packageModel
+    : null;
   return {
     format: MODEL_PACKAGE_FORMAT,
     formatVersion: MODEL_PACKAGE_VERSION,
-    modelVersion: LOCAL_IMAGE_SEARCH_VERSION,
+    modelVersion: packageModel?.id || LOCAL_IMAGE_SEARCH_VERSION,
+    modelId: packageModel?.id || LOCAL_IMAGE_SEARCH_VERSION,
+    modelFingerprint: packageModel?.fingerprint || null,
+    sharedComponents: files.some((file) => file.model === "text") ? ["text"] : [],
     totalBytes: files.reduce((sum, file) => sum + file.size, 0),
     files: files.map((file) => ({
       path: packagePath(file),
@@ -51,11 +57,16 @@ function assertManifest(actual, expected) {
   if (!actual || typeof actual !== "object" || Array.isArray(actual)) throw new Error("MODEL_PACKAGE_MANIFEST_INVALID");
   if (
     actual.format !== expected.format
-    || actual.formatVersion !== expected.formatVersion
+    || ![1, expected.formatVersion].includes(actual.formatVersion)
     || actual.modelVersion !== expected.modelVersion
     || actual.totalBytes !== expected.totalBytes
     || JSON.stringify(actual.files) !== JSON.stringify(expected.files)
   ) throw new Error("MODEL_PACKAGE_VERSION_MISMATCH");
+  if (actual.formatVersion >= 2 && (
+    actual.modelId !== expected.modelId
+    || actual.modelFingerprint !== expected.modelFingerprint
+    || JSON.stringify(actual.sharedComponents || []) !== JSON.stringify(expected.sharedComponents)
+  )) throw new Error("MODEL_PACKAGE_VERSION_MISMATCH");
 }
 
 async function exportPackage() {

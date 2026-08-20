@@ -28,10 +28,10 @@
     jobTimer: null,
     engineTimer: null,
     queryPreviewUrl: "",
-    resultUrls: [],
   };
   const $ = (selector) => document.querySelector(selector);
   const bridge = () => globalScope.NgrDesktopBridge?.localImageSearch;
+  const assetBrowser = () => globalScope.NgrLocalImageBrowser;
 
   const nodes = {};
   function collectNodes() {
@@ -49,7 +49,7 @@
       "localSearchDropzone", "localSearchImageInput", "localSearchQueryPreview", "localSearchTextInput",
       "localSearchTextSubmit", "localSearchClearTextQuery", "localSearchQueryStatus", "localSearchResultCount", "localSearchResults",
       "localSearchClearImageQuery",
-      "localSearchResultsEmpty", "localSearchLibrarySelect", "localSearchGuideOverlay", "localSearchGuideClose", "localSearchGuideStart",
+      "localSearchResultsEmpty", "localSearchLibrarySelect", "localSearchQuickLibrarySelect", "localSearchGuideOverlay", "localSearchGuideClose", "localSearchGuideStart",
       "localSearchModelManagerOverlay", "localSearchModelManagerClose", "localSearchCustomImportStart",
       "localSearchManagedModels", "localSearchManagedModelsEmpty", "localSearchModelWizard", "localSearchCustomModelName",
       "localSearchCustomModelType", "localSearchCustomModelLicense", "localSearchCustomLayout", "localSearchCustomWidth",
@@ -91,6 +91,12 @@
     return state.models.find((model) => model.id === state.activeModelId) || null;
   }
 
+  function getPackageModelId() {
+    const selected = getActiveModel();
+    if (selected?.builtin) return selected.id;
+    return state.models.find((model) => model.builtin)?.id || state.activeModelId || null;
+  }
+
   function modelSupportsText(model) {
     if (!model) return true;
     return model.supportsText === true || model.kind === "image-text" || model.kind === "multimodal";
@@ -129,12 +135,26 @@
 
   function renderTextCapability() {
     const supported = modelSupportsText(getActiveModel());
-    nodes.localSearchTextTab.disabled = !supported;
-    nodes.localSearchTextTab.setAttribute("aria-disabled", String(!supported));
-    nodes.localSearchTextTab.title = supported ? "使用当前模型进行文字搜索" : "当前模型仅支持图片搜索";
-    nodes.localSearchTextSubmit.disabled = !supported;
-    nodes.localSearchTextInput.disabled = !supported;
-    nodes.localSearchTextInput.placeholder = supported ? "例如：红色跑车、blue ocean sunset" : "当前模型仅支持图片搜索";
+    const searchable = isActiveLibrarySearchable();
+    nodes.localSearchImageTab.disabled = !searchable;
+    nodes.localSearchImageTab.setAttribute("aria-disabled", String(!searchable));
+    nodes.localSearchTextTab.disabled = !supported || !searchable;
+    nodes.localSearchTextTab.setAttribute("aria-disabled", String(!supported || !searchable));
+    nodes.localSearchTextTab.title = !supported
+      ? "当前模型仅支持图片搜索"
+      : searchable
+        ? "使用当前模型进行文字搜索"
+        : "请先用当前模型完成图库分析";
+    nodes.localSearchTextSubmit.disabled = !supported || !searchable;
+    nodes.localSearchTextInput.disabled = !supported || !searchable;
+    nodes.localSearchTextInput.placeholder = !supported
+      ? "当前模型仅支持图片搜索"
+      : searchable
+        ? "例如：红色跑车、blue ocean sunset"
+        : "当前模型尚未完成图库分析";
+    nodes.localSearchImageInput.disabled = !searchable;
+    nodes.localSearchDropzone.setAttribute("aria-disabled", String(!searchable));
+    nodes.localSearchDropzone.tabIndex = searchable ? 0 : -1;
     if (!supported && !nodes.localSearchTextPanel.classList.contains("hidden")) setTab("image");
   }
 
@@ -154,15 +174,17 @@
     } else {
       nodes.localSearchModelSummary.textContent = packageStatus.totalBytes
         ? `${formatBytes(packageStatus.downloadedBytes)} / ${formatBytes(packageStatus.totalBytes)}`
-        : "约 225 MB，首次使用需下载或导入";
+        : "约 190 MB，首次使用需下载或导入";
       nodes.localSearchModelMeta.textContent = "内置模型支持图片和中英文文字搜索";
       nodes.localSearchModelState.textContent = packageStatus.state === "importing" ? "导入校验中" : packageStatus.state === "exporting" ? "正在导出" : packageStatus.ready ? "已就绪" : packageStatus.state === "downloading" ? "下载中" : packageStatus.state === "error" ? "校验失败" : packageStatus.state === "canceled" ? "已取消" : "未下载";
       nodes.localSearchModelState.dataset.state = packageStatus.ready ? "ready" : packageStatus.state;
     }
 
     const busy = ["downloading", "importing", "exporting"].includes(packageStatus.state);
-    const builtinModel = state.models.find((model) => model.builtin);
-    const builtinReady = builtinModel ? builtinModel.ready !== false && builtinModel.status !== "missing" : Boolean(packageStatus.ready);
+    const packageModel = state.models.find((model) => model.id === getPackageModelId());
+    const builtinReady = packageModel?.builtin
+      ? packageModel.ready !== false && packageModel.status !== "missing"
+      : Boolean(packageStatus.ready);
     nodes.localSearchDownloadModel.classList.toggle("hidden", builtinReady || busy || packageStatus.state === "error");
     nodes.localSearchImportModel.classList.toggle("hidden", busy);
     nodes.localSearchExportModel.classList.toggle("hidden", !packageStatus.ready || busy);
@@ -208,6 +230,31 @@
     return state.libraries.find((item) => item.id === state.activeLibraryId);
   }
 
+  function isActiveLibrarySearchable() {
+    const library = getActiveLibrary();
+    const activeModel = getActiveModel();
+    const modelReady = !state.models.length || Boolean(activeModel && activeModel.ready !== false && activeModel.status !== "missing");
+    return Boolean(
+      library
+      && modelReady
+      && Number(library.itemCount || 0) > 0
+      && library.status !== "stale"
+      && !state.activeJobId
+    );
+  }
+
+  function searchUnavailableMessage() {
+    const library = getActiveLibrary();
+    if (!library) return "请先选择图库。";
+    if (state.activeJobId) return "图库正在分析；完成或停止后再使用 AI 搜索。";
+    const activeModel = getActiveModel();
+    if (state.models.length && (!activeModel || activeModel.ready === false || activeModel.status === "missing")) {
+      return "当前模型尚未就绪，请先下载、导入或切换模型。";
+    }
+    if (library.status === "stale") return "当前模型索引已过期，请重新分析后再搜索。";
+    return "请先用当前模型完成图库分析；现有素材仍可直接浏览。";
+  }
+
   function showGuideOverlay() {
     if (!nodes.localSearchGuideOverlay) return;
     nodes.localSearchGuideOverlay.classList.remove("hidden");
@@ -234,7 +281,8 @@
   async function refreshModelStatus() {
     if (!bridge()?.isAvailable()) return;
     const wasReady = Boolean(state.packageStatus?.ready);
-    const status = await bridge().getModelStatus();
+    const modelId = getPackageModelId();
+    const status = await bridge().getModelStatus(modelId ? { modelId } : undefined);
     state.packageStatus = status;
     renderModelStatus();
     if (["downloading", "importing", "exporting"].includes(status.state)) scheduleModelPoll();
@@ -357,8 +405,9 @@
     }
     const result = await bridge().setActiveModel({ modelId });
     state.activeModelId = result?.activeModelId || result?.model?.id || modelId;
-    clearResults();
+    resetQueryAndBrowse({ refresh: false });
     await Promise.all([refreshModels(), refreshLibraries(), refreshEngineStatus()]);
+    await refreshModelStatus();
     showStatus(`已切换到“${model.name}”；该模型首次使用时需要重新分析图库。`, "ready");
   }
 
@@ -512,15 +561,19 @@
     const vectorNotice = model.builtin ? "对应模型文件将被删除" : "该模型文件及其独立向量索引将被删除";
     if (!globalScope.confirm(`确定删除模型“${model.name}”吗？${vectorNotice}，不会删除任何图库原图。`)) return;
     await bridge().removeModel({ modelId: model.id });
-    clearResults();
-    await Promise.all([refreshModelStatus(), refreshModels(), refreshLibraries()]);
+    resetQueryAndBrowse({ refresh: false });
+    await refreshModels();
+    await Promise.all([refreshModelStatus(), refreshLibraries()]);
     await refreshEngineStatus().catch(() => {});
     showStatus(`模型“${model.name}”已删除，图库原图未做任何修改。`, "ready");
   }
 
   async function startModelDownload() {
-    if (!globalScope.confirm("首次使用需要下载约 225 MB 的两个固定量化模型。下载完成后所有分析和搜索均离线运行，是否继续？")) return;
-    await bridge().downloadModel();
+    const expectedBytes = Number(state.packageStatus?.totalBytes || 0);
+    const expectedSize = expectedBytes > 0 ? formatBytes(expectedBytes) : "约 190 MB";
+    if (!globalScope.confirm(`首次使用需要下载 ${expectedSize} 的固定离线模型。下载完成后所有分析和搜索均离线运行，是否继续？`)) return;
+    const modelId = getPackageModelId();
+    await bridge().downloadModel(modelId ? { modelId } : undefined);
     showStatus("模型正在下载，可以继续浏览软件。", "working");
     await refreshModelStatus();
   }
@@ -541,7 +594,8 @@
 
   async function exportOfflineModel() {
     showStatus("正在生成可复制到纯离线电脑的模型包…", "working");
-    const result = await bridge().exportModel();
+    const modelId = getPackageModelId();
+    const result = await bridge().exportModel(modelId ? { modelId } : undefined);
     if (result.canceled) return showStatus("已取消导出。", "");
     showStatus("离线模型包已导出，可复制到其他电脑后直接导入。", "ready");
     await refreshModelStatus();
@@ -549,9 +603,12 @@
 
   async function removeModel() {
     if (!globalScope.confirm("删除内置模型会同时删除该模型对应的向量索引，但不会删除任何图库原图。再次使用前需要重新下载或导入并重新分析，是否继续？")) return;
-    const builtinModel = state.models.find((model) => model.builtin);
+    const builtinModel = getActiveModel()?.builtin
+      ? getActiveModel()
+      : state.models.find((model) => model.builtin);
     await bridge().removeModel(builtinModel ? { modelId: builtinModel.id } : undefined);
-    await Promise.all([refreshModelStatus(), refreshModels(), refreshLibraries()]);
+    await refreshModels();
+    await Promise.all([refreshModelStatus(), refreshLibraries()]);
     await refreshEngineStatus().catch(() => {});
     showStatus("内置模型及其向量索引已删除，图库原图未做任何修改。", "ready");
   }
@@ -586,30 +643,31 @@
     if (state.activeLibraryId === libraryId) return;
     state.activeLibraryId = libraryId;
     persistActiveLibraryId(libraryId);
+    clearQueryInputs();
     renderLibraries();
     renderActiveLibrary();
-    clearResults();
   }
 
   function renderLibraries() {
     nodes.localSearchLibraryList.replaceChildren();
     nodes.localSearchLibraryEmpty.classList.toggle("hidden", state.libraries.length > 0);
-    if (nodes.localSearchLibrarySelect) {
-      nodes.localSearchLibrarySelect.classList.toggle("hidden", state.libraries.length === 0);
-      nodes.localSearchLibrarySelect.replaceChildren();
+    [nodes.localSearchLibrarySelect, nodes.localSearchQuickLibrarySelect].filter(Boolean).forEach((select) => {
+      select.classList.toggle("hidden", select === nodes.localSearchLibrarySelect && state.libraries.length === 0);
+      select.disabled = state.libraries.length === 0;
+      select.replaceChildren();
       const placeholder = document.createElement("option");
       placeholder.value = "";
-      placeholder.textContent = "选择当前图库";
-      nodes.localSearchLibrarySelect.appendChild(placeholder);
+      placeholder.textContent = state.libraries.length ? "选择当前图库" : "尚未创建图库";
+      select.appendChild(placeholder);
       state.libraries.forEach((library) => {
         const option = document.createElement("option");
         option.value = library.id;
         option.textContent = library.name;
         if (library.id === state.activeLibraryId) option.selected = true;
-        nodes.localSearchLibrarySelect.appendChild(option);
+        select.appendChild(option);
       });
-      if (!state.activeLibraryId) nodes.localSearchLibrarySelect.value = "";
-    }
+      select.value = state.activeLibraryId || "";
+    });
     state.libraries.forEach((library) => {
       const card = document.createElement("article");
       card.className = `local-search-library${library.id === state.activeLibraryId ? " active" : ""}`;
@@ -620,7 +678,9 @@
       const name = document.createElement("strong");
       const status = document.createElement("span");
       name.textContent = library.name;
-      status.textContent = `${library.itemCount} 张 · ${library.status === "ready" ? "已就绪" : library.status === "indexing" ? "分析中" : "待分析"}`;
+      const libraryCatalogCount = Number(library.catalogItemCount ?? library.catalog_item_count ?? library.itemCount ?? 0) || 0;
+      const catalogState = library.catalogStatus ?? library.catalog_status ?? library.status;
+      status.textContent = `${libraryCatalogCount} 张素材 · ${Number(library.itemCount || 0)} 张当前模型向量 · ${catalogState === "ready" ? "目录已就绪" : catalogState === "indexing" ? "分析中" : catalogState === "paused" ? "分析已暂停" : "待分析"}`;
       body.append(name, status);
 
       const actions = document.createElement("div");
@@ -660,15 +720,22 @@
     const library = getActiveLibrary();
     const activeModel = getActiveModel();
     const modelReady = !state.models.length || Boolean(activeModel && activeModel.ready !== false && activeModel.status !== "missing");
+    const catalogCount = Number(library?.catalogItemCount ?? library?.catalog_item_count ?? library?.itemCount ?? 0) || 0;
+    const modelItemCount = Number(library?.itemCount ?? 0) || 0;
     nodes.localSearchActiveLibraryName.textContent = library?.name || "尚未选择图库";
     nodes.localSearchLibraryMeta.textContent = library
-      ? `${library.itemCount} 张已索引${activeModel ? ` · 当前模型 ${activeModel.name}` : ""}${library.errorCount ? ` · ${library.errorCount} 个错误` : ""}${library.lastIndexedAt ? ` · ${new Date(library.lastIndexedAt).toLocaleString()}` : ""}`
+      ? `${catalogCount} 张素材 · ${modelItemCount} 张当前模型向量${activeModel ? ` · 当前模型 ${activeModel.name}` : ""}${library.errorCount ? ` · ${library.errorCount} 个错误` : ""}${library.lastIndexedAt ? ` · ${new Date(library.lastIndexedAt).toLocaleString()}` : ""}`
       : "创建图库后开始分析";
     nodes.localSearchStartIndex.disabled = !library || !modelReady;
     nodes.localSearchRemoveLibrary.disabled = !library || Boolean(state.activeJobId);
     if (nodes.localSearchLibrarySelect) nodes.localSearchLibrarySelect.value = library?.id || "";
-    if (library?.itemCount && modelReady) showStatus(`图库已就绪，可以使用“${activeModel?.name || "内置模型"}”搜索。`, "ready");
+    if (nodes.localSearchQuickLibrarySelect) nodes.localSearchQuickLibrarySelect.value = library?.id || "";
+    assetBrowser()?.setLibrary(library || null, { modelReady });
+    renderTextCapability();
+    if (isActiveLibrarySearchable()) showStatus(`图库已就绪，可以使用“${activeModel?.name || "内置模型"}”搜索。`, "ready");
     else if (library && !modelReady) showStatus("当前模型尚未就绪，请下载、导入或切换模型。", "error");
+    else if (library?.status === "stale") showStatus("当前模型索引已过期；素材仍可浏览，重新分析后恢复 AI 搜索。", "error");
+    else if (library && catalogCount > 0) showStatus("当前模型尚未分析此图库；素材仍可浏览，完成分析后启用 AI 搜索。", "");
   }
 
   async function createLibrary() {
@@ -686,7 +753,7 @@
     await bridge().removeLibrary({ libraryId: state.activeLibraryId });
     state.activeLibraryId = null;
     clearStoredActiveLibraryId();
-    clearResults();
+    clearQueryInputs();
     await refreshLibraries();
     showStatus("索引已删除，原图片未做任何修改。", "ready");
   }
@@ -700,7 +767,7 @@
       state.activeLibraryId = null;
       clearStoredActiveLibraryId();
     }
-    clearResults();
+    clearQueryInputs();
     await refreshLibraries();
     showStatus("索引已删除，原图片未做任何修改。", "ready");
   }
@@ -802,7 +869,11 @@
     nodes.localSearchSkipped.textContent = job.skipped || 0;
     nodes.localSearchErrors.textContent = job.errors || 0;
     renderJobPerformance(job);
-    if (job.state === "indexing") return scheduleJobPoll();
+    if (job.state === "indexing") {
+      const activeLibrary = getActiveLibrary();
+      assetBrowser()?.refreshIfDue(activeLibrary ? { ...activeLibrary, catalogStatus: "indexing" } : null, 2000);
+      return scheduleJobPoll();
+    }
     nodes.localSearchStartIndex.classList.remove("hidden");
     nodes.localSearchCancelIndex.classList.add("hidden");
     state.activeJobId = null;
@@ -832,12 +903,7 @@
     if (!image) nodes.localSearchTextInput.focus();
   }
 
-  function clearResultUrls() {
-    state.resultUrls.forEach((url) => URL.revokeObjectURL(url));
-    state.resultUrls = [];
-  }
-
-  function clearImageQuery() {
+  function clearImageInput() {
     if (state.queryPreviewUrl) {
       URL.revokeObjectURL(state.queryPreviewUrl);
       state.queryPreviewUrl = "";
@@ -846,72 +912,57 @@
     nodes.localSearchQueryPreview.classList.add("hidden");
     if (nodes.localSearchImageInput) nodes.localSearchImageInput.value = "";
     if (nodes.localSearchClearImageQuery) nodes.localSearchClearImageQuery.disabled = true;
-    clearResults();
-    showStatus("已清除查询图片，恢复到默认搜索态。", "");
+  }
+
+  function clearTextInput() {
+    if (nodes.localSearchTextInput) nodes.localSearchTextInput.value = "";
+    if (nodes.localSearchClearTextQuery) nodes.localSearchClearTextQuery.disabled = true;
+  }
+
+  function clearQueryInputs() {
+    clearImageInput();
+    clearTextInput();
+  }
+
+  function resetQueryAndBrowse(options = {}) {
+    clearQueryInputs();
+    assetBrowser()?.resetAndBrowse(options);
+    if (options.status !== false) showStatus("已清空查询，正在浏览当前图库素材。", "");
+  }
+
+  function clearImageQuery() {
+    resetQueryAndBrowse();
   }
 
   function clearTextQuery() {
-    if (nodes.localSearchTextInput) nodes.localSearchTextInput.value = "";
-    if (nodes.localSearchClearTextQuery) nodes.localSearchClearTextQuery.disabled = true;
-    clearResults();
-    showStatus("已清空文字查询，恢复到默认搜索态。", "");
-  }
-
-  function clearResults() {
-    clearResultUrls();
-    nodes.localSearchResults.replaceChildren();
-    nodes.localSearchResultsEmpty.classList.remove("hidden");
-    nodes.localSearchResultCount.textContent = "默认返回前 50 项";
-  }
-
-  async function renderResults(searchResult) {
-    clearResults();
-    const results = searchResult?.results || [];
-    nodes.localSearchResultsEmpty.classList.toggle("hidden", results.length > 0);
-    nodes.localSearchResultCount.textContent = `${results.length} 项 · ${formatProvider(searchResult.executionProvider)}`;
-    for (const result of results) {
-      const article = document.createElement("article");
-      article.className = "local-search-result";
-      article.innerHTML = `
-        <div class="local-search-thumb"><span>加载中</span></div>
-        <div class="local-search-result-body"><strong></strong><small class="path"></small><small class="meta"></small>
-          <div class="local-search-result-actions"><button type="button">打开</button><button type="button">定位</button></div>
-        </div>`;
-      article.querySelector("strong").textContent = result.fileName;
-      article.querySelector(".path").textContent = result.relativePath;
-      article.querySelector(".meta").textContent = `${result.width || "?"} × ${result.height || "?"} · 相似度 ${(Number(result.score) * 100).toFixed(1)}%`;
-      const [openButton, revealButton] = article.querySelectorAll("button");
-      openButton.addEventListener("click", () => bridge().openResult({ libraryId: state.activeLibraryId, imageId: result.imageId }));
-      revealButton.addEventListener("click", () => bridge().revealResult({ libraryId: state.activeLibraryId, imageId: result.imageId }));
-      nodes.localSearchResults.append(article);
-      bridge().getThumbnail({ libraryId: state.activeLibraryId, imageId: result.imageId }).then((thumbnail) => {
-        if (!article.isConnected) return;
-        const url = URL.createObjectURL(new Blob([thumbnail.data], { type: thumbnail.mimeType }));
-        state.resultUrls.push(url);
-        const image = new Image();
-        image.src = url;
-        image.alt = result.fileName;
-        article.querySelector(".local-search-thumb").replaceChildren(image);
-      }).catch(() => { article.querySelector(".local-search-thumb span").textContent = "无法预览"; });
-    }
+    resetQueryAndBrowse();
   }
 
   async function searchImage(file) {
     if (!file || !file.type.startsWith("image/")) return showStatus("请选择有效图片。", "error");
     if (file.size > 25 * 1024 * 1024) return showStatus("查询图片不得超过 25 MB。", "error");
-    if (!state.activeLibraryId) return showStatus("请先选择图库。", "error");
+    if (!isActiveLibrarySearchable()) return showStatus(searchUnavailableMessage(), "error");
     if (state.queryPreviewUrl) URL.revokeObjectURL(state.queryPreviewUrl);
     state.queryPreviewUrl = URL.createObjectURL(file);
     nodes.localSearchQueryPreview.src = state.queryPreviewUrl;
     nodes.localSearchQueryPreview.classList.remove("hidden");
     if (nodes.localSearchClearImageQuery) nodes.localSearchClearImageQuery.disabled = false;
+    clearTextInput();
+    const libraryId = state.activeLibraryId;
+    const modelId = state.activeModelId || undefined;
+    const context = assetBrowser()?.beginSearch(libraryId) || { libraryId, token: 0 };
     showStatus("正在本地计算图片向量并精确搜索…", "working");
     try {
-      const result = await bridge().searchByImage({ libraryId: state.activeLibraryId, modelId: state.activeModelId || undefined, data: await file.arrayBuffer(), mimeType: file.type });
-      await renderResults(result);
-      showStatus("搜索完成，查询图片未保存。", "ready");
+      const result = await bridge().searchByImage({ libraryId, modelId, data: await file.arrayBuffer(), mimeType: file.type });
+      const rendered = assetBrowser()?.renderSearchResults(result, {
+        ...context,
+        providerLabel: formatProvider(result?.executionProvider),
+      });
+      if (rendered !== false) showStatus("搜索完成，查询图片未保存。", "ready");
     } catch (error) {
-      showStatus(friendlyError(error, "图片搜索失败"), "error");
+      const message = friendlyError(error, "图片搜索失败");
+      const rendered = assetBrowser()?.showSearchError(message, context);
+      if (rendered !== false) showStatus(message, "error");
     }
   }
 
@@ -919,22 +970,34 @@
     if (!modelSupportsText(getActiveModel())) return showStatus("当前模型仅支持图片搜索，请切换到图文模型。", "error");
     const text = nodes.localSearchTextInput.value.trim();
     if (!text) return showStatus("请输入要搜索的中文或英文描述。", "error");
-    if (!state.activeLibraryId) return showStatus("请先选择图库。", "error");
+    if (!isActiveLibrarySearchable()) return showStatus(searchUnavailableMessage(), "error");
+    clearImageInput();
+    const libraryId = state.activeLibraryId;
+    const modelId = state.activeModelId || undefined;
+    const context = assetBrowser()?.beginSearch(libraryId) || { libraryId, token: 0 };
     showStatus("正在本地计算文字向量并精确搜索…", "working");
     if (nodes.localSearchClearTextQuery) nodes.localSearchClearTextQuery.disabled = false;
     try {
-      const result = await bridge().searchByText({ libraryId: state.activeLibraryId, modelId: state.activeModelId || undefined, text });
-      await renderResults(result);
-      showStatus("搜索完成，文字查询未保存。", "ready");
+      const result = await bridge().searchByText({ libraryId, modelId, text });
+      const rendered = assetBrowser()?.renderSearchResults(result, {
+        ...context,
+        providerLabel: formatProvider(result?.executionProvider),
+      });
+      if (rendered !== false) showStatus("搜索完成，文字查询未保存。", "ready");
     } catch (error) {
-      showStatus(friendlyError(error, "文字搜索失败"), "error");
+      const message = friendlyError(error, "文字搜索失败");
+      const rendered = assetBrowser()?.showSearchError(message, context);
+      if (rendered !== false) showStatus(message, "error");
     }
   }
 
   function bindEvents() {
     nodes.localSearchDownloadModel.addEventListener("click", () => startModelDownload().catch((error) => showStatus(friendlyError(error), "error")));
     nodes.localSearchRetryDownload.addEventListener("click", () => startModelDownload().catch((error) => showStatus(friendlyError(error), "error")));
-    nodes.localSearchCancelDownload.addEventListener("click", () => bridge().cancelModelDownload().then(refreshModelStatus));
+    nodes.localSearchCancelDownload.addEventListener("click", () => {
+      const modelId = getPackageModelId();
+      return bridge().cancelModelDownload(modelId ? { modelId } : undefined).then(refreshModelStatus);
+    });
     nodes.localSearchImportModel.addEventListener("click", () => importOfflineModel().catch((error) => showStatus(friendlyError(error, "离线模型包导入失败"), "error")));
     nodes.localSearchExportModel.addEventListener("click", () => exportOfflineModel().catch((error) => showStatus(friendlyError(error, "离线模型包导出失败"), "error")));
     nodes.localSearchRemoveModel.addEventListener("click", () => removeModel().catch((error) => showStatus(friendlyError(error), "error")));
@@ -974,6 +1037,10 @@
     nodes.localSearchTextInput.addEventListener("keydown", (event) => { if (event.key === "Enter") searchText(); });
     nodes.localSearchLibrarySelect?.addEventListener("change", () => {
       const selectedId = nodes.localSearchLibrarySelect.value;
+      if (selectedId) setActiveLibrary(selectedId);
+    });
+    nodes.localSearchQuickLibrarySelect?.addEventListener("change", () => {
+      const selectedId = nodes.localSearchQuickLibrarySelect.value;
       if (selectedId) setActiveLibrary(selectedId);
     });
     nodes.localSearchDropzone.addEventListener("click", () => nodes.localSearchImageInput.click());
@@ -1023,14 +1090,15 @@
     if (state.initialized) return;
     state.initialized = true;
     collectNodes();
+    assetBrowser()?.init({ onStatus: showStatus });
     bindEvents();
     const available = Boolean(bridge()?.isAvailable());
     nodes.localSearchRuntimeStatus.textContent = available ? "Windows 桌面版 · 本机离线" : "桌面版专属";
     nodes.localSearchWebOnly.classList.toggle("hidden", available);
     nodes.localSearchDesktopContent.classList.toggle("hidden", !available);
     if (!available) return;
-    await refreshModelStatus();
-    await Promise.all([refreshModels(), refreshLibraries()]);
+    await refreshModels();
+    await Promise.all([refreshModelStatus(), refreshLibraries()]);
     await refreshEngineStatus().catch((error) => {
       renderEngineStatus({ fallbackReason: friendlyError(error, "推理设备检测失败") });
     });
@@ -1038,4 +1106,5 @@
 
   globalScope.initLocalImageSearch = initLocalImageSearch;
   globalScope.showLocalImageSearchGuide = maybeShowGuide;
+  globalScope.resetLocalImageSearchQuery = resetQueryAndBrowse;
 })(window);

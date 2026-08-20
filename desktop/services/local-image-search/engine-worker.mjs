@@ -1,10 +1,11 @@
-import { parentPort, workerData } from "node:worker_threads";
+import { parentPort as threadParentPort, workerData as threadWorkerData } from "node:worker_threads";
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { opendir, readFile, stat } from "node:fs/promises";
+import { lstat, opendir, readFile, realpath, stat } from "node:fs/promises";
 import { availableParallelism } from "node:os";
 import { performance } from "node:perf_hooks";
+import process from "node:process";
 import path from "node:path";
 import sharp from "sharp";
 import * as ort from "onnxruntime-node";
@@ -16,24 +17,91 @@ import {
   SUPPORTED_IMAGE_EXTENSIONS,
 } from "./constants.mjs";
 import { exactTopK } from "./vector-search.mjs";
+import { BUILTIN_MODEL_FINGERPRINT } from "./model-manager.mjs";
+import { createIndexExecutionProfile } from "./execution-profile.mjs";
 
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
 
-const DEFAULT_MODEL_FINGERPRINT = "d169114d56ae3bbcc37cad224c9f39947b8712a4d5375c781d69f7fe632606e4";
+const UTILITY_WORKER_DATA_PREFIX = "--ngr-local-image-worker-data=";
+const MAX_WORKER_DATA_ARGUMENT_CHARS = 24 * 1024;
+
+function decodeUtilityWorkerData() {
+  const argument = process.argv.find((value) => value.startsWith(UTILITY_WORKER_DATA_PREFIX));
+  if (!argument) return null;
+  const encoded = argument.slice(UTILITY_WORKER_DATA_PREFIX.length);
+  if (!encoded || argument.length > MAX_WORKER_DATA_ARGUMENT_CHARS || !/^[A-Za-z0-9_-]+$/.test(encoded)) {
+    throw new Error("WORKER_DATA_INVALID");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+  } catch {
+    throw new Error("WORKER_DATA_INVALID");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("WORKER_DATA_INVALID");
+  if (typeof parsed.dbPath !== "string" || !path.isAbsolute(parsed.dbPath)
+      || typeof parsed.modelRoot !== "string" || !path.isAbsolute(parsed.modelRoot)) {
+    throw new Error("WORKER_DATA_INVALID");
+  }
+  return Object.freeze({
+    dbPath: parsed.dbPath,
+    modelRoot: parsed.modelRoot,
+    preferredProvider: parsed.preferredProvider === "dml" ? "dml" : "cpu",
+    directmlProbe: parsed.directmlProbe && typeof parsed.directmlProbe === "object"
+      ? parsed.directmlProbe
+      : null,
+    testScanFailurePrefix: typeof parsed.testScanFailurePrefix === "string"
+      ? parsed.testScanFailurePrefix.slice(0, 1_024)
+      : null,
+    testPauseAfterStagedRows: Number.isInteger(parsed.testPauseAfterStagedRows)
+      ? Math.max(1, Math.min(10_000, parsed.testPauseAfterStagedRows))
+      : null,
+    testPauseAfterIndexBegin: parsed.testPauseAfterIndexBegin === true,
+  });
+}
+
+const utilityParentPort = threadParentPort ? null : process.parentPort;
+const workerData = threadParentPort ? threadWorkerData : decodeUtilityWorkerData();
+if (!workerData || (!threadParentPort && !utilityParentPort)) throw new Error("WORKER_PARENT_UNAVAILABLE");
+
+function postParentMessage(message) {
+  (threadParentPort || utilityParentPort).postMessage(message);
+}
+
+function onParentMessage(listener) {
+  if (threadParentPort) {
+    threadParentPort.on("message", listener);
+    return;
+  }
+  utilityParentPort.on("message", (event) => listener(
+    event && typeof event === "object" && Object.hasOwn(event, "data") ? event.data : event,
+  ));
+}
+
+const DEFAULT_MODEL_FINGERPRINT = BUILTIN_MODEL_FINGERPRINT;
 const MAX_INPUT_PIXELS = 50_000_000;
 const MAX_BUFFERED_SOURCE_BYTES = 32 * 1024 * 1024;
 const FILE_CHUNK_SIZE = 8;
 const INDEX_INFERENCE_BATCH_SIZE = 16;
 const GPU_BATCH_SIZES = Object.freeze([16, 8, 4, 1]);
 const CPU_INDEX_BATCH_SIZE = 16;
-const INDEX_EXECUTION_PROFILE_VERSION = "batched-v1";
 const MAX_EXECUTION_PROFILE_RESTARTS = 1;
 const TRANSACTION_SIZE = 256;
+const ASSET_SORTS = Object.freeze({
+  "path-asc": "normalized_path COLLATE NOCASE ASC, i.id ASC",
+  "modified-desc": "i.mtime_ms DESC, i.id DESC",
+  "modified-asc": "i.mtime_ms ASC, i.id ASC",
+  "size-desc": "i.size_bytes DESC, i.id DESC",
+});
 const PROGRESS_EMIT_INTERVAL_MS = 250;
+const MAX_VECTOR_CACHE_BYTES = 300 * 1024 * 1024;
+const ORT_VERSION = "1.24.3";
+const SCAN_COMPLETE_TOKEN = Symbol("local-image-scan-complete");
 const logicalCpus = Math.max(1, availableParallelism());
 const CPU_INTRA_OP_THREADS = Math.max(1, Math.min(6, logicalCpus - 2));
 const PREPROCESS_CONCURRENCY = Math.max(2, Math.min(8, logicalCpus - 2));
+const SCAN_STAT_CONCURRENCY = Math.max(8, Math.min(32, logicalCpus * 2));
 const SHARP_CONCURRENCY = Math.max(2, Math.min(4, logicalCpus - 2));
 
 sharp.concurrency(SHARP_CONCURRENCY);
@@ -43,12 +111,16 @@ db.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=50
 const modernSchema = Boolean(db.prepare(`
   SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'image_embeddings'
 `).get());
+const stagingSchema = Boolean(db.prepare(`
+  SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'index_staging_jobs'
+`).get());
 const canceledJobs = new Set();
 const activeOrQueuedJobs = new Set();
 const sessionStates = new Map();
 const progressEmissionTimes = new Map();
 let activeCache = null;
 let indexTail = Promise.resolve();
+let requestTail = Promise.resolve();
 let builtinPreprocessLutCache = null;
 
 function modelPath(model, relativePath) {
@@ -88,7 +160,10 @@ function resolveModelConfig(payload = {}) {
   if (!dimensions) throw new Error("MODEL_DIMENSIONS_INVALID");
   const kind = raw.kind === "image" ? "image" : "image-text";
   const vision = {
-    modelPath: String(rawVision.modelPath || modelPath("vision", "onnx/vision_model_quantized.onnx")),
+    modelPath: String(rawVision.modelPath || modelPath(
+      "vision",
+      isBuiltinDefault ? "onnx/vision_model_q4f16.onnx" : "onnx/vision_model_quantized.onnx",
+    )),
     inputName: rawVision.inputName ? String(rawVision.inputName) : null,
     outputName: rawVision.outputName ? String(rawVision.outputName) : "image_embeds",
     pixelType: ["float32", "uint8", "int8"].includes(rawVision.pixelType) ? rawVision.pixelType : "float32",
@@ -125,6 +200,8 @@ function resolveModelConfig(payload = {}) {
     kind,
     supportsText,
     builtin: Boolean(raw.builtin ?? isBuiltinDefault),
+    legacyCompatibility: raw.legacyCompatibility === true,
+    preprocessingVersion: String(raw.preprocessingVersion || raw.indexProfile || "1"),
     vision,
     text,
   };
@@ -140,6 +217,7 @@ function getSessionState(model, requestProbe) {
   if (!state) {
     const probe = requestProbe || workerData.directmlProbe || {};
     const preferredProvider = probe.preferredProvider || workerData.preferredProvider || "cpu";
+    const legacyCpuOnly = model.legacyCompatibility === true;
     state = {
       model,
       cpuVision: null,
@@ -147,28 +225,31 @@ function getSessionState(model, requestProbe) {
       tokenizer: null,
       gpuVision: null,
       gpuAttempted: false,
-      gpuDisabled: preferredProvider !== "dml",
-      visionProvider: preferredProvider === "dml" ? "dml" : "cpu",
+      gpuDisabled: legacyCpuOnly || preferredProvider !== "dml",
+      visionProvider: !legacyCpuOnly && preferredProvider === "dml" ? "dml" : "cpu",
       textProvider: "cpu",
       deviceId: Number.isInteger(probe.deviceId) ? probe.deviceId : 0,
       deviceName: probe.deviceName || null,
-      batchSize: preferredProvider === "dml" && GPU_BATCH_SIZES.includes(Number(probe.batchSize))
+      batchSize: legacyCpuOnly ? 1 : preferredProvider === "dml" && GPU_BATCH_SIZES.includes(Number(probe.batchSize))
         ? Number(probe.batchSize)
         : CPU_INDEX_BATCH_SIZE,
-      fallbackReason: probe.fallbackReason || null,
+      fallbackReason: legacyCpuOnly ? "LEGACY_MODEL_CPU_ONLY" : probe.fallbackReason || null,
+      driverFingerprint: String(probe.driverFingerprint || "unknown"),
       probeDiagnostics: Array.isArray(probe.probeDiagnostics) ? probe.probeDiagnostics : [],
     };
     sessionStates.set(key, state);
   } else if (requestProbe && !state.gpuAttempted) {
-    state.gpuDisabled = requestProbe.preferredProvider !== "dml";
-    state.visionProvider = requestProbe.preferredProvider === "dml" ? "dml" : "cpu";
+    const legacyCpuOnly = model.legacyCompatibility === true;
+    state.gpuDisabled = legacyCpuOnly || requestProbe.preferredProvider !== "dml";
+    state.visionProvider = !legacyCpuOnly && requestProbe.preferredProvider === "dml" ? "dml" : "cpu";
     state.deviceId = Number.isInteger(requestProbe.deviceId) ? requestProbe.deviceId : 0;
     state.deviceName = requestProbe.deviceName || null;
-    state.batchSize = requestProbe.preferredProvider === "dml"
+    state.batchSize = legacyCpuOnly ? 1 : requestProbe.preferredProvider === "dml"
       && GPU_BATCH_SIZES.includes(Number(requestProbe.batchSize))
       ? Number(requestProbe.batchSize)
       : CPU_INDEX_BATCH_SIZE;
-    state.fallbackReason = requestProbe.fallbackReason || null;
+    state.fallbackReason = legacyCpuOnly ? "LEGACY_MODEL_CPU_ONLY" : requestProbe.fallbackReason || null;
+    state.driverFingerprint = String(requestProbe.driverFingerprint || "unknown");
     state.probeDiagnostics = requestProbe.probeDiagnostics || [];
   }
   return state;
@@ -201,7 +282,7 @@ async function activateSessionState(model, requestProbe) {
 function cpuSessionOptions(externalData = []) {
   return {
     executionProviders: ["cpu"],
-    graphOptimizationLevel: "all",
+    graphOptimizationLevel: "basic",
     executionMode: "sequential",
     intraOpNumThreads: CPU_INTRA_OP_THREADS,
     interOpNumThreads: 1,
@@ -580,22 +661,87 @@ async function sha256File(filePath, jobId) {
   return hash.digest("hex");
 }
 
-async function* walkImages(rootPath, relativeDirectory = "") {
-  const directoryPath = path.join(rootPath, relativeDirectory);
-  let directory;
+function scanIncomplete(error) {
+  const wrapped = new Error("INDEX_SCAN_INCOMPLETE", { cause: error });
+  wrapped.code = "INDEX_SCAN_INCOMPLETE";
+  return wrapped;
+}
+
+function canonicalDirectoryKey(directoryPath) {
+  const resolved = path.resolve(directoryPath).replace(/^\\\\\?\\/, "");
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+async function* walkImages(rootPath) {
+  let canonicalRoot;
   try {
-    directory = await opendir(directoryPath);
-  } catch {
-    return;
+    canonicalRoot = await realpath(rootPath);
+  } catch (error) {
+    throw scanIncomplete(error);
   }
-  for await (const entry of directory) {
-    if (entry.isSymbolicLink()) continue;
-    const relativePath = path.join(relativeDirectory, entry.name);
-    if (entry.isDirectory()) yield* walkImages(rootPath, relativePath);
-    else if (entry.isFile() && SUPPORTED_IMAGE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
-      yield relativePath;
+  const visited = new Set();
+  const visit = async function* (segments) {
+    const directoryPath = path.join(canonicalRoot, ...segments);
+    let canonicalDirectory;
+    let directory;
+    try {
+      if (segments.join("/") === workerData.testScanFailurePrefix) {
+        const injected = new Error("EACCES");
+        injected.code = "EACCES";
+        throw injected;
+      }
+      canonicalDirectory = await realpath(directoryPath);
+      const relativeCanonical = path.relative(canonicalRoot, canonicalDirectory);
+      if (relativeCanonical.startsWith("..") || path.isAbsolute(relativeCanonical)) {
+        yield { kind: "skipped", reason: "REPARSE_POINT" };
+        return;
+      }
+      // A normal directory resolves to itself. A different target means a Windows junction,
+      // mount/reparse point, or another alias; all are skipped even when they happen to point
+      // back inside the library so traversal cannot loop or escape its lexical root.
+      if (segments.length && canonicalDirectoryKey(canonicalDirectory) !== canonicalDirectoryKey(directoryPath)) {
+        yield { kind: "skipped", reason: "REPARSE_POINT" };
+        return;
+      }
+      const canonicalKey = canonicalDirectoryKey(canonicalDirectory);
+      if (visited.has(canonicalKey)) {
+        yield { kind: "skipped", reason: "REPARSE_POINT" };
+        return;
+      }
+      visited.add(canonicalKey);
+      directory = await opendir(canonicalDirectory);
+    } catch (error) {
+      throw scanIncomplete(error);
     }
-  }
+    const entries = [];
+    try {
+      for await (const entry of directory) entries.push(entry);
+    } catch (error) {
+      throw scanIncomplete(error);
+    }
+    const inspectedEntries = await mapLimit(entries, SCAN_STAT_CONCURRENCY, async (entry) => {
+      const childSegments = [...segments, entry.name];
+      const childPath = path.join(canonicalDirectory, entry.name);
+      try {
+        return { entry, childSegments, linkInfo: await lstat(childPath) };
+      } catch (error) {
+        throw scanIncomplete(error);
+      }
+    });
+    for (const { entry, childSegments, linkInfo } of inspectedEntries) {
+      if (linkInfo.isSymbolicLink() || entry.isSymbolicLink()) {
+        yield { kind: "skipped", reason: "REPARSE_POINT" };
+        continue;
+      }
+      if (entry.isDirectory()) yield* visit(childSegments);
+      else if (entry.isFile() && SUPPORTED_IMAGE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+        yield { kind: "image", relativePath: childSegments.join("/"), fileInfo: linkInfo };
+      } else if (entry.isFile()) {
+        yield { kind: "skipped", reason: "UNSUPPORTED_FORMAT" };
+      }
+    }
+  };
+  yield* visit([]);
 }
 
 async function mapLimit(items, limit, mapper) {
@@ -626,7 +772,10 @@ function createIndexQueries(model) {
       throw new Error("MULTI_MODEL_SCHEMA_REQUIRED");
     }
     return {
-      existing: db.prepare("SELECT *, embedding AS model_embedding FROM images WHERE library_id = ? AND relative_path = ?"),
+      existing: db.prepare(`
+        SELECT *, length(embedding) AS model_embedding_bytes
+        FROM images WHERE library_id = ? AND relative_path = ?
+      `),
       duplicate: db.prepare(`
         SELECT embedding, width, height, format FROM images
         WHERE library_id = ? AND sha256 = ? AND embedding IS NOT NULL LIMIT 1
@@ -646,7 +795,7 @@ function createIndexQueries(model) {
     existing: db.prepare(`
       SELECT i.id, i.library_id, i.relative_path, i.mtime_ms, i.size_bytes,
         i.sha256, i.format, i.width, i.height, i.scan_generation,
-        e.embedding AS model_embedding, e.error_code AS model_error_code
+        length(e.embedding) AS model_embedding_bytes, e.error_code AS model_error_code
       FROM images i
       LEFT JOIN image_embeddings e
         ON e.library_id = i.library_id AND e.image_id = i.id
@@ -662,28 +811,28 @@ function createIndexQueries(model) {
         AND e.model_id = ? AND e.model_fingerprint = ? AND e.embedding IS NOT NULL
       LIMIT 1
     `),
-    markImage: db.prepare("UPDATE images SET scan_generation = ? WHERE id = ?"),
-    markEmbedding: db.prepare(`
-      UPDATE image_embeddings SET scan_generation = ?
-      WHERE library_id = ? AND image_id = ? AND model_id = ? AND model_fingerprint = ?
+    stagedDuplicate: db.prepare(`
+      SELECT embedding, width, height, format
+      FROM index_staging_images INDEXED BY index_staging_images_sha_idx
+      WHERE job_id=? AND sha256=? AND embedding IS NOT NULL
+      LIMIT 1
     `),
-    upsertImage: db.prepare(`
-      INSERT INTO images(library_id, relative_path, mtime_ms, size_bytes, sha256, format, width, height, scan_generation)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(library_id, relative_path) DO UPDATE SET
-        mtime_ms=excluded.mtime_ms, size_bytes=excluded.size_bytes, sha256=excluded.sha256,
-        format=excluded.format, width=excluded.width, height=excluded.height,
-        scan_generation=excluded.scan_generation
-      RETURNING id
-    `),
-    deleteAllEmbeddings: db.prepare("DELETE FROM image_embeddings WHERE library_id = ? AND image_id = ?"),
-    upsertEmbedding: db.prepare(`
-      INSERT INTO image_embeddings(
-        library_id, image_id, model_id, model_fingerprint, dimensions, embedding, scan_generation, error_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(library_id, image_id, model_id, model_fingerprint) DO UPDATE SET
-        dimensions=excluded.dimensions, embedding=excluded.embedding,
-        scan_generation=excluded.scan_generation, error_code=excluded.error_code
+    upsertStage: db.prepare(`
+      INSERT INTO index_staging_images(
+        job_id, relative_path, mtime_ms, size_bytes, sha256, format, width, height,
+        error_code, file_changed, embedding_changed, embedding
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(job_id, relative_path) DO UPDATE SET
+        mtime_ms=excluded.mtime_ms,
+        size_bytes=excluded.size_bytes,
+        sha256=excluded.sha256,
+        format=excluded.format,
+        width=excluded.width,
+        height=excluded.height,
+        error_code=excluded.error_code,
+        file_changed=excluded.file_changed,
+        embedding_changed=excluded.embedding_changed,
+        embedding=excluded.embedding
     `),
   };
 }
@@ -694,24 +843,26 @@ function queryExisting(queries, model, libraryId, relativePath) {
     : queries.existing.get(libraryId, relativePath);
 }
 
-function queryDuplicate(queries, model, libraryId, digest) {
-  return modernSchema
-    ? queries.duplicate.get(libraryId, digest, model.id, model.fingerprint)
-    : queries.duplicate.get(libraryId, digest);
+function queryDuplicate(queries, model, libraryId, digest, { jobId, profileRebuilt }) {
+  if (!modernSchema) return queries.duplicate.get(libraryId, digest);
+  const staged = queries.stagedDuplicate.get(jobId, digest);
+  if (staged && embeddingValid(staged.embedding, model.dimensions)) return staged;
+  if (profileRebuilt) return null;
+  return queries.duplicate.get(libraryId, digest, model.id, model.fingerprint);
 }
 
-async function inspectCandidate({ relativePath, library, model, queries, jobId }) {
+async function inspectCandidate({ relativePath, scannedFileInfo, library, model, queries, jobId, profileRebuilt }) {
   const absolutePath = path.join(library.root_path, relativePath);
-  let fileInfo;
+  let fileInfo = scannedFileInfo || null;
   let existing;
   try {
-    fileInfo = await stat(absolutePath);
+    if (!fileInfo) fileInfo = await stat(absolutePath);
     existing = queryExisting(queries, model, library.id, relativePath);
     const fileUnchanged = Boolean(existing
       && Number(existing.mtime_ms) === fileInfo.mtimeMs
       && Number(existing.size_bytes) === fileInfo.size);
-    const currentEmbedding = existing?.model_embedding;
-    if (fileUnchanged && embeddingValid(currentEmbedding, model.dimensions)) {
+    const embeddingBytes = Number(existing?.model_embedding_bytes || 0);
+    if (!profileRebuilt && fileUnchanged && embeddingBytes === model.dimensions * Float32Array.BYTES_PER_ELEMENT) {
       return { kind: "unchanged", existing, relativePath, absolutePath, fileInfo, fileUnchanged };
     }
 
@@ -725,7 +876,7 @@ async function inspectCandidate({ relativePath, library, model, queries, jobId }
     }
     if (canceledJobs.has(jobId)) throw new Error("INDEX_CANCELED");
 
-    const duplicate = queryDuplicate(queries, model, library.id, digest);
+    const duplicate = queryDuplicate(queries, model, library.id, digest, { jobId, profileRebuilt });
     if (duplicate && embeddingValid(duplicate.embedding, model.dimensions)) {
       return {
         kind: "duplicate", existing, relativePath, absolutePath, fileInfo, fileUnchanged, digest, bytes: null,
@@ -771,7 +922,7 @@ function emitProgress(jobId, progress, { force = false } = {}) {
   const lastEmission = progressEmissionTimes.get(jobId) || 0;
   if (!force && now - lastEmission < PROGRESS_EMIT_INTERVAL_MS) return false;
   progressEmissionTimes.set(jobId, now);
-  parentPort.postMessage({ type: "progress", jobId, progress });
+  postParentMessage({ type: "progress", jobId, progress });
   return true;
 }
 
@@ -790,7 +941,32 @@ function runtimeFields(state) {
 
 function indexExecutionProfile(state) {
   const provider = state.visionProvider === "dml" ? "dml" : "cpu";
-  return `${INDEX_EXECUTION_PROFILE_VERSION}:${provider}:${state.batchSize}`;
+  const vision = state.model.vision;
+  return createIndexExecutionProfile({
+    modelFingerprint: state.model.fingerprint,
+    preprocessingVersion: state.model.preprocessingVersion,
+    preprocessing: {
+      inputName: vision.inputName,
+      outputName: vision.outputName,
+      pixelType: vision.pixelType,
+      layout: vision.layout,
+      width: vision.width,
+      height: vision.height,
+      colorOrder: vision.colorOrder,
+      resizeMode: vision.resizeMode,
+      cropMode: vision.cropMode,
+      scale: vision.scale,
+      mean: vision.mean,
+      std: vision.std,
+      normalizeOutput: vision.normalizeOutput,
+    },
+    provider,
+    batchSize: state.batchSize,
+    deviceId: provider === "dml" ? state.deviceId : null,
+    driverFingerprint: provider === "dml" ? state.driverFingerprint : null,
+    onnxRuntimeVersion: ORT_VERSION,
+    architecture: process.arch,
+  });
 }
 
 function executionProfileChanged(expectedProfile, state, progress) {
@@ -814,173 +990,145 @@ function refreshRate(progress, analysisStartedAt) {
     : null;
 }
 
-function beginIndexState(library, model, executionProfile) {
+function beginIndexState(jobId, library, model, executionProfile) {
+  if (!modernSchema || !stagingSchema) throw new Error("INDEX_STAGING_SCHEMA_REQUIRED");
   db.exec("BEGIN IMMEDIATE");
   try {
-    const fileGeneration = Number(library.scan_generation || 0) + 1;
-    db.prepare("UPDATE libraries SET scan_generation = ?, status = 'indexing' WHERE id = ?")
-      .run(fileGeneration, library.id);
-    let modelGeneration = fileGeneration;
-    if (modernSchema) {
-      db.prepare(`
-        INSERT OR IGNORE INTO library_models(
-          library_id, model_id, model_fingerprint, status, item_count, error_count,
-          scan_generation, execution_profile
-        ) VALUES (?, ?, ?, 'new', 0, 0, 0, ?)
-      `).run(library.id, model.id, model.fingerprint, executionProfile);
-      const row = db.prepare(`
-        SELECT status, scan_generation, execution_profile FROM library_models
-        WHERE library_id = ? AND model_id = ? AND model_fingerprint = ?
-      `).get(library.id, model.id, model.fingerprint);
-      const profileRebuilt = row?.execution_profile !== executionProfile;
-      if (profileRebuilt) {
-        db.prepare(`
-          DELETE FROM image_embeddings
-          WHERE library_id = ? AND model_id = ? AND model_fingerprint = ?
-        `).run(library.id, model.id, model.fingerprint);
-      }
-      modelGeneration = Number(row?.scan_generation || 0) + 1;
-      db.prepare(`
-        UPDATE library_models
-        SET scan_generation = ?, status = 'indexing', execution_profile = ?,
-          item_count = CASE WHEN ? THEN 0 ELSE item_count END,
-          error_count = CASE WHEN ? THEN 0 ELSE error_count END,
-          last_indexed_at = CASE WHEN ? THEN NULL ELSE last_indexed_at END
-        WHERE library_id = ? AND model_id = ? AND model_fingerprint = ?
-      `).run(
-        modelGeneration,
-        executionProfile,
-        profileRebuilt ? 1 : 0,
-        profileRebuilt ? 1 : 0,
-        profileRebuilt ? 1 : 0,
-        library.id,
-        model.id,
-        model.fingerprint,
-      );
-      db.exec("COMMIT");
-      if (profileRebuilt && activeCache?.libraryId === library.id && activeCache?.modelId === model.id) {
-        activeCache = null;
-      }
-      return { fileGeneration, modelGeneration, executionProfile, profileRebuilt };
-    } else if (library.model_version !== LOCAL_IMAGE_SEARCH_VERSION) {
-      throw new Error("MODEL_VERSION_CHANGED");
-    }
+    const committedLibrary = db.prepare(`
+      SELECT scan_generation, catalog_revision FROM libraries WHERE id=?
+    `).get(library.id);
+    if (!committedLibrary) throw new Error("LIBRARY_NOT_FOUND");
+    db.prepare(`
+      INSERT OR IGNORE INTO library_models(
+        library_id, model_id, model_fingerprint, status, item_count, error_count,
+        scan_generation, execution_profile
+      ) VALUES (?, ?, ?, 'new', 0, 0, 0, NULL)
+    `).run(library.id, model.id, model.fingerprint);
+    const committedModel = db.prepare(`
+      SELECT scan_generation, execution_profile FROM library_models
+      WHERE library_id=? AND model_id=? AND model_fingerprint=?
+    `).get(library.id, model.id, model.fingerprint);
+    const baseFileGeneration = Number(committedLibrary.scan_generation || 0);
+    const baseModelGeneration = Number(committedModel?.scan_generation || 0);
+    const baseCatalogRevision = Number(committedLibrary.catalog_revision || 0);
+    const fileGeneration = baseFileGeneration + 1;
+    const modelGeneration = baseModelGeneration + 1;
+    const profileRebuilt = committedModel?.execution_profile !== executionProfile;
+    db.prepare(`
+      DELETE FROM index_staging_jobs
+      WHERE library_id=? AND model_id=? AND model_fingerprint=?
+    `).run(library.id, model.id, model.fingerprint);
+    db.prepare(`
+      INSERT INTO index_staging_jobs(
+        job_id, library_id, model_id, model_fingerprint, dimensions,
+        base_catalog_revision, base_file_generation, target_file_generation,
+        base_model_generation, target_model_generation, execution_profile,
+        profile_rebuilt, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      jobId,
+      library.id,
+      model.id,
+      model.fingerprint,
+      model.dimensions,
+      baseCatalogRevision,
+      baseFileGeneration,
+      fileGeneration,
+      baseModelGeneration,
+      modelGeneration,
+      executionProfile,
+      profileRebuilt ? 1 : 0,
+      new Date().toISOString(),
+    );
+    db.prepare("UPDATE libraries SET status='indexing' WHERE id=?").run(library.id);
+    db.prepare(`
+      UPDATE library_models SET status='indexing'
+      WHERE library_id=? AND model_id=? AND model_fingerprint=?
+    `).run(library.id, model.id, model.fingerprint);
     db.exec("COMMIT");
-    return { fileGeneration, modelGeneration, executionProfile: null, profileRebuilt: false };
+    return {
+      jobId,
+      fileGeneration,
+      modelGeneration,
+      executionProfile,
+      profileRebuilt,
+      baseCatalogRevision,
+      baseFileGeneration,
+      baseModelGeneration,
+    };
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
   }
 }
 
-function createWriter({ library, model, queries, fileGeneration, modelGeneration }) {
-  let open = false;
-  let writes = 0;
-  const ensureOpen = () => {
-    if (!open) {
-      db.exec("BEGIN IMMEDIATE");
-      open = true;
-    }
-  };
-  const rotate = () => {
-    writes += 1;
-    if (writes >= TRANSACTION_SIZE) {
-      db.exec("COMMIT");
-      open = false;
-      writes = 0;
-    }
-  };
-  const write = (candidate, embedding, metadata, error) => {
-    ensureOpen();
+function createWriter({ jobId, model, queries, profileRebuilt }) {
+  const pending = [];
+  let stagedRows = 0;
+  const applyWrite = ({ candidate, embedding, metadata, error, embeddingChanged }) => {
+    if (profileRebuilt && !embeddingChanged) throw new Error("INDEX_PROFILE_REUSE_INVALID");
+    const existing = candidate.existing || null;
     const errorCode = error ? shortError(error) : null;
-    const embeddingBytes = embedding ? vectorBuffer(embedding) : null;
-    if (!modernSchema) {
-      queries.upsertLegacy.run(
-        library.id,
-        candidate.relativePath,
-        candidate.fileInfo?.mtimeMs || 0,
-        candidate.fileInfo?.size || 0,
-        candidate.digest || null,
-        metadata?.format || path.extname(candidate.relativePath).slice(1) || null,
-        metadata?.width || null,
-        metadata?.height || null,
-        embeddingBytes,
-        fileGeneration,
-        errorCode,
-      );
-      rotate();
-      return;
-    }
-
-    let imageId = Number(candidate.existing?.id || 0);
-    if (!candidate.fileUnchanged || !imageId) {
-      const row = queries.upsertImage.get(
-        library.id,
-        candidate.relativePath,
-        candidate.fileInfo?.mtimeMs || 0,
-        candidate.fileInfo?.size || 0,
-        candidate.digest || null,
-        metadata?.format || path.extname(candidate.relativePath).slice(1) || null,
-        metadata?.width || null,
-        metadata?.height || null,
-        fileGeneration,
-      );
-      imageId = Number(row.id);
-      if (!candidate.fileUnchanged) {
-        queries.deleteAllEmbeddings.run(library.id, imageId);
-      }
-    } else {
-      queries.markImage.run(fileGeneration, imageId);
-    }
-    queries.upsertEmbedding.run(
-      library.id,
-      imageId,
-      model.id,
-      model.fingerprint,
-      model.dimensions,
-      embeddingBytes,
-      modelGeneration,
+    queries.upsertStage.run(
+      jobId,
+      candidate.relativePath,
+      Number(candidate.fileInfo?.mtimeMs || existing?.mtime_ms || 0),
+      Number(candidate.fileInfo?.size || existing?.size_bytes || 0),
+      candidate.digest || existing?.sha256 || null,
+      metadata?.format || existing?.format || path.extname(candidate.relativePath).slice(1) || null,
+      metadata?.width ?? existing?.width ?? null,
+      metadata?.height ?? existing?.height ?? null,
       errorCode,
+      (!existing || !candidate.fileUnchanged) ? 1 : 0,
+      embeddingChanged ? 1 : 0,
+      embedding ? vectorBuffer(embedding) : null,
     );
-    rotate();
-  };
-  const markReused = (candidate) => {
-    ensureOpen();
-    if (modernSchema) {
-      queries.markImage.run(fileGeneration, candidate.existing.id);
-      queries.markEmbedding.run(
-        modelGeneration,
-        library.id,
-        candidate.existing.id,
-        model.id,
-        model.fingerprint,
-      );
-    } else {
-      queries.markReused.run(fileGeneration, candidate.existing.id);
-    }
-    rotate();
   };
   const flush = () => {
-    if (open) db.exec("COMMIT");
-    open = false;
-    writes = 0;
+    if (!pending.length) return;
+    const operations = pending.splice(0, pending.length);
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const operation of operations) applyWrite(operation);
+      db.exec("COMMIT");
+      stagedRows += operations.length;
+      if (workerData.testPauseAfterStagedRows && stagedRows >= workerData.testPauseAfterStagedRows) {
+        canceledJobs.add(jobId);
+      }
+    } catch (error) {
+      db.exec("ROLLBACK");
+      pending.unshift(...operations);
+      throw error;
+    }
   };
-  const rollback = () => {
-    if (open) db.exec("ROLLBACK");
-    open = false;
-    writes = 0;
+  const enqueue = (operation) => {
+    pending.push(operation);
+    if (pending.length >= TRANSACTION_SIZE) flush();
   };
-  return { write, markReused, flush, rollback };
+  const write = (candidate, embedding, metadata, error) => enqueue({
+    candidate, embedding, metadata, error, embeddingChanged: true,
+  });
+  const markReused = (candidate) => enqueue({
+    candidate, embedding: null, metadata: null, error: null, embeddingChanged: false,
+  });
+  const rollback = () => { pending.length = 0; };
+  return { write, markReused, flush, flushReused: () => {}, rollback };
 }
 
-function pauseIndex(libraryId, model) {
+function pauseIndex(jobId, libraryId, model) {
   db.exec("BEGIN IMMEDIATE");
   try {
-    db.prepare("UPDATE libraries SET status = 'paused' WHERE id = ?").run(libraryId);
+    if (jobId) {
+      db.prepare(`
+        DELETE FROM index_staging_jobs
+        WHERE job_id=? AND library_id=? AND model_id=? AND model_fingerprint=?
+      `).run(jobId, libraryId, model.id, model.fingerprint);
+    }
+    db.prepare("UPDATE libraries SET status='paused', catalog_status='paused' WHERE id=?").run(libraryId);
     if (modernSchema) {
       db.prepare(`
-        UPDATE library_models SET status = 'paused'
-        WHERE library_id = ? AND model_id = ? AND model_fingerprint = ?
+        UPDATE library_models SET status='paused'
+        WHERE library_id=? AND model_id=? AND model_fingerprint=?
       `).run(libraryId, model.id, model.fingerprint);
     }
     db.exec("COMMIT");
@@ -990,70 +1138,173 @@ function pauseIndex(libraryId, model) {
   }
 }
 
-function resetIndexForExecutionProfile(libraryId, model, executionProfile) {
-  if (!modernSchema) return;
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    db.prepare(`
-      DELETE FROM image_embeddings
-      WHERE library_id = ? AND model_id = ? AND model_fingerprint = ?
-    `).run(libraryId, model.id, model.fingerprint);
-    db.prepare(`
-      UPDATE library_models
-      SET status = 'new', item_count = 0, error_count = 0,
-        execution_profile = ?, last_indexed_at = NULL
-      WHERE library_id = ? AND model_id = ? AND model_fingerprint = ?
-    `).run(executionProfile, libraryId, model.id, model.fingerprint);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
-  if (activeCache?.libraryId === libraryId && activeCache?.modelId === model.id) activeCache = null;
+function stagingStaleError() {
+  const error = new Error("INDEX_STAGING_STALE");
+  error.code = "INDEX_STAGING_STALE";
+  return error;
 }
 
-function finishIndex({ libraryId, model, fileGeneration, modelGeneration, executionProfile }) {
+function finishIndex({ jobId, libraryId, model, fileGeneration, modelGeneration, executionProfile, scanCompleteToken }) {
+  if (scanCompleteToken !== SCAN_COMPLETE_TOKEN) {
+    const error = new Error("INDEX_SCAN_INCOMPLETE");
+    error.code = "INDEX_SCAN_INCOMPLETE";
+    throw error;
+  }
   db.exec("BEGIN IMMEDIATE");
   try {
-    db.prepare("DELETE FROM images WHERE library_id = ? AND scan_generation <> ?").run(libraryId, fileGeneration);
-    let counts;
-    if (modernSchema) {
-      counts = db.prepare(`
-        SELECT COUNT(e.embedding) AS item_count,
-          SUM(CASE WHEN e.error_code IS NOT NULL THEN 1 ELSE 0 END) AS error_count
-        FROM image_embeddings e
-        JOIN images i ON i.library_id = e.library_id AND i.id = e.image_id
-        WHERE e.library_id = ? AND e.model_id = ? AND e.model_fingerprint = ?
-          AND e.scan_generation = ?
-      `).get(libraryId, model.id, model.fingerprint, modelGeneration);
+    const job = db.prepare("SELECT * FROM index_staging_jobs WHERE job_id=?").get(jobId);
+    const committedLibrary = db.prepare(`
+      SELECT scan_generation, catalog_revision FROM libraries WHERE id=?
+    `).get(libraryId);
+    const committedModel = db.prepare(`
+      SELECT scan_generation FROM library_models
+      WHERE library_id=? AND model_id=? AND model_fingerprint=?
+    `).get(libraryId, model.id, model.fingerprint);
+    if (!job || !committedLibrary || !committedModel
+      || job.library_id !== libraryId || job.model_id !== model.id
+      || job.model_fingerprint !== model.fingerprint || Number(job.dimensions) !== model.dimensions
+      || Number(job.target_file_generation) !== fileGeneration
+      || Number(job.target_model_generation) !== modelGeneration
+      || job.execution_profile !== executionProfile
+      || Number(committedLibrary.catalog_revision) !== Number(job.base_catalog_revision)
+      || Number(committedLibrary.scan_generation) !== Number(job.base_file_generation)
+      || Number(committedModel.scan_generation) !== Number(job.base_model_generation)) {
+      throw stagingStaleError();
+    }
+    if (Number(job.profile_rebuilt) === 1) {
+      const invalidReuse = Number(db.prepare(`
+        SELECT COUNT(*) AS count FROM index_staging_images
+        WHERE job_id=? AND embedding_changed=0
+      `).get(jobId).count || 0);
+      if (invalidReuse) throw new Error("INDEX_PROFILE_REUSE_INVALID");
+    }
+    const contentChanged = Boolean(db.prepare(`
+      SELECT
+        EXISTS(SELECT 1 FROM index_staging_images WHERE job_id=? AND file_changed=1)
+        OR EXISTS(
+          SELECT 1 FROM images i WHERE i.library_id=? AND NOT EXISTS(
+            SELECT 1 FROM index_staging_images s
+            WHERE s.job_id=? AND s.relative_path=i.relative_path
+          )
+        ) AS changed
+    `).get(jobId, libraryId, jobId).changed);
+    if (contentChanged) {
       db.prepare(`
-        UPDATE library_models
-        SET status='ready', item_count=?, error_count=?, execution_profile=?, last_indexed_at=?
-        WHERE library_id=? AND model_id=? AND model_fingerprint=?
-      `).run(
-        Number(counts.item_count || 0),
-        Number(counts.error_count || 0),
-        executionProfile,
-        new Date().toISOString(),
-        libraryId,
-        model.id,
-        model.fingerprint,
-      );
-    } else {
-      counts = db.prepare(`
-        SELECT COUNT(embedding) AS item_count,
-          SUM(CASE WHEN error_code IS NOT NULL THEN 1 ELSE 0 END) AS error_count
-        FROM images WHERE library_id = ?
-      `).get(libraryId);
+        UPDATE library_models SET status='stale'
+        WHERE library_id=? AND NOT (model_id=? AND model_fingerprint=?)
+          AND status IN ('ready','paused','error')
+      `).run(libraryId, model.id, model.fingerprint);
+      db.prepare(`
+        DELETE FROM image_embeddings
+        WHERE library_id=? AND image_id IN (
+          SELECT i.id FROM images i JOIN index_staging_images s
+            ON s.job_id=? AND s.relative_path=i.relative_path
+          WHERE i.library_id=? AND s.file_changed=1
+        )
+      `).run(libraryId, jobId, libraryId);
     }
     db.prepare(`
-      UPDATE libraries SET status='ready', item_count=?, error_count=?, last_indexed_at=? WHERE id=?
+      DELETE FROM images
+      WHERE library_id=? AND NOT EXISTS(
+        SELECT 1 FROM index_staging_images s
+        WHERE s.job_id=? AND s.relative_path=images.relative_path
+      )
+    `).run(libraryId, jobId);
+    db.prepare(`
+      INSERT INTO images(
+        library_id, relative_path, mtime_ms, size_bytes, sha256, format, width, height,
+        scan_generation, error_code
+      )
+      SELECT ?, relative_path, mtime_ms, size_bytes, sha256, format, width, height, ?, error_code
+      FROM index_staging_images WHERE job_id=? AND file_changed=1
+      ON CONFLICT(library_id, relative_path) DO UPDATE SET
+        mtime_ms=excluded.mtime_ms,
+        size_bytes=excluded.size_bytes,
+        sha256=excluded.sha256,
+        format=excluded.format,
+        width=excluded.width,
+        height=excluded.height,
+        scan_generation=excluded.scan_generation,
+        error_code=excluded.error_code
+    `).run(libraryId, fileGeneration, jobId);
+    if (Number(job.profile_rebuilt) === 1) {
+      db.prepare(`
+        DELETE FROM image_embeddings
+        WHERE library_id=? AND model_id=? AND model_fingerprint=?
+      `).run(libraryId, model.id, model.fingerprint);
+    } else {
+      db.prepare(`
+        DELETE FROM image_embeddings
+        WHERE library_id=? AND model_id=? AND model_fingerprint=? AND image_id IN (
+          SELECT i.id FROM images i JOIN index_staging_images s
+            ON s.job_id=? AND s.relative_path=i.relative_path
+          WHERE i.library_id=? AND s.embedding_changed=1
+        )
+      `).run(libraryId, model.id, model.fingerprint, jobId, libraryId);
+    }
+    db.prepare(`
+      INSERT INTO image_embeddings(
+        library_id, image_id, model_id, model_fingerprint, dimensions,
+        embedding, scan_generation, error_code
+      )
+      SELECT ?, i.id, ?, ?, ?, s.embedding, ?, s.error_code
+      FROM index_staging_images s JOIN images i
+        ON i.library_id=? AND i.relative_path=s.relative_path
+      WHERE s.job_id=? AND s.embedding_changed=1
+      ON CONFLICT(library_id, image_id, model_id, model_fingerprint) DO UPDATE SET
+        dimensions=excluded.dimensions,
+        embedding=excluded.embedding,
+        scan_generation=excluded.scan_generation,
+        error_code=excluded.error_code
+    `).run(
+      libraryId,
+      model.id,
+      model.fingerprint,
+      model.dimensions,
+      modelGeneration,
+      libraryId,
+      jobId,
+    );
+    const counts = db.prepare(`
+      SELECT COUNT(embedding) AS item_count,
+        SUM(CASE WHEN error_code IS NOT NULL THEN 1 ELSE 0 END) AS error_count
+      FROM image_embeddings
+      WHERE library_id=? AND model_id=? AND model_fingerprint=?
+    `).get(libraryId, model.id, model.fingerprint);
+    const indexedAt = new Date().toISOString();
+    db.prepare(`
+      UPDATE library_models
+      SET status='ready', item_count=?, error_count=?, scan_generation=?,
+        execution_profile=?, last_indexed_at=?
+      WHERE library_id=? AND model_id=? AND model_fingerprint=?
     `).run(
       Number(counts.item_count || 0),
       Number(counts.error_count || 0),
-      new Date().toISOString(),
+      modelGeneration,
+      executionProfile,
+      indexedAt,
+      libraryId,
+      model.id,
+      model.fingerprint,
+    );
+    db.prepare(`
+      UPDATE libraries
+      SET status='ready', item_count=?, error_count=?, scan_generation=?, last_indexed_at=?,
+        catalog_status='ready',
+        catalog_item_count=(SELECT COUNT(*) FROM images WHERE library_id=?),
+        catalog_revision=catalog_revision+1,
+        catalog_last_scanned_at=?
+      WHERE id=?
+    `).run(
+      Number(counts.item_count || 0),
+      Number(counts.error_count || 0),
+      fileGeneration,
+      indexedAt,
+      libraryId,
+      indexedAt,
       libraryId,
     );
+    db.prepare("DELETE FROM index_staging_jobs WHERE job_id=?").run(jobId);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -1068,8 +1319,8 @@ async function runIndexAttempt({ jobId, libraryId, modelId, modelConfig, engineP
   const state = await activateSessionState(model, engineProbe);
   const queries = createIndexQueries(model);
   const expectedExecutionProfile = indexExecutionProfile(state);
-  const generations = beginIndexState(library, model, expectedExecutionProfile);
-  const writer = createWriter({ library, model, queries, ...generations });
+  let generations = null;
+  let writer = null;
   const progress = {
     state: "indexing",
     stage: "scanning",
@@ -1082,10 +1333,11 @@ async function runIndexAttempt({ jobId, libraryId, modelId, modelConfig, engineP
     imagesPerSecond: 0,
     etaSeconds: null,
     profileRestartCount,
-    profileRebuilt: generations.profileRebuilt,
+    profileRebuilt: false,
     ...runtimeFields(state),
   };
   const paths = [];
+  let scanCompleteToken = null;
   let inferenceInFlight = null;
   const awaitInferenceBarrier = async () => {
     if (!inferenceInFlight) return;
@@ -1095,22 +1347,43 @@ async function runIndexAttempt({ jobId, libraryId, modelId, modelConfig, engineP
     if (settled.error) throw settled.error;
   };
   try {
-    for await (const relativePath of walkImages(library.root_path)) {
+    for await (const scannedFile of walkImages(library.root_path)) {
       if (canceledJobs.has(jobId)) {
-        writer.flush();
-        pauseIndex(libraryId, model);
+        pauseIndex(jobId, libraryId, model);
         return { ...progress, state: "canceled", ...runtimeFields(state) };
       }
-      paths.push(relativePath);
-      progress.scanned = paths.length;
-      progress.total = paths.length;
-      if (paths.length % 250 === 0) {
+      progress.scanned += 1;
+      if (scannedFile.kind === "skipped") {
+        progress.skipped += 1;
+        progress.total = paths.length + progress.skipped;
+        if (progress.scanned % 250 === 0) {
+          emitProgress(jobId, progress);
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        continue;
+      }
+      paths.push(scannedFile);
+      progress.total = paths.length + progress.skipped;
+      if (progress.scanned % 250 === 0) {
         emitProgress(jobId, progress);
         await new Promise((resolve) => setImmediate(resolve));
       }
     }
+    scanCompleteToken = SCAN_COMPLETE_TOKEN;
+    if (canceledJobs.has(jobId)) {
+      pauseIndex(jobId, libraryId, model);
+      return { ...progress, state: "canceled", ...runtimeFields(state) };
+    }
 
-    progress.total = paths.length;
+    // Do not advance generations, change the execution profile, or prune/rebuild vectors
+    // until the whole directory tree has been enumerated successfully. A missing/offline or
+    // unreadable root/subdirectory must leave the last committed index intact.
+    generations = beginIndexState(jobId, library, model, expectedExecutionProfile);
+    writer = createWriter({ jobId, model, queries, ...generations });
+    progress.profileRebuilt = generations.profileRebuilt;
+    if (workerData.testPauseAfterIndexBegin) canceledJobs.add(jobId);
+
+    progress.total = paths.length + progress.skipped;
     progress.stage = "preprocessing";
     emitProgress(jobId, progress, { force: true });
     const analysisStartedAt = performance.now();
@@ -1178,12 +1451,14 @@ async function runIndexAttempt({ jobId, libraryId, modelId, modelConfig, engineP
     for (let offset = 0; offset < paths.length; offset += FILE_CHUNK_SIZE) {
       if (canceledJobs.has(jobId)) break;
       const pathChunk = paths.slice(offset, offset + FILE_CHUNK_SIZE);
-      const inspected = await mapLimit(pathChunk, PREPROCESS_CONCURRENCY, (relativePath) => inspectCandidate({
-        relativePath,
+      const inspected = await mapLimit(pathChunk, PREPROCESS_CONCURRENCY, (scannedFile) => inspectCandidate({
+        relativePath: scannedFile.relativePath,
+        scannedFileInfo: scannedFile.fileInfo,
         library,
         model,
         queries,
         jobId,
+        profileRebuilt: generations.profileRebuilt,
       }));
       const representatives = [];
       const representativesByDigest = new Map();
@@ -1249,9 +1524,10 @@ async function runIndexAttempt({ jobId, libraryId, modelId, modelConfig, engineP
     else await awaitInferenceBarrier();
     writer.flush();
     if (canceledJobs.has(jobId)) {
-      pauseIndex(libraryId, model);
+      pauseIndex(jobId, libraryId, model);
       return { ...progress, state: "canceled", ...runtimeFields(state) };
     }
+    writer.flushReused();
     progress.stage = "finalizing";
     emitProgress(jobId, progress, { force: true });
     const finalProfileError = modernSchema
@@ -1261,7 +1537,14 @@ async function runIndexAttempt({ jobId, libraryId, modelId, modelConfig, engineP
       finalProfileError.model = model;
       throw finalProfileError;
     }
-    finishIndex({ libraryId, model, ...generations, executionProfile: expectedExecutionProfile });
+    finishIndex({
+      jobId,
+      libraryId,
+      model,
+      ...generations,
+      executionProfile: expectedExecutionProfile,
+      scanCompleteToken,
+    });
     if (activeCache?.libraryId === libraryId) activeCache = null;
     refreshRate(progress, analysisStartedAt);
     return { ...progress, state: "completed", ...runtimeFields(state) };
@@ -1272,8 +1555,8 @@ async function runIndexAttempt({ jobId, libraryId, modelId, modelConfig, engineP
     } catch (inferenceError) {
       if (inferenceError?.code === "INDEX_EXECUTION_PROFILE_CHANGED") failure = inferenceError;
     }
-    writer.rollback();
-    if (failure?.code !== "INDEX_EXECUTION_PROFILE_CHANGED") pauseIndex(libraryId, model);
+    writer?.rollback();
+    if (failure?.code !== "INDEX_EXECUTION_PROFILE_CHANGED") pauseIndex(jobId, libraryId, model);
     throw failure;
   }
 }
@@ -1292,7 +1575,6 @@ async function runIndex(payload) {
           model,
           payload.engineProbe,
         ));
-        resetIndexForExecutionProfile(libraryId, model, actualProfile);
         const clearedProgress = {
           ...(error.progress || {}),
           analyzed: 0,
@@ -1302,7 +1584,7 @@ async function runIndex(payload) {
           executionProfile: actualProfile,
         };
         if (canceledJobs.has(jobId)) {
-          pauseIndex(libraryId, model);
+          pauseIndex(jobId, libraryId, model);
           return {
             ...clearedProgress,
             state: "canceled",
@@ -1311,7 +1593,7 @@ async function runIndex(payload) {
           };
         }
         if (profileRestartCount >= MAX_EXECUTION_PROFILE_RESTARTS) {
-          pauseIndex(libraryId, model);
+          pauseIndex(jobId, libraryId, model);
           const unstableError = new Error("INDEX_EXECUTION_PROFILE_UNSTABLE");
           unstableError.code = "INDEX_EXECUTION_PROFILE_UNSTABLE";
           unstableError.expectedProfile = error.expectedProfile;
@@ -1345,43 +1627,241 @@ function bufferToVector(bytes, dimensions) {
 function loadCache(libraryId, model) {
   const key = `${libraryId}:${modelKey(model)}`;
   if (activeCache?.key === key) return activeCache;
-  let rows;
-  if (modernSchema) {
-    rows = db.prepare(`
-      SELECT i.id, i.relative_path, i.width, i.height, i.format, e.embedding
-      FROM image_embeddings e
-      JOIN images i ON i.library_id = e.library_id AND i.id = e.image_id
-      WHERE e.library_id = ? AND e.model_id = ? AND e.model_fingerprint = ?
-        AND e.dimensions = ? AND e.embedding IS NOT NULL
-      ORDER BY i.id
-    `).all(libraryId, model.id, model.fingerprint, model.dimensions);
-  } else {
-    rows = db.prepare(`
-      SELECT id, relative_path, width, height, format, embedding FROM images
-      WHERE library_id = ? AND embedding IS NOT NULL ORDER BY id
-    `).all(libraryId);
+  const expectedBytes = model.dimensions * Float32Array.BYTES_PER_ELEMENT;
+  const count = modernSchema
+    ? Number(db.prepare(`
+      SELECT COUNT(*) AS count FROM image_embeddings
+      WHERE library_id=? AND model_id=? AND model_fingerprint=? AND dimensions=?
+        AND embedding IS NOT NULL AND length(embedding)=?
+    `).get(libraryId, model.id, model.fingerprint, model.dimensions, expectedBytes).count || 0)
+    : Number(db.prepare(`
+      SELECT COUNT(*) AS count FROM images
+      WHERE library_id=? AND embedding IS NOT NULL AND length(embedding)=?
+    `).get(libraryId, expectedBytes).count || 0);
+  const requiredBytes = count * expectedBytes + count * Float64Array.BYTES_PER_ELEMENT;
+  if (requiredBytes > MAX_VECTOR_CACHE_BYTES) {
+    activeCache = {
+      key, libraryId, modelId: model.id, fingerprint: model.fingerprint,
+      mode: "chunked", count, requiredBytes,
+    };
+    return activeCache;
   }
-  const validRows = rows.filter((row) => embeddingValid(row.embedding, model.dimensions));
-  const vectors = new Float32Array(validRows.length * model.dimensions);
-  validRows.forEach((row, index) => vectors.set(bufferToVector(row.embedding, model.dimensions), index * model.dimensions));
-  activeCache = { key, libraryId, modelId: model.id, fingerprint: model.fingerprint, rows: validRows, vectors };
+  const vectors = new Float32Array(count * model.dimensions);
+  const imageIds = new Float64Array(count);
+  const statement = modernSchema ? db.prepare(`
+    SELECT image_id AS id, embedding FROM image_embeddings
+    WHERE library_id=? AND model_id=? AND model_fingerprint=? AND dimensions=?
+      AND embedding IS NOT NULL AND length(embedding)=?
+    ORDER BY image_id
+  `) : db.prepare(`
+    SELECT id, embedding FROM images
+    WHERE library_id=? AND embedding IS NOT NULL AND length(embedding)=?
+    ORDER BY id
+  `);
+  const argumentsList = modernSchema
+    ? [libraryId, model.id, model.fingerprint, model.dimensions, expectedBytes]
+    : [libraryId, expectedBytes];
+  let rowIndex = 0;
+  for (const row of statement.iterate(...argumentsList)) {
+    imageIds[rowIndex] = Number(row.id);
+    vectors.set(bufferToVector(row.embedding, model.dimensions), rowIndex * model.dimensions);
+    rowIndex += 1;
+  }
+  activeCache = {
+    key, libraryId, modelId: model.id, fingerprint: model.fingerprint,
+    mode: "memory", count: rowIndex, imageIds, vectors,
+  };
   return activeCache;
+}
+
+function chunkedTopK(libraryId, model, query, limit) {
+  const expectedBytes = model.dimensions * Float32Array.BYTES_PER_ELEMENT;
+  const statement = modernSchema ? db.prepare(`
+    SELECT image_id AS id, embedding FROM image_embeddings
+    WHERE library_id=? AND model_id=? AND model_fingerprint=? AND dimensions=?
+      AND embedding IS NOT NULL AND length(embedding)=?
+    ORDER BY image_id
+  `) : db.prepare(`
+    SELECT id, embedding FROM images
+    WHERE library_id=? AND embedding IS NOT NULL AND length(embedding)=?
+    ORDER BY id
+  `);
+  const argumentsList = modernSchema
+    ? [libraryId, model.id, model.fingerprint, model.dimensions, expectedBytes]
+    : [libraryId, expectedBytes];
+  const winners = [];
+  let ordinal = 0;
+  for (const row of statement.iterate(...argumentsList)) {
+    const vector = bufferToVector(row.embedding, model.dimensions);
+    let score = 0;
+    for (let index = 0; index < model.dimensions; index += 1) score += vector[index] * query[index];
+    const winner = { imageId: Number(row.id), score, ordinal };
+    ordinal += 1;
+    let insertion = winners.findIndex((item) => score > item.score || (score === item.score && winner.ordinal < item.ordinal));
+    if (insertion < 0) insertion = winners.length;
+    if (insertion < limit) winners.splice(insertion, 0, winner);
+    if (winners.length > limit) winners.pop();
+  }
+  return winners;
+}
+
+function resultMetadata(libraryId, winners) {
+  if (!winners.length) return [];
+  const placeholders = winners.map(() => "?").join(",");
+  const rows = db.prepare(`
+    SELECT id, replace(relative_path, char(92), '/') AS relative_path,
+      width, height, format, size_bytes, mtime_ms
+    FROM images WHERE library_id=? AND id IN (${placeholders})
+  `).all(libraryId, ...winners.map((winner) => winner.imageId));
+  const byId = new Map(rows.map((row) => [Number(row.id), row]));
+  return winners.flatMap((winner) => {
+    const row = byId.get(winner.imageId);
+    if (!row) return [];
+    return [{
+      imageId: Number(row.id),
+      relativePath: row.relative_path,
+      fileName: path.posix.basename(row.relative_path),
+      width: row.width,
+      height: row.height,
+      format: row.format,
+      sizeBytes: Number(row.size_bytes || 0),
+      modifiedAt: Number(row.mtime_ms || 0),
+      score: winner.score,
+    }];
+  });
+}
+
+function normalizeAssetPrefix(value, { maximumLength = 1024 } = {}) {
+  if (value === undefined || value === null || value === "") return "";
+  if (
+    typeof value !== "string" || value.length > maximumLength || value.includes("\0")
+    || value.includes("\\") || value.startsWith("/") || /^[a-z]:/i.test(value) || value.startsWith("//")
+  ) throw new Error("LOCAL_SEARCH_ASSET_PREFIX_INVALID");
+  const normalized = value.replace(/\/+$/g, "");
+  if (!normalized || path.posix.isAbsolute(normalized)) throw new Error("LOCAL_SEARCH_ASSET_PREFIX_INVALID");
+  const segments = normalized.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw new Error("LOCAL_SEARCH_ASSET_PREFIX_INVALID");
+  }
+  return segments.join("/");
+}
+
+function escapeLike(value) {
+  return value.replaceAll("!", "!!").replaceAll("%", "!%").replaceAll("_", "!_");
+}
+
+function requireCatalogLibrary(libraryId) {
+  const library = db.prepare("SELECT id, catalog_revision FROM libraries WHERE id=?").get(libraryId);
+  if (!library) throw new Error("LOCAL_SEARCH_LIBRARY_NOT_FOUND");
+  return library;
+}
+
+function listAssetFolders(payload) {
+  const libraryId = String(payload.libraryId || "");
+  const library = requireCatalogLibrary(libraryId);
+  const canonicalParent = normalizeAssetPrefix(payload.parentPrefix);
+  const prefix = canonicalParent ? `${canonicalParent}/` : "";
+  const rows = db.prepare(`
+    WITH normalized AS (
+      SELECT replace(relative_path, char(92), '/') AS normalized_path
+      FROM images
+      WHERE library_id=?
+    ), descendants AS (
+      SELECT substr(normalized_path, length(?) + 1) AS rest
+      FROM normalized
+      WHERE normalized_path LIKE ? ESCAPE '!'
+    )
+    SELECT substr(rest, 1, instr(rest, '/') - 1) AS name, COUNT(*) AS item_count
+    FROM descendants
+    WHERE instr(rest, '/') > 0
+    GROUP BY name COLLATE NOCASE
+    ORDER BY name COLLATE NOCASE ASC
+  `).all(libraryId, prefix, `${escapeLike(prefix)}%`);
+  return {
+    libraryId,
+    catalogRevision: Number(library.catalog_revision || 0),
+    parentPrefix: canonicalParent,
+    folders: rows.map((row) => ({
+      name: row.name,
+      prefix: canonicalParent ? `${canonicalParent}/${row.name}` : row.name,
+      itemCount: Number(row.item_count || 0),
+    })),
+  };
+}
+
+function listAssets(payload) {
+  const libraryId = String(payload.libraryId || "");
+  const library = requireCatalogLibrary(libraryId);
+  const canonicalFolder = normalizeAssetPrefix(payload.folderPrefix);
+  const pageSize = Number(payload.pageSize ?? 100);
+  const requestedPage = Number(payload.page ?? 1);
+  const filter = payload.filter ?? "";
+  const sort = payload.sort ?? "path-asc";
+  if (!Number.isInteger(pageSize) || pageSize !== 100) throw new Error("LOCAL_SEARCH_ASSET_PAGE_SIZE_INVALID");
+  if (!Number.isSafeInteger(requestedPage) || requestedPage < 1) throw new Error("LOCAL_SEARCH_ASSET_PAGE_INVALID");
+  if (typeof filter !== "string" || filter.length > 100 || filter.includes("\0")) {
+    throw new Error("LOCAL_SEARCH_ASSET_FILTER_INVALID");
+  }
+  const orderBy = ASSET_SORTS[sort];
+  if (!orderBy) throw new Error("LOCAL_SEARCH_ASSET_SORT_INVALID");
+  const folderPattern = canonicalFolder ? `${escapeLike(canonicalFolder)}/%` : "%";
+  const filterPattern = `%${escapeLike(filter.trim())}%`;
+  const where = `
+    i.library_id=?
+    AND replace(i.relative_path, char(92), '/') LIKE ? ESCAPE '!'
+    AND replace(i.relative_path, char(92), '/') LIKE ? ESCAPE '!'
+  `;
+  const totalItems = Number(db.prepare(`SELECT COUNT(*) AS count FROM images i WHERE ${where}`)
+    .get(libraryId, folderPattern, filterPattern).count || 0);
+  const pageCount = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = Math.min(requestedPage, pageCount);
+  const rows = db.prepare(`
+    SELECT i.id, replace(i.relative_path, char(92), '/') AS normalized_path,
+      i.width, i.height, i.format, i.size_bytes, i.mtime_ms,
+      COALESCE(i.error_code, (
+        SELECT e.error_code FROM image_embeddings e
+        WHERE e.library_id=i.library_id AND e.image_id=i.id AND e.error_code IS NOT NULL
+        LIMIT 1
+      )) AS browse_error_code
+    FROM images i
+    WHERE ${where}
+    ORDER BY ${orderBy}
+    LIMIT ? OFFSET ?
+  `).all(libraryId, folderPattern, filterPattern, pageSize, (currentPage - 1) * pageSize);
+  return {
+    libraryId,
+    catalogRevision: Number(library.catalog_revision || 0),
+    page: currentPage,
+    pageSize,
+    pageCount,
+    totalItems,
+    items: rows.map((row) => {
+      const relativePath = row.normalized_path;
+      const directory = path.posix.dirname(relativePath);
+      return {
+        imageId: Number(row.id),
+        fileName: path.posix.basename(relativePath),
+        relativePath,
+        directory: directory === "." ? "" : directory,
+        width: row.width == null ? null : Number(row.width),
+        height: row.height == null ? null : Number(row.height),
+        format: row.format || null,
+        sizeBytes: Number(row.size_bytes || 0),
+        modifiedAt: Number(row.mtime_ms || 0),
+        errorCode: row.browse_error_code || null,
+      };
+    }),
+  };
 }
 
 function exactSearch(libraryId, model, query, limit = DEFAULT_RESULT_LIMIT) {
   const cache = loadCache(libraryId, model);
-  return exactTopK(cache.vectors, cache.rows.length, query, limit).map(({ rowIndex, score }) => {
-    const row = cache.rows[rowIndex];
-    return {
-      imageId: Number(row.id),
-      relativePath: row.relative_path,
-      fileName: path.basename(row.relative_path),
-      width: row.width,
-      height: row.height,
-      format: row.format,
-      score,
-    };
-  });
+  const winners = cache.mode === "chunked"
+    ? chunkedTopK(libraryId, model, query, limit)
+    : exactTopK(cache.vectors, cache.count, query, limit).map(({ rowIndex, score }) => ({
+      imageId: Number(cache.imageIds[rowIndex]), score,
+    }));
+  return resultMetadata(libraryId, winners);
 }
 
 async function engineStatus(payload = {}) {
@@ -1419,6 +1899,8 @@ async function handleRequest(action, payload) {
     if (!payload.libraryId || activeCache?.libraryId === payload.libraryId) activeCache = null;
     return { invalidated: true };
   }
+  if (action === "listAssetFolders") return listAssetFolders(payload);
+  if (action === "listAssets") return listAssets(payload);
   if (action === "status" || action === "getEngineStatus") return engineStatus(payload);
   if (action === "searchImage") {
     const model = resolveModelConfig(payload);
@@ -1454,15 +1936,26 @@ async function handleRequest(action, payload) {
   throw new Error("WORKER_ACTION_INVALID");
 }
 
-parentPort.on("message", async ({ requestId, action, payload }) => {
+onParentMessage(({ requestId, action, payload }) => {
+  const run = async () => {
   try {
     const result = await handleRequest(action, payload || {});
-    parentPort.postMessage({ type: "result", requestId, result });
+    postParentMessage({ type: "result", requestId, result });
   } catch (error) {
-    parentPort.postMessage({
+    postParentMessage({
       type: "error",
       requestId,
       error: { code: String(error?.code || error?.message || "WORKER_FAILED").slice(0, 160) },
     });
   }
+  };
+  if (action === "cancel") {
+    void run();
+    return;
+  }
+  if (action === "dispose") {
+    for (const jobId of activeOrQueuedJobs) canceledJobs.add(jobId);
+  }
+  const task = requestTail.then(run, run);
+  requestTail = task.catch(() => {});
 });
