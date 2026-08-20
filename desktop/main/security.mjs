@@ -1,5 +1,7 @@
 import { APP_HOST, APP_SCHEME } from "../shared/constants.mjs";
 
+const FEEDBACK_FORM_URL = "https://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=1";
+
 export function isTrustedAppUrl(rawUrl) {
   if (typeof rawUrl !== "string" || rawUrl.length > 4096) return false;
   try {
@@ -21,12 +23,13 @@ export function isAllowedExternalUrl(rawUrl) {
   try {
     const parsed = new URL(rawUrl);
     const allowedHosts = new Set(["ngr.lttlt.top", "github.com"]);
+    const isFeedbackForm = parsed.href === FEEDBACK_FORM_URL;
     return (
       parsed.protocol === "https:" &&
       !parsed.port &&
       !parsed.username &&
       !parsed.password &&
-      allowedHosts.has(parsed.hostname.toLowerCase())
+      (allowedHosts.has(parsed.hostname.toLowerCase()) || isFeedbackForm)
     );
   } catch {
     return false;

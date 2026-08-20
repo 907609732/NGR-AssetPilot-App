@@ -45,6 +45,7 @@ export class UpdaterController {
     feed = null,
     websiteUrl = "https://ngr.lttlt.top/",
     historyUrl = "https://github.com/907609732/NGR-AssetPilot-App/releases",
+    installLaunchDelayMs = 1_100,
   } = {}) {
     this.autoUpdater = autoUpdater;
     this.enabled = Boolean(enabled && autoUpdater);
@@ -55,6 +56,8 @@ export class UpdaterController {
     this.listeners = [];
     this.stateListeners = new Set();
     this.inFlight = null;
+    this.installLaunchDelayMs = Math.max(0, Number(installLaunchDelayMs) || 0);
+    this.installTimer = null;
     this.state = {
       enabled: this.enabled,
       phase: this.enabled ? "idle" : "disabled",
@@ -207,13 +210,18 @@ export class UpdaterController {
       throw new DesktopError("UPDATE_NOT_DOWNLOADED", "更新尚未下载完成");
     }
     this.#patch({ phase: "installing" });
-    // Silent mode is required for a downloaded NSIS update to replace the
-    // current per-user installation instead of reopening the setup wizard.
-    setImmediate(() => this.autoUpdater.quitAndInstall(true, true));
+    // Give the renderer time to paint its hand-off state, then open the
+    // assisted NSIS installer so installation never appears to happen silently.
+    this.installTimer = setTimeout(() => {
+      this.installTimer = null;
+      this.autoUpdater.quitAndInstall(false, true);
+    }, this.installLaunchDelayMs);
     return { accepted: true };
   }
 
   dispose() {
+    if (this.installTimer) clearTimeout(this.installTimer);
+    this.installTimer = null;
     if (!this.autoUpdater) return;
     for (const [eventName, listener] of this.listeners) {
       this.autoUpdater.removeListener(eventName, listener);

@@ -256,6 +256,7 @@ function showView(name) {
   currentViewName = name;
   Object.entries(els.views).forEach(([key, node]) => node.classList.toggle("active", key === name));
   els.backButton.classList.toggle("hidden", name === "home");
+  els.feedbackFormLink?.classList.toggle("hidden", name !== "home");
   const settingsViews = new Set(["rules", "detectionSettings", "generalSettings", "localImageSearchSettings"]);
   els.rulesEntry.classList.toggle("hidden", settingsViews.has(name));
   updateContextSettingsLabel(name);
@@ -607,13 +608,25 @@ function bindRules() {
     aiSettings = collectAiSettings();
   });
 
-  els.saveAiSettings.addEventListener("click", () => {
+  els.saveAiSettings.addEventListener("click", async () => {
     aiSettings = collectAiSettings();
-    saveAiSettings(aiSettings);
-    showToast("AI 配置已保存");
+    try {
+      await saveAiSettings(aiSettings);
+      showToast("AI 配置已保存");
+    } catch (error) {
+      showToast(`AI 配置保存失败：${error?.message || "未知错误"}`);
+    }
   });
 
   els.testAiSettings.addEventListener("click", testAiSettings);
+  els.clearAiCredential?.addEventListener("click", async () => {
+    try {
+      await clearActiveAiCredential();
+      showToast("已清除当前 AI 服务密钥");
+    } catch (error) {
+      showToast(`清除密钥失败：${error?.message || "未知错误"}`);
+    }
+  });
 
   els.exportAiSettings.addEventListener("click", exportAiSettings);
   els.importAiSettings.addEventListener("change", importAiSettings);

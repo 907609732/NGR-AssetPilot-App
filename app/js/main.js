@@ -1,5 +1,6 @@
 /* NGR AssetPilot V2.25 module: main.js */
 async function startApp() {
+  await NgrWorkspaceMigration.recoverInterruptedWorkspaceImport();
   resetAppLocalStorageOnVersionChange();
   bootstrapState();
   await hydrateDesktopCredentials();

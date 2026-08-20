@@ -28,10 +28,18 @@ test("桌面依赖版本全部精确锁定", () => {
   assert.equal(packageJson.dependencies["onnxruntime-node"], "1.24.3");
   assert.equal(packageJson.dependencies.sharp, "0.35.3");
   assert.equal(packageJson.dependencies["adm-zip"], "0.6.0");
+  assert.equal(packageJson.dependencies["electron-log"], "5.4.4");
+  assert.equal(packageJson.dependencies.fflate, "0.8.3");
   assert.equal(packageJson.devDependencies["@playwright/test"], "1.62.1");
   assert.equal(packageJson.scripts["build:prod"], "node scripts/run-build.mjs prod");
   assert.equal(packageJson.scripts["build:dev"], "node scripts/run-build.mjs dev");
   assert.equal(packageJson.scripts["build:test"], "node scripts/run-build.mjs test");
+  const builderConfig = fs.readFileSync(path.join(projectRoot, "build", "electron-builder.config.cjs"), "utf8");
+  assert.match(builderConfig, /"app\/\*\*\/\*"/);
+  assert.equal(fs.existsSync(path.join(projectRoot, "app", "js", "workspace-backup-stream-worker.js")), true);
+  const secretScanner = fs.readFileSync(path.join(projectRoot, "scripts", "scan-package-secrets.mjs"), "utf8");
+  assert.match(secretScanner, /relativeFile === "builder-effective-config\.yaml"/);
+  assert.match(secretScanner, /containsBuffer\(filePath, needle\)/);
 });
 
 test("应用版本、界面标识和静态资源缓存版本保持一致", () => {
@@ -50,7 +58,7 @@ test("应用版本、界面标识和静态资源缓存版本保持一致", () =>
   assert.deepEqual([...new Set(visibleVersions)], [packageJson.version]);
 
   const cacheVersions = [...appIndex.matchAll(/[?&]v=V(\d+\.\d+\.\d+)/g)].map((match) => match[1]);
-  assert.equal(cacheVersions.length, 21);
+  assert.equal(cacheVersions.length, 22);
   assert.deepEqual([...new Set(cacheVersions)], [packageJson.version]);
 });
 
@@ -115,6 +123,8 @@ test("三个入口明确选择版本且启动器不内置平台凭据", () => {
   assert.match(bootstrap, /com\.chenyuecai\.ngrassetpilot/);
   assert.match(bootstrap, /app\.isPackaged\s*&&\s*isProductionEdition/);
   assert.match(bootstrap, /channel:\s*updateChannel/);
+  assert.match(bootstrap, /onEngineEvent:/);
+  assert.match(bootstrap, /runtimeLogger\.(?:info|warn)/);
   assert.doesNotMatch(bootstrap, /updaterRequested\s*=\s*false/);
   assert.doesNotMatch(prodEntry + devEntry + testEntry + bootstrap, /local-config\.js|KIMI_API_KEY|BAIDU_SECRET/);
 });
@@ -141,9 +151,27 @@ test("正式版发布工作流同时上传自动更新元数据", () => {
   assert.match(workflow, /npm run verify:packaged:prod/);
   assert.match(workflow, /draft:\s*false/);
   assert.doesNotMatch(workflow, /draft:\s*true/);
+  assert.match(workflow, /body_path:\s*docs\/releases\/\$\{\{ github\.ref_name \}\}\.md/);
+  assert.match(workflow, /generate_release_notes:\s*false/);
+});
+
+test("GitHub Actions 固定第三方提交并使用最小发布权限", () => {
+  const ci = fs.readFileSync(path.join(projectRoot, ".github", "workflows", "desktop-ci.yml"), "utf8");
+  const release = fs.readFileSync(path.join(projectRoot, ".github", "workflows", "desktop-release.yml"), "utf8");
+  for (const source of [ci, release]) {
+    assert.doesNotMatch(source, /uses:\s*[^\s]+@v\d+/);
+    const uses = [...source.matchAll(/uses:\s*[^\s]+@([0-9a-f]{40})\b/g)];
+    assert.ok(uses.length >= 2);
+    assert.match(source, /persist-credentials:\s*false/);
+  }
+  assert.match(ci, /permissions:\s*\r?\n\s+contents:\s*read/);
+  assert.match(release, /permissions:\s*\r?\n\s+contents:\s*read/);
+  assert.match(release, /environment:\s*production-release/);
+  assert.match(release, /build-release:[\s\S]*?permissions:\s*\r?\n\s+contents:\s*write/);
 });
 
 test("发布校验清单不会引用未上传的 builder 调试文件", () => {
   const generator = fs.readFileSync(path.join(projectRoot, "scripts", "generate-release-metadata.mjs"), "utf8");
   assert.match(generator, /"builder-debug\.yml"/);
+  assert.match(generator, /sbom\.metadata\.component\.name = packageJson\.name/);
 });

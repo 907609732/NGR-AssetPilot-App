@@ -33,7 +33,8 @@ async function runNamingWorkflow({ useAi, useExternalTranslation = false }) {
     return;
   }
   const apiKey = aiSettings.apiKey.trim();
-  const shouldUseAi = useAi && Boolean(apiKey);
+  const desktopProviderReady = Boolean(window.NgrDesktopBridge?.isDesktopRuntime() && aiSettings.hasSecret);
+  const shouldUseAi = useAi && Boolean(apiKey || desktopProviderReady);
   const shouldUseExternalTranslation = !shouldUseAi && useExternalTranslation && translationSettings.provider !== "local";
   const knowledge = parseKnowledge();
   const progressLabel = shouldUseAi ? "AI 命名中 " : shouldUseExternalTranslation ? "翻译命名中 " : "本地命名中 ";
@@ -178,16 +179,21 @@ async function requestAiRecommendations(asset, localRecommendations, signal) {
   const referenceImageUrl = referenceFile && isRasterImage(referenceFile) ? await imageFileToDataUrl(referenceFile, 960) : "";
   const prompt = buildAiPrompt(asset, localRecommendations);
   const apiFormat = aiSettings.apiFormat || "responses";
-  const response = await ngrFetch(buildAiEndpoint(apiFormat), {
-    service: "ai",
-    method: "POST",
-    signal,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + aiSettings.apiKey.trim(),
-    },
-    body: JSON.stringify(apiFormat === "chat" ? buildChatPayload(prompt, cutImageUrl, referenceImageUrl) : buildResponsesPayload(prompt, cutImageUrl, referenceImageUrl)),
-  });
+  const body = apiFormat === "chat"
+    ? buildChatPayload(prompt, cutImageUrl, referenceImageUrl)
+    : buildResponsesPayload(prompt, cutImageUrl, referenceImageUrl);
+  const response = window.NgrDesktopBridge?.isDesktopRuntime()
+    ? await window.NgrDesktopBridge.requestProvider(aiSettings.providerId, apiFormat, body, { signal })
+    : await ngrFetch(buildAiEndpoint(apiFormat), {
+        service: "ai",
+        method: "POST",
+        signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + aiSettings.apiKey.trim(),
+        },
+        body: JSON.stringify(body),
+      });
 
   if (!response.ok) {
     throw new Error("AI request failed");
@@ -288,24 +294,26 @@ function applyProviderPreset() {
 
 async function testAiSettings() {
   aiSettings = collectAiSettings();
-  saveAiSettings(aiSettings);
-  if (!aiSettings.apiKey) {
+  await saveAiSettings(aiSettings);
+  if (!aiSettings.apiKey && !aiSettings.hasSecret) {
     showToast("请先填写 API Key");
     return;
   }
   els.testAiSettings.disabled = true;
   els.testAiSettings.textContent = "测试中";
   try {
-    const endpoint = buildAiEndpoint(aiSettings.apiFormat || "responses");
-    const response = await ngrFetch(endpoint, {
-      service: "ai",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + aiSettings.apiKey,
-      },
-      body: JSON.stringify(buildAiTestPayload()),
-    });
+    const apiFormat = aiSettings.apiFormat || "responses";
+    const response = window.NgrDesktopBridge?.isDesktopRuntime()
+      ? await window.NgrDesktopBridge.requestProvider(aiSettings.providerId, apiFormat, buildAiTestPayload())
+      : await ngrFetch(buildAiEndpoint(apiFormat), {
+          service: "ai",
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + aiSettings.apiKey,
+          },
+          body: JSON.stringify(buildAiTestPayload()),
+        });
     showToast(response.ok ? "API 测试通过，配置已保存" : "API 测试失败，请检查地址、Key 和模型");
   } catch {
     showToast("API 测试失败，请检查网络或接口地址");
@@ -315,14 +323,16 @@ async function testAiSettings() {
   }
 }
 
-function exportAiSettings() {
+async function exportAiSettings() {
   aiSettings = collectAiSettings();
-  saveAiSettings(aiSettings);
+  await saveAiSettings(aiSettings);
   const payload = {
     type: "NGR_AI_API_CONFIG",
     version: 1,
     exportedAt: new Date().toISOString(),
-    settings: aiSettings,
+    settings: window.NgrDesktopBridge?.isDesktopRuntime()
+      ? { ...aiSettings, apiKey: "", hasSecret: Boolean(aiSettings.hasSecret) }
+      : aiSettings,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -331,7 +341,9 @@ function exportAiSettings() {
   link.download = "ngr-ai-api-config.json";
   link.click();
   URL.revokeObjectURL(url);
-  showToast("API 配置已导出，请妥善保管文件中的 API Key");
+  showToast(window.NgrDesktopBridge?.isDesktopRuntime()
+    ? "API 配置已导出（不包含 Windows 安全存储中的密钥）"
+    : "API 配置已导出，请妥善保管文件中的 API Key");
 }
 
 async function importAiSettings(event) {
@@ -342,7 +354,7 @@ async function importAiSettings(event) {
     const payload = JSON.parse(await file.text());
     const importedSettings = payload.settings || payload;
     aiSettings = normalizeAiSettings(importedSettings);
-    saveAiSettings(aiSettings);
+    await saveAiSettings(aiSettings);
     fillAiSettings();
     showToast("API 配置已导入并保存");
   } catch {

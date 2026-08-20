@@ -85,6 +85,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
       "files",
       "localImageSearch",
       "network",
+      "providers",
       "shell",
       "updater",
     ]);
@@ -98,11 +99,74 @@ test("Electron development app boots with the Dev identity and an isolated rende
       };
     });
     assert.equal(homeLayout.visible, true);
+    assert.equal(await window.locator("#feedbackFormLink").isVisible(), true);
+    assert.match(await window.locator("#feedbackFormLink").innerText(), /反馈与建议/);
+
+    await window.locator("#detectEntry").click();
+    await window.waitForFunction(() => document.querySelector("#detectView")?.classList.contains("active"));
+    await window.locator("#detectionSingleInput").setInputFiles([
+      {
+        name: "valid.png",
+        mimeType: "image/png",
+        buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAARUlEQVRYhe3XsREAMAhC0czAmEzh5maLpHmFvXcifE6m+3OOBeIEQ4T1hsuIwopHGFUcLyAJJBtQWli+iklUs1FO+1wHFywT7GqIQKHAAAAAAElFTkSuQmCC", "base64"),
+      },
+      {
+        name: "wrong.jpg",
+        mimeType: "image/jpeg",
+        buffer: Buffer.from("/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAgACADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAT/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFgEBAQEAAAAAAAAAAAAAAAAAAAQH/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AiAQNRAAAAAAf/9k=", "base64"),
+      },
+      {
+        name: "disguised.png",
+        mimeType: "image/png",
+        buffer: Buffer.from("/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAgACADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAT/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFgEBAQEAAAAAAAAAAAAAAAAAAAQH/8QAFBEBAAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AiAQNRAAAAAAf/9k=", "base64"),
+      },
+    ]);
+    await window.waitForFunction(() => document.querySelector("#detectionCount")?.textContent?.includes("3 张 / 2 张问题"));
+    const validDetectionRow = window.locator(".detection-item", { hasText: "valid.png" });
+    const wrongDetectionRow = window.locator(".detection-item", { hasText: "wrong.jpg" });
+    const disguisedDetectionRow = window.locator(".detection-item", { hasText: "disguised.png" });
+    assert.match(await validDetectionRow.getAttribute("class"), /\bpassed\b/);
+    assert.match(await wrongDetectionRow.innerText(), /NGR只允许png格式，不允许其他格式/);
+    assert.match(await disguisedDetectionRow.innerText(), /检测到 JPEG/);
+    await window.locator("#detectionModeSelect").selectOption("planner");
+    assert.match(await wrongDetectionRow.innerText(), /NGR只允许png格式，不允许其他格式/);
+    await window.locator("#backButton").click();
+    await window.waitForFunction(() => document.querySelector("#homeView")?.classList.contains("active"));
 
     await window.locator("#workEntry").click();
     await window.waitForFunction(() => document.querySelector("#workView")?.classList.contains("active"));
+    assert.equal(await window.locator("#feedbackFormLink").isHidden(), true);
     assert.equal(await window.locator("#workProjectName").inputValue(), "");
     assert.match(await window.locator(".toolbar-download-action").innerText(), /下载命名完成的图片/);
+    await window.evaluate(() => {
+      const image = new File(
+        ['<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#0f766e"/></svg>'],
+        "folder-drop-smoke.svg",
+        { type: "image/svg+xml", lastModified: 1 },
+      );
+      const rootDirectory = {
+        kind: "directory",
+        name: "smoke-folder",
+        async *values() {
+          yield { kind: "file", name: image.name, getFile: async () => image };
+        },
+      };
+      const dropEvent = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(dropEvent, "dataTransfer", {
+        value: {
+          items: [{
+            kind: "file",
+            getAsFileSystemHandle: () => Promise.resolve(rootDirectory),
+            webkitGetAsEntry: () => null,
+            getAsFile: () => null,
+          }],
+          files: [],
+        },
+      });
+      document.querySelector("#uploadDropZone").dispatchEvent(dropEvent);
+    });
+    await window.waitForFunction(() => document.querySelector("#assetList")?.textContent?.includes("folder-drop-smoke"));
+    assert.match(await window.locator("#fileCount").innerText(), /1 张/);
     await window.locator("#workBasePrefix .prefix-picker-trigger").click();
     assert.equal(await window.locator("#workBasePrefix .prefix-picker-edit").innerText(), "＋ 新建/编辑前缀");
     await window.locator("#workBasePrefix .prefix-picker-edit").click();
@@ -137,6 +201,13 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.deepEqual(localSearch.libraries, []);
     assert.ok(localSearch.exposedMethods.includes("searchByImage"));
     assert.ok(localSearch.exposedMethods.includes("revealResult"));
+    assert.ok(localSearch.exposedMethods.includes("listAssetFolders"));
+    assert.ok(localSearch.exposedMethods.includes("listAssets"));
+    assert.equal(await window.locator("#localSearchContentTitle").innerText(), "素材库");
+    assert.equal(await window.locator("#localSearchBrowser").isVisible(), true);
+    assert.equal(await window.locator("#localSearchSearchSurface").isHidden(), true);
+    assert.equal(await window.locator("#localSearchQuickLibrarySelect").isDisabled(), true);
+    assert.match(await window.locator("#localSearchAssetEmpty").innerText(), /尚未选择图库|尚未建立素材目录/);
     if (await window.locator("#localSearchGuideOverlay").isVisible()) {
       await window.locator("#localSearchGuideStart").click();
     }
@@ -144,8 +215,11 @@ test("Electron development app boots with the Dev identity and an isolated rende
     await window.waitForFunction(() => document.querySelector("#localImageSearchSettingsView")?.classList.contains("active"));
     await window.locator("#localSearchManageModels").click();
     await window.locator("#localSearchModelManagerOverlay:not(.hidden)").waitFor();
-    assert.equal(await window.locator("#localSearchManagedModels .local-search-managed-model").count(), 1);
-    assert.match(await window.locator("#localSearchManagedModels").innerText(), /内置|已认证/);
+    assert.equal(await window.locator("#localSearchManagedModels .local-search-managed-model").count(), 2);
+    const managedModelText = await window.locator("#localSearchManagedModels").innerText();
+    assert.match(managedModelText, /稳定 GPU 版/);
+    assert.match(managedModelText, /旧版兼容/);
+    assert.match(managedModelText, /内置|已认证/);
     await window.locator("#localSearchCustomImportStart").click();
     await window.locator("#localSearchCustomModelName").fill("E2E 离线向量模型");
     await window.locator("#localSearchCustomModelType").selectOption("image-text");

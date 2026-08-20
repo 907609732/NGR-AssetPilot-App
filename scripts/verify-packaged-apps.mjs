@@ -33,6 +33,12 @@ async function verifyTarget(target) {
     assert.equal(path.resolve(appInfo.userData), path.resolve(userDataPath));
     const window = await electronApp.firstWindow({ timeout: 60_000 });
     await window.waitForFunction(() => Boolean(window.ngrDesktop?.environment));
+    if (target.badge) {
+      await window.waitForFunction(
+        (expected) => document.querySelector("#editionBadge")?.textContent?.includes(expected),
+        target.badge.split(" ")[0],
+      );
+    }
     const state = await window.evaluate(async () => ({
       info: await window.ngrDesktop.environment.getInfo(),
       credentials: await window.ngrDesktop.credentials.getStatus(),

@@ -1,13 +1,19 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { Worker } from "node:worker_threads";
-import { MODEL_FILES, MODEL_TOTAL_BYTES, LOCAL_IMAGE_SEARCH_VERSION } from "./constants.mjs";
+import {
+  LEGACY_LOCAL_IMAGE_SEARCH_VERSION,
+  LEGACY_MODEL_FILES,
+  LOCAL_IMAGE_SEARCH_VERSION,
+  MODEL_FILES,
+  MODEL_TOTAL_BYTES,
+} from "./constants.mjs";
 
 const CUSTOM_MODEL_SCHEMA_VERSION = 1;
 const CUSTOM_VALIDATION_TIMEOUT_MS = 60_000;
@@ -15,6 +21,12 @@ const CUSTOM_MODEL_MAX_FILE_BYTES = 4 * 1024 * 1024 * 1024;
 const CUSTOM_MODEL_MAX_TOTAL_BYTES = 8 * 1024 * 1024 * 1024;
 const CUSTOM_TOKENIZER_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const PROBE_OUTPUT_LIMIT = 1024 * 1024;
+const DOWNLOAD_HEADER_TIMEOUT_MS = 60_000;
+const DOWNLOAD_IDLE_TIMEOUT_MS = 120_000;
+const DOWNLOAD_TOTAL_TIMEOUT_MS = 30 * 60_000;
+const DOWNLOAD_DISK_RESERVE_BYTES = 1024 * 1024 * 1024;
+const PACKAGE_NO_PROGRESS_TIMEOUT_MS = 120_000;
+const PACKAGE_TOTAL_TIMEOUT_MS = 30 * 60_000;
 const SAFE_TOKENIZER_EXTENSIONS = new Set([".json", ".txt", ".model", ".vocab", ".merges"]);
 const BLOCKED_EXTENSIONS = new Set([
   ".appx", ".bat", ".chm", ".cmd", ".com", ".cpl", ".dll", ".dylib", ".exe", ".hta",
@@ -27,9 +39,17 @@ function canonicalBuiltinFiles(files = MODEL_FILES) {
 }
 
 export const BUILTIN_MODEL_ID = LOCAL_IMAGE_SEARCH_VERSION;
-export const BUILTIN_INDEX_PROFILE = "batched-v1";
+export const LEGACY_BUILTIN_MODEL_ID = LEGACY_LOCAL_IMAGE_SEARCH_VERSION;
+export const BUILTIN_INDEX_PROFILE = "q4f16-stable-v1";
+export const LEGACY_BUILTIN_INDEX_PROFILE = "batched-v1";
 export const BUILTIN_MODEL_FINGERPRINT = createHash("sha256")
   .update(JSON.stringify({ indexProfile: BUILTIN_INDEX_PROFILE, files: canonicalBuiltinFiles() }))
+  .digest("hex");
+export const LEGACY_BUILTIN_MODEL_FINGERPRINT = createHash("sha256")
+  .update(JSON.stringify({
+    indexProfile: LEGACY_BUILTIN_INDEX_PROFILE,
+    files: canonicalBuiltinFiles(LEGACY_MODEL_FILES),
+  }))
   .digest("hex");
 
 const BUILTIN_PREPROCESSING = Object.freeze({
@@ -128,24 +148,34 @@ export function normalizePreprocessing(value = {}) {
   };
 }
 
-export function createBuiltinModelManifest() {
+function builtinManifest({
+  id,
+  fingerprint,
+  indexProfile,
+  files,
+  name,
+  visionModelPath,
+  legacyCompatibility = false,
+}) {
   return {
     schemaVersion: CUSTOM_MODEL_SCHEMA_VERSION,
-    id: BUILTIN_MODEL_ID,
-    fingerprint: BUILTIN_MODEL_FINGERPRINT,
-    name: "NGR CLIP B/32 多语言模型",
+    id,
+    fingerprint,
+    name,
     kind: "image-text",
-    version: LOCAL_IMAGE_SEARCH_VERSION,
-    indexProfile: BUILTIN_INDEX_PROFILE,
+    version: id,
+    indexProfile,
     dimensions: 512,
     supportsText: true,
     builtin: true,
     certification: "built-in",
     license: "Apache-2.0",
-    totalBytes: MODEL_TOTAL_BYTES,
+    legacyCompatibility,
+    indexingPolicy: legacyCompatibility ? { provider: "cpu", batchSize: 1 } : { provider: "auto", batchSize: 16 },
+    totalBytes: files.reduce((sum, file) => sum + file.size, 0),
     relativeRoot: ".",
     vision: {
-      modelPath: "vision/onnx/vision_model_quantized.onnx",
+      modelPath: visionModelPath,
       modelRoot: "vision",
       ...BUILTIN_PREPROCESSING,
     },
@@ -157,7 +187,7 @@ export function createBuiltinModelManifest() {
       outputName: BUILTIN_PREPROCESSING.textOutputName,
       normalizeOutput: true,
     },
-    files: canonicalBuiltinFiles().map((file) => ({
+    files: canonicalBuiltinFiles(files).map((file) => ({
       role: file.model === "vision" ? "vision" : "text",
       path: `${file.model}/${file.relativePath}`,
       size: file.size,
@@ -165,6 +195,36 @@ export function createBuiltinModelManifest() {
     })),
   };
 }
+
+export function createBuiltinModelManifest() {
+  return builtinManifest({
+    id: BUILTIN_MODEL_ID,
+    fingerprint: BUILTIN_MODEL_FINGERPRINT,
+    indexProfile: BUILTIN_INDEX_PROFILE,
+    files: MODEL_FILES,
+    name: "NGR CLIP B/32 多语言模型（稳定 GPU 版）",
+    visionModelPath: "vision/onnx/vision_model_q4f16.onnx",
+  });
+}
+
+export function createLegacyBuiltinModelManifest() {
+  return builtinManifest({
+    id: LEGACY_BUILTIN_MODEL_ID,
+    fingerprint: LEGACY_BUILTIN_MODEL_FINGERPRINT,
+    indexProfile: LEGACY_BUILTIN_INDEX_PROFILE,
+    files: LEGACY_MODEL_FILES,
+    name: "NGR CLIP B/32 多语言模型（旧版兼容）",
+    visionModelPath: "vision/onnx/vision_model_quantized.onnx",
+    legacyCompatibility: true,
+  });
+}
+
+export const BUILTIN_MODEL_CATALOG = Object.freeze([
+  Object.freeze({ id: BUILTIN_MODEL_ID, recommended: true, files: MODEL_FILES, createManifest: createBuiltinModelManifest }),
+  Object.freeze({ id: LEGACY_BUILTIN_MODEL_ID, recommended: false, files: LEGACY_MODEL_FILES, createManifest: createLegacyBuiltinModelManifest }),
+]);
+const MODEL_ROOT_RECOVERY_PROMISES = new Map();
+const OPERATION_JOURNAL_NAME = ".model-operation-journal.json";
 
 async function sha256File(filePath) {
   const hash = createHash("sha256");
@@ -180,6 +240,23 @@ async function fileMatches(filePath, expected) {
   } catch {
     return false;
   }
+}
+
+function codedError(code, cause) {
+  const error = new Error(code, cause ? { cause } : undefined);
+  error.code = code;
+  return error;
+}
+
+function contentRange(value) {
+  const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(String(value || "").trim());
+  if (!match) return null;
+  return { start: Number(match[1]), end: Number(match[2]), total: Number(match[3]) };
+}
+
+async function availableDiskBytes(directory) {
+  const info = await statfs(directory);
+  return Number(BigInt(info.bavail) * BigInt(info.bsize));
 }
 
 async function assertRegularSource(filePath) {
@@ -680,20 +757,188 @@ function modelFingerprint(manifest) {
 }
 
 export class LocalModelManager {
-  constructor({ modelRoot, fetchImpl, files = MODEL_FILES }) {
+  constructor({ modelRoot, fetchImpl, files = MODEL_FILES, packageModel = null }) {
     this.modelRoot = modelRoot;
     this.fetchImpl = fetchImpl;
     this.files = files;
+    this.packageModel = packageModel;
     this.totalBytes = files.reduce((sum, file) => sum + file.size, 0);
     this.job = null;
     this.cachedInspection = null;
+    this.initializationPromise = null;
   }
 
   resolveFile(file) {
     return path.join(this.modelRoot, file.model, ...file.relativePath.split("/"));
   }
 
+  operationJournalPath() {
+    return path.join(this.modelRoot, OPERATION_JOURNAL_NAME);
+  }
+
+  async writeOperationJournal(document) {
+    const journalPath = this.operationJournalPath();
+    const partial = `${journalPath}.part`;
+    const backup = `${journalPath}.replace-backup`;
+    const handle = await open(partial, "w");
+    try {
+      await handle.writeFile(`${JSON.stringify(document)}\n`, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rm(backup, { force: true });
+    let backedUp = false;
+    try {
+      try {
+        await rename(journalPath, backup);
+        backedUp = true;
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+      await rename(partial, journalPath);
+      await rm(backup, { force: true });
+    } catch (error) {
+      if (backedUp) {
+        await rm(journalPath, { force: true }).catch(() => {});
+        await rename(backup, journalPath).catch(() => {});
+      }
+      throw error;
+    }
+  }
+
+  async clearOperationJournal() {
+    await rm(this.operationJournalPath(), { force: true });
+    await rm(`${this.operationJournalPath()}.part`, { force: true });
+    await rm(`${this.operationJournalPath()}.replace-backup`, { force: true });
+  }
+
+  async recoverOperationJournal() {
+    const journalPath = this.operationJournalPath();
+    const backupPath = `${journalPath}.replace-backup`;
+    const journalInfo = await stat(journalPath).catch(() => null);
+    const backupInfo = await stat(backupPath).catch(() => null);
+    if (!journalInfo && backupInfo?.isFile()) await rename(backupPath, journalPath);
+    else if (journalInfo) await rm(backupPath, { force: true });
+    let rawDocument;
+    try {
+      rawDocument = await readFile(journalPath, "utf8");
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      await rm(`${this.operationJournalPath()}.part`, { force: true });
+      return;
+    }
+    let document;
+    try {
+      document = JSON.parse(rawDocument);
+    } catch {
+      throw codedError("MODEL_OPERATION_JOURNAL_INVALID");
+    }
+    if (!document || typeof document !== "object" || Number(document.version) !== 1) {
+      throw codedError("MODEL_OPERATION_JOURNAL_INVALID");
+    }
+    const parentRoot = path.dirname(this.modelRoot);
+    const safeSibling = (name, prefix) => {
+      if (typeof name !== "string" || !name.startsWith(prefix) || path.basename(name) !== name) {
+        throw codedError("MODEL_OPERATION_JOURNAL_INVALID");
+      }
+      return path.join(parentRoot, name);
+    };
+    const safeModelFile = (relativePath) => {
+      const normalized = normalizeRelativePath(relativePath);
+      const candidate = path.resolve(this.modelRoot, ...normalized.split("/"));
+      if (!isInside(this.modelRoot, candidate)) throw codedError("MODEL_OPERATION_JOURNAL_INVALID");
+      return candidate;
+    };
+    if (document.type === "import") {
+      const stagingRoot = safeSibling(document.stagingName, ".models-import-");
+      const backupRoot = safeSibling(document.backupName, ".models-backup-");
+      if (document.state !== "committed") {
+        for (const entry of Array.isArray(document.entries) ? document.entries : []) {
+          const target = safeModelFile(entry.path);
+          const backup = path.join(backupRoot, ...normalizeRelativePath(entry.path).split("/"));
+          if (await stat(backup).then((info) => info.isFile()).catch(() => false)) {
+            await rm(target, { force: true });
+            await mkdir(path.dirname(target), { recursive: true });
+            await rename(backup, target);
+          } else if (entry.hadOriginal === false) {
+            const staged = path.join(stagingRoot, ...normalizeRelativePath(entry.path).split("/"));
+            if (!await stat(staged).catch(() => null)) await rm(target, { force: true });
+          }
+        }
+      }
+      await rm(stagingRoot, { recursive: true, force: true });
+      await rm(backupRoot, { recursive: true, force: true });
+    } else if (document.type === "removal") {
+      const trashRoot = path.join(this.modelRoot, document.trashName || "");
+      if (
+        typeof document.trashName !== "string" || !document.trashName.startsWith(".removal-")
+        || path.basename(document.trashName) !== document.trashName || !isInside(this.modelRoot, trashRoot)
+      ) throw codedError("MODEL_OPERATION_JOURNAL_INVALID");
+      if (document.state !== "committed") {
+        for (const entry of Array.isArray(document.entries) ? document.entries : []) {
+          const source = safeModelFile(entry.source);
+          const trash = path.join(trashRoot, ...normalizeRelativePath(entry.trashName).split("/"));
+          if (await stat(trash).catch(() => null)) {
+            await mkdir(path.dirname(source), { recursive: true });
+            await rm(source, { recursive: true, force: true });
+            await rename(trash, source);
+          }
+        }
+      }
+      await rm(trashRoot, { recursive: true, force: true });
+    } else {
+      throw codedError("MODEL_OPERATION_JOURNAL_INVALID");
+    }
+    await this.clearOperationJournal();
+  }
+
+  async initialize() {
+    if (!this.initializationPromise) {
+      this.initializationPromise = (async () => {
+        await mkdir(this.modelRoot, { recursive: true });
+        let recovery = MODEL_ROOT_RECOVERY_PROMISES.get(this.modelRoot);
+        if (!recovery) {
+          recovery = this.recoverOperationJournal();
+          MODEL_ROOT_RECOVERY_PROMISES.set(this.modelRoot, recovery);
+        }
+        try {
+          await recovery;
+        } finally {
+          if (MODEL_ROOT_RECOVERY_PROMISES.get(this.modelRoot) === recovery) {
+            MODEL_ROOT_RECOVERY_PROMISES.delete(this.modelRoot);
+          }
+        }
+        for (const file of this.files) {
+          const target = this.resolveFile(file);
+          const backup = `${target}.replace-backup`;
+          const backupInfo = await stat(backup).catch(() => null);
+          if (backupInfo) {
+            if (await fileMatches(target, file)) await rm(backup, { force: true });
+            else if (await fileMatches(backup, file)) {
+              await rm(target, { force: true });
+              await rename(backup, target);
+            } else await rm(backup, { force: true });
+          }
+          const partial = `${target}.part`;
+          const partialInfo = await stat(partial).catch(() => null);
+          if (partialInfo && (!partialInfo.isFile() || partialInfo.size > file.size)) {
+            await rm(partial, { force: true });
+          } else if (partialInfo?.size === file.size) {
+            if (await fileMatches(partial, file)) await this.enableDownloadedFile(partial, target);
+            else await rm(partial, { force: true });
+          }
+        }
+      })().catch((error) => {
+        this.initializationPromise = null;
+        throw error;
+      });
+    }
+    return this.initializationPromise;
+  }
+
   async inspect({ force = false } = {}) {
+    await this.initialize();
     if (["downloading", "importing"].includes(this.job?.state)) {
       return { version: LOCAL_IMAGE_SEARCH_VERSION, ready: false, state: this.job.state, downloadedBytes: this.job.downloadedBytes, totalBytes: this.totalBytes || MODEL_TOTAL_BYTES, error: null };
     }
@@ -958,18 +1203,47 @@ export class LocalModelManager {
     }
   }
 
-  async stageRemoval(manifest) {
+  async stageRemoval(manifest, { preservePaths = [] } = {}) {
+    await this.initialize();
     const trashRoot = path.join(this.modelRoot, `.removal-${randomUUID()}`);
     const entries = [];
     await mkdir(trashRoot, { recursive: true });
+    const operation = {
+      version: 1,
+      type: "removal",
+      state: "staged",
+      trashName: path.basename(trashRoot),
+      entries: [],
+    };
+    const stageEntry = async (source, trashName) => {
+      const sourceRelative = path.relative(this.modelRoot, source).split(path.sep).join("/");
+      normalizeRelativePath(sourceRelative);
+      normalizeRelativePath(trashName);
+      operation.entries.push({ source: sourceRelative, trashName });
+      await this.writeOperationJournal(operation);
+      await mkdir(path.dirname(path.join(trashRoot, ...trashName.split("/"))), { recursive: true });
+      await rename(source, path.join(trashRoot, ...trashName.split("/")));
+      entries.push({ source, trashName });
+    };
     if (manifest?.builtin) {
-      const candidates = (await readdir(this.modelRoot, { withFileTypes: true }).catch(() => []))
-        .filter((entry) => entry.name !== "custom" && !entry.name.startsWith(".validation-") && !entry.name.startsWith(".removal-"));
-      try {
+      await this.writeOperationJournal(operation);
+      const preserved = new Set(preservePaths.map((item) => normalizeRelativePath(item)));
+      const visit = async (directory, relativeDirectory = "") => {
+        const candidates = await readdir(directory, { withFileTypes: true }).catch(() => []);
         for (const entry of candidates) {
-          await rename(path.join(this.modelRoot, entry.name), path.join(trashRoot, entry.name));
-          entries.push(entry.name);
+          if (!relativeDirectory && (entry.name === "custom" || entry.name.startsWith("."))) continue;
+          const relativePath = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+          const source = path.join(directory, entry.name);
+          if (entry.isDirectory() && !entry.isSymbolicLink()) {
+            await visit(source, relativePath);
+            continue;
+          }
+          if (preserved.has(relativePath)) continue;
+          await stageEntry(source, relativePath);
         }
+      };
+      try {
+        await visit(this.modelRoot);
       } catch (error) {
         await this.rollbackRemoval({ trashRoot, entries, builtin: true });
         throw error;
@@ -979,9 +1253,9 @@ export class LocalModelManager {
     const relativeRoot = normalizeRelativePath(manifest?.relativeRoot || "");
     const targetRoot = path.resolve(this.modelRoot, ...relativeRoot.split("/"));
     if (!isInside(path.join(this.modelRoot, "custom"), targetRoot)) throw new Error("MODEL_REMOVE_PATH_REJECTED");
+    await this.writeOperationJournal(operation);
     try {
-      await rename(targetRoot, path.join(trashRoot, "model"));
-      entries.push({ source: targetRoot, trashName: "model" });
+      await stageEntry(targetRoot, "model");
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
     }
@@ -992,8 +1266,9 @@ export class LocalModelManager {
     if (!removal?.trashRoot) return;
     const failures = [];
     if (removal.builtin) {
-      for (const name of removal.entries || []) {
-        await rename(path.join(removal.trashRoot, name), path.join(this.modelRoot, name))
+      for (const entry of removal.entries || []) {
+        await mkdir(path.dirname(entry.source), { recursive: true });
+        await rename(path.join(removal.trashRoot, ...entry.trashName.split("/")), entry.source)
           .catch((error) => failures.push(error));
       }
     } else {
@@ -1005,12 +1280,24 @@ export class LocalModelManager {
     }
     if (failures.length) throw failures[0];
     await rm(removal.trashRoot, { recursive: true, force: true });
+    await this.clearOperationJournal();
   }
 
   async commitRemoval(removal) {
+    await this.writeOperationJournal({
+      version: 1,
+      type: "removal",
+      state: "committed",
+      trashName: path.basename(removal.trashRoot),
+      entries: (removal.entries || []).map((entry) => ({
+        source: path.relative(this.modelRoot, entry.source).split(path.sep).join("/"),
+        trashName: entry.trashName,
+      })),
+    });
     this.cachedInspection = null;
     this.job = null;
     await rm(removal?.trashRoot, { recursive: true, force: true });
+    await this.clearOperationJournal();
   }
 
   async removeInstalled(manifest) {
@@ -1024,7 +1311,7 @@ export class LocalModelManager {
     const abortController = new AbortController();
     this.cachedInspection = null;
     this.job = { state: "downloading", downloadedBytes: 0, error: null, abortController };
-    this.runDownload(abortController.signal).catch((error) => {
+    this.downloadPromise = this.runDownload(abortController.signal).catch((error) => {
       if (error?.name === "AbortError") this.job.state = "canceled";
       else {
         this.job.state = "error";
@@ -1042,14 +1329,39 @@ export class LocalModelManager {
 
   runPackageWorker(workerData, onProgress = () => {}) {
     return new Promise((resolve, reject) => {
-      const worker = new Worker(new URL("./model-package-worker.mjs", import.meta.url), { workerData });
-      worker.on("message", (message) => {
-        if (message?.type === "progress") onProgress(message.completedBytes);
-        else if (message?.type === "complete") resolve(message.result);
-        else if (message?.type === "error") reject(new Error(message.code));
+      const worker = new Worker(new URL("./model-package-worker.mjs", import.meta.url), {
+        workerData: { ...workerData, packageModel: this.packageModel },
       });
-      worker.once("error", reject);
-      worker.once("exit", (code) => { if (code !== 0) reject(new Error("MODEL_PACKAGE_WORKER_FAILED")); });
+      let settled = false;
+      let progressTimer = null;
+      const totalTimer = setTimeout(() => finish(new Error("MODEL_PACKAGE_TOTAL_TIMEOUT")), PACKAGE_TOTAL_TIMEOUT_MS);
+      totalTimer.unref?.();
+      const armProgress = () => {
+        clearTimeout(progressTimer);
+        progressTimer = setTimeout(() => finish(new Error("MODEL_PACKAGE_NO_PROGRESS_TIMEOUT")), PACKAGE_NO_PROGRESS_TIMEOUT_MS);
+        progressTimer.unref?.();
+      };
+      const finish = (error, result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(progressTimer);
+        clearTimeout(totalTimer);
+        worker.terminate().catch(() => {});
+        if (error) reject(error);
+        else resolve(result);
+      };
+      armProgress();
+      worker.on("message", (message) => {
+        if (message?.type === "progress") {
+          armProgress();
+          onProgress(message.completedBytes);
+        } else if (message?.type === "complete") finish(null, message.result);
+        else if (message?.type === "error") finish(new Error(message.code));
+      });
+      worker.once("error", (error) => finish(error));
+      worker.once("exit", (code) => {
+        if (!settled) finish(new Error(code === 0 ? "MODEL_PACKAGE_COMPLETE_MISSING" : "MODEL_PACKAGE_WORKER_FAILED"));
+      });
     });
   }
 
@@ -1066,45 +1378,69 @@ export class LocalModelManager {
   }
 
   async runImport(packagePath) {
+    await this.initialize();
     const parentRoot = path.dirname(this.modelRoot);
     const stagingRoot = path.join(parentRoot, `.models-import-${randomUUID()}`);
     const backupRoot = path.join(parentRoot, `.models-backup-${randomUUID()}`);
-    const installedTowers = [];
-    const backedUpTowers = [];
+    const installedFiles = [];
+    const backedUpFiles = [];
+    let operation = null;
     try {
       await this.runPackageWorker({ action: "import", packagePath, stagingRoot, files: this.files },
         (completedBytes) => { this.job.downloadedBytes = completedBytes; });
       await mkdir(this.modelRoot, { recursive: true });
       await mkdir(backupRoot, { recursive: true });
-      const packageTowers = [...new Set(this.files.map((file) => file.model))].sort();
-      for (const tower of packageTowers) {
-        const currentTower = path.join(this.modelRoot, tower);
-        const stagedTower = path.join(stagingRoot, tower);
-        const backupTower = path.join(backupRoot, tower);
+      operation = {
+        version: 1,
+        type: "import",
+        state: "installing",
+        stagingName: path.basename(stagingRoot),
+        backupName: path.basename(backupRoot),
+        entries: await Promise.all(this.files.map(async (file) => {
+          const relativePath = `${file.model}/${file.relativePath}`;
+          return {
+            path: relativePath,
+            hadOriginal: Boolean(await stat(path.join(this.modelRoot, ...relativePath.split("/"))).catch(() => null)),
+          };
+        })),
+      };
+      await this.writeOperationJournal(operation);
+      for (const file of this.files) {
+        const relativePath = `${file.model}/${file.relativePath}`;
+        const currentFile = path.join(this.modelRoot, file.model, ...file.relativePath.split("/"));
+        const stagedFile = path.join(stagingRoot, file.model, ...file.relativePath.split("/"));
+        const backupFile = path.join(backupRoot, file.model, ...file.relativePath.split("/"));
+        await mkdir(path.dirname(currentFile), { recursive: true });
+        await mkdir(path.dirname(backupFile), { recursive: true });
         try {
-          await rename(currentTower, backupTower);
-          backedUpTowers.push(tower);
+          await rename(currentFile, backupFile);
+          backedUpFiles.push(relativePath);
         } catch (error) {
           if (error?.code !== "ENOENT") throw error;
         }
-        await rename(stagedTower, currentTower);
-        installedTowers.push(tower);
+        await rename(stagedFile, currentFile);
+        installedFiles.push(relativePath);
       }
+      operation.state = "committed";
+      await this.writeOperationJournal(operation);
       await rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
       this.cachedInspection = null;
       this.job.state = "ready";
       this.job.downloadedBytes = this.totalBytes;
       this.job.error = null;
       await rm(backupRoot, { recursive: true, force: true }).catch(() => {});
+      await this.clearOperationJournal();
     } catch (error) {
       await rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
-      for (const tower of installedTowers) {
-        await rm(path.join(this.modelRoot, tower), { recursive: true, force: true }).catch(() => {});
+      for (const relativePath of installedFiles) {
+        await rm(path.join(this.modelRoot, ...relativePath.split("/")), { force: true }).catch(() => {});
       }
       const restoreErrors = [];
-      for (const tower of backedUpTowers) {
+      for (const relativePath of backedUpFiles) {
         try {
-          await rename(path.join(backupRoot, tower), path.join(this.modelRoot, tower));
+          const currentFile = path.join(this.modelRoot, ...relativePath.split("/"));
+          await mkdir(path.dirname(currentFile), { recursive: true });
+          await rename(path.join(backupRoot, ...relativePath.split("/")), currentFile);
         } catch (restoreError) {
           restoreErrors.push(restoreError);
         }
@@ -1116,6 +1452,7 @@ export class LocalModelManager {
         );
       }
       await rm(backupRoot, { recursive: true, force: true }).catch(() => {});
+      await this.clearOperationJournal().catch(() => {});
       throw error;
     }
   }
@@ -1135,42 +1472,195 @@ export class LocalModelManager {
     }
   }
 
-  async runDownload(signal) {
-    await mkdir(this.modelRoot, { recursive: true });
-    let completed = 0;
-    for (const file of this.files) {
-      const target = this.resolveFile(file);
-      if (await fileMatches(target, file)) {
-        completed += file.size;
-        this.job.downloadedBytes = completed;
-        continue;
+  async enableDownloadedFile(partial, target) {
+    const backup = `${target}.replace-backup`;
+    await rm(backup, { force: true });
+    let backedUp = false;
+    try {
+      try {
+        await rename(target, backup);
+        backedUp = true;
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
       }
-      await mkdir(path.dirname(target), { recursive: true });
-      const partial = `${target}.part`;
-      await rm(partial, { force: true });
-      const response = await this.fetchImpl(file.url, { signal });
-      if (!response.ok || !response.body) throw new Error(`MODEL_HTTP_${response.status}`);
-      let received = 0;
-      const manager = this;
-      const progress = new TransformStream({
-        transform(chunk, controller) {
-          received += chunk.byteLength;
-          manager.job.downloadedBytes = completed + received;
-          controller.enqueue(chunk);
-        },
-      });
-      await pipeline(response.body.pipeThrough(progress), createWriteStream(partial), { signal });
-      this.job.downloadedBytes = completed + received;
-      if (!(await fileMatches(partial, file))) {
-        await rm(partial, { force: true });
-        throw new Error("MODEL_HASH_MISMATCH");
-      }
-      await rm(target, { force: true });
       await rename(partial, target);
-      completed += file.size;
-      this.job.downloadedBytes = completed;
+      await rm(backup, { force: true });
+    } catch (error) {
+      if (backedUp) {
+        await rm(target, { force: true }).catch(() => {});
+        await rename(backup, target).catch(() => {});
+      }
+      throw error;
     }
-    this.job.state = "ready";
-    this.job.error = null;
+  }
+
+  async downloadFile(file, target, signal, completed) {
+    const partial = `${target}.part`;
+    let partialInfo = await stat(partial).catch(() => null);
+    if (partialInfo && (!partialInfo.isFile() || partialInfo.size > file.size)) {
+      await rm(partial, { force: true });
+      partialInfo = null;
+    }
+    if (partialInfo?.size === file.size) {
+      if (await fileMatches(partial, file)) {
+        await this.enableDownloadedFile(partial, target);
+        return file.size;
+      }
+      await rm(partial, { force: true });
+      partialInfo = null;
+    }
+
+    let resumeAt = Number(partialInfo?.size || 0);
+    const remainingBytes = file.size - resumeAt;
+    const freeBytes = await availableDiskBytes(path.dirname(target));
+    if (freeBytes < remainingBytes + DOWNLOAD_DISK_RESERVE_BYTES) {
+      throw codedError("MODEL_DISK_SPACE_INSUFFICIENT");
+    }
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const headerAbort = new AbortController();
+      const idleAbort = new AbortController();
+      const headerTimer = setTimeout(() => headerAbort.abort(codedError("MODEL_DOWNLOAD_HEADER_TIMEOUT")), DOWNLOAD_HEADER_TIMEOUT_MS);
+      headerTimer.unref?.();
+      const requestSignal = AbortSignal.any([signal, headerAbort.signal, idleAbort.signal]);
+      let response;
+      try {
+        response = await this.fetchImpl(file.url, {
+          signal: requestSignal,
+          headers: resumeAt > 0 ? { Range: `bytes=${resumeAt}-` } : undefined,
+        });
+      } catch (error) {
+        clearTimeout(headerTimer);
+        if (headerAbort.signal.aborted) throw codedError("MODEL_DOWNLOAD_HEADER_TIMEOUT", error);
+        throw error;
+      }
+      clearTimeout(headerTimer);
+
+      if (response.status === 416) {
+        if (resumeAt === file.size && await fileMatches(partial, file)) {
+          await this.enableDownloadedFile(partial, target);
+          return file.size;
+        }
+        await rm(partial, { force: true });
+        resumeAt = 0;
+        if (attempt === 0) continue;
+        throw codedError("MODEL_HTTP_RANGE_INVALID");
+      }
+      if (!response.ok || !response.body) throw codedError(`MODEL_HTTP_${response.status}`);
+
+      let append = false;
+      if (resumeAt > 0) {
+        if (response.status === 206) {
+          const range = contentRange(response.headers.get("content-range"));
+          if (!range || range.start !== resumeAt || range.end !== file.size - 1 || range.total !== file.size) {
+            await rm(partial, { force: true });
+            throw codedError("MODEL_HTTP_CONTENT_RANGE_INVALID");
+          }
+          append = true;
+        } else if (response.status === 200) {
+          resumeAt = 0;
+          await rm(partial, { force: true });
+        } else {
+          throw codedError("MODEL_HTTP_RANGE_INVALID");
+        }
+      } else if (response.status === 206) {
+        const range = contentRange(response.headers.get("content-range"));
+        if (!range || range.start !== 0 || range.end !== file.size - 1 || range.total !== file.size) {
+          await rm(partial, { force: true });
+          throw codedError("MODEL_HTTP_CONTENT_RANGE_INVALID");
+        }
+      }
+
+      const contentLength = Number(response.headers.get("content-length"));
+      const responseLimit = file.size - resumeAt;
+      if (Number.isFinite(contentLength) && contentLength > responseLimit) {
+        await rm(partial, { force: true });
+        throw codedError("MODEL_DOWNLOAD_SIZE_EXCEEDED");
+      }
+
+      const handle = await open(partial, append ? "a" : "w");
+      const reader = response.body.getReader();
+      let received = 0;
+      let idleTimer = null;
+      let deletePartial = false;
+      const armIdle = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => idleAbort.abort(codedError("MODEL_DOWNLOAD_IDLE_TIMEOUT")), DOWNLOAD_IDLE_TIMEOUT_MS);
+        idleTimer.unref?.();
+      };
+      try {
+        armIdle();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          armIdle();
+          const chunk = Buffer.from(value);
+          if (received + chunk.byteLength > responseLimit) {
+            await reader.cancel().catch(() => {});
+            throw codedError("MODEL_DOWNLOAD_SIZE_EXCEEDED");
+          }
+          await handle.write(chunk);
+          received += chunk.byteLength;
+          this.job.downloadedBytes = completed + resumeAt + received;
+        }
+        await handle.sync();
+      } catch (error) {
+        if (error?.code === "MODEL_DOWNLOAD_SIZE_EXCEEDED") deletePartial = true;
+        if (idleAbort.signal.aborted) throw codedError("MODEL_DOWNLOAD_IDLE_TIMEOUT", error);
+        throw error;
+      } finally {
+        clearTimeout(idleTimer);
+        await handle.close().catch(() => {});
+        if (deletePartial) await rm(partial, { force: true }).catch(() => {});
+      }
+
+      const finalInfo = await stat(partial).catch(() => null);
+      if (!finalInfo || finalInfo.size !== file.size) {
+        throw codedError("MODEL_DOWNLOAD_INCOMPLETE");
+      }
+      if (!await fileMatches(partial, file)) {
+        await rm(partial, { force: true });
+        throw codedError("MODEL_HASH_MISMATCH");
+      }
+      await this.enableDownloadedFile(partial, target);
+      return file.size;
+    }
+    throw codedError("MODEL_DOWNLOAD_RETRY_EXHAUSTED");
+  }
+
+  async runDownload(signal) {
+    await this.initialize();
+    await mkdir(this.modelRoot, { recursive: true });
+    const totalAbort = new AbortController();
+    const totalTimer = setTimeout(() => totalAbort.abort(codedError("MODEL_DOWNLOAD_TOTAL_TIMEOUT")), DOWNLOAD_TOTAL_TIMEOUT_MS);
+    totalTimer.unref?.();
+    const downloadSignal = AbortSignal.any([signal, totalAbort.signal]);
+    let completed = 0;
+    try {
+      for (const file of this.files) {
+        const target = this.resolveFile(file);
+        if (await fileMatches(target, file)) {
+          completed += file.size;
+          this.job.downloadedBytes = completed;
+          continue;
+        }
+        await mkdir(path.dirname(target), { recursive: true });
+        completed += await this.downloadFile(file, target, downloadSignal, completed);
+        this.job.downloadedBytes = completed;
+      }
+      this.job.state = "ready";
+      this.job.error = null;
+    } catch (error) {
+      if (totalAbort.signal.aborted && !signal.aborted) throw codedError("MODEL_DOWNLOAD_TOTAL_TIMEOUT", error);
+      throw error;
+    } finally {
+      clearTimeout(totalTimer);
+    }
+  }
+
+  async dispose() {
+    this.cancelDownload();
+    await Promise.allSettled([this.downloadPromise, this.packagePromise].filter(Boolean));
+    this.cachedInspection = null;
   }
 }

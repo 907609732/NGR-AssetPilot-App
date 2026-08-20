@@ -1,5 +1,6 @@
 import electron from "electron";
-import { appendFileSync, cpSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import electronLog from "electron-log/main.js";
+import { appendFileSync, cpSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_URL } from "../shared/constants.mjs";
@@ -8,6 +9,8 @@ import { BackupFileService } from "../services/backup-files.mjs";
 import { CredentialStore } from "../services/credential-store.mjs";
 import { DirectoryTokenStore } from "../services/directory-tokens.mjs";
 import { NetworkClient } from "../services/network-client.mjs";
+import { ProviderRegistry } from "../services/provider-registry.mjs";
+import { RuntimeLogger } from "../services/runtime-logger.mjs";
 import { UpdaterController } from "../services/updater-controller.mjs";
 import { LocalImageSearchController } from "../services/local-image-search/controller.mjs";
 import { registerDesktopIpc } from "./ipc.mjs";
@@ -26,6 +29,7 @@ const {
   safeStorage,
   session,
   shell,
+  utilityProcess,
 } = electron;
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(moduleDirectory, "../../app");
@@ -35,7 +39,13 @@ function writeStartupLog(app, stage, details = {}) {
   try {
     const userDataPath = app.getPath("userData");
     mkdirSync(userDataPath, { recursive: true });
-    appendFileSync(path.join(userDataPath, "desktop-startup.log"), `${JSON.stringify({
+    const logPath = path.join(userDataPath, "desktop-startup.log");
+    if (existsSync(logPath) && statSync(logPath).size >= 1024 * 1024) {
+      const previousPath = `${logPath}.1`;
+      rmSync(previousPath, { force: true });
+      renameSync(logPath, previousPath);
+    }
+    appendFileSync(logPath, `${JSON.stringify({
       at: new Date().toISOString(),
       stage,
       ...details,
@@ -127,12 +137,21 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
 
   await app.whenReady();
   writeStartupLog(app, "app-ready");
+  const runtimeLogger = new RuntimeLogger({ app, logger: electronLog, edition });
+  await runtimeLogger.initialize().catch((error) => writeStartupLog(app, "runtime-log-failed", {
+    code: errorCodeOnly(error),
+  }));
   app.setAppUserModelId(applicationId);
   await installAppProtocol({ protocol, appRoot });
   writeStartupLog(app, "protocol-ready");
   hardenSession(session.defaultSession);
 
   const credentialStore = new CredentialStore({ safeStorage, userDataPath: app.getPath("userData") });
+  const providerRegistry = new ProviderRegistry({
+    credentialStore,
+    userDataPath: app.getPath("userData"),
+  });
+  await providerRegistry.initialize();
   writeStartupLog(app, "credentials-ready");
 
   const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
@@ -153,15 +172,54 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
       : null,
   });
   const directoryTokens = new DirectoryTokenStore();
-  const networkClient = new NetworkClient({ fetchImpl: net.fetch.bind(net) });
+  const networkClient = new NetworkClient({
+    fetchImpl: net.fetch.bind(net),
+    providerRegistry,
+  });
   const lifecycle = new QuitCoordinator({ app, channel: channels.appBeforeQuit });
-  const backupService = new BackupFileService({ dialog, getWindow: () => mainWindow });
+  const backupService = new BackupFileService({
+    dialog,
+    getWindow: () => mainWindow,
+    userDataPath: app.getPath("userData"),
+    providerRegistry,
+  });
+  await backupService.initialize();
   const localImageSearch = new LocalImageSearchController({
     userDataPath: app.getPath("userData"),
     dialog,
     shell,
     netFetch: net.fetch.bind(net),
     getWindow: () => mainWindow,
+    utilityProcess,
+    onEngineEvent: (event = {}) => {
+      const stage = `local-search:${String(event.stage || "engine-event")}`;
+      const details = {
+        operationId: event.requestId,
+        jobId: event.jobId,
+        workerExitCode: event.exitCode,
+        reason: event.role,
+        errorCode: event.errorCode,
+      };
+      if (["worker-exit", "request-timeout", "index-failed"].includes(event.stage)) {
+        runtimeLogger.warn(stage, { code: event.errorCode || event.stage }, details);
+      } else {
+        runtimeLogger.info(stage, details);
+      }
+    },
+  });
+  lifecycle.addFinalizer("desktop-services", async () => {
+    const results = await Promise.allSettled([
+      Promise.resolve().then(() => localImageSearch.dispose()),
+      Promise.resolve().then(() => networkClient.dispose()),
+      Promise.resolve().then(() => backupService.dispose?.()),
+      Promise.resolve().then(() => updater.dispose()),
+    ]);
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed) {
+      runtimeLogger.warn("quit-finalizer-failed", failed.reason);
+      return;
+    }
+    await runtimeLogger.markCleanShutdown();
   });
 
   mainWindow = new BrowserWindow(createSecureWindowOptions({ preloadPath, isPackaged: app.isPackaged }));
@@ -189,6 +247,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     shell,
     getWindow: () => mainWindow,
     credentialStore,
+    providerRegistry,
     networkClient,
     directoryTokens,
     backupService,
@@ -196,6 +255,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     lifecycle,
     environmentInfo,
     localImageSearch,
+    runtimeLogger,
   });
 
   const showMainWindowMaximized = () => {
@@ -205,8 +265,51 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   };
   mainWindow.once("ready-to-show", showMainWindowMaximized);
   mainWindow.on("closed", () => {
+    if (rendererRecoveryTimer) clearTimeout(rendererRecoveryTimer);
+    rendererRecoveryTimer = null;
+    networkClient.cancelOwner(rendererOwnerId);
+    void backupService.disposeOwner(rendererOwnerId);
     directoryTokens.revokeOwner(rendererOwnerId);
     mainWindow = null;
+  });
+  let rendererReloadAttempts = 0;
+  let rendererRecoveryTimer = null;
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    networkClient.cancelOwner(rendererOwnerId);
+    void backupService.disposeOwner(rendererOwnerId);
+    if (rendererRecoveryTimer) clearTimeout(rendererRecoveryTimer);
+    rendererRecoveryTimer = null;
+    const reason = String(details?.reason || "unknown");
+    runtimeLogger.error("renderer-process-gone", { code: reason }, {
+      reason,
+      workerExitCode: Number(details?.exitCode || 0),
+      reloadAttempt: rendererReloadAttempts,
+    });
+    if (lifecycle.allowQuit || !mainWindow || mainWindow.isDestroyed()) return;
+    if (rendererReloadAttempts < 1) {
+      rendererReloadAttempts += 1;
+      setImmediate(() => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.webContents.once("did-finish-load", () => {
+          showMainWindowMaximized();
+          rendererRecoveryTimer = setTimeout(() => {
+            rendererReloadAttempts = 0;
+            rendererRecoveryTimer = null;
+          }, 30_000);
+          rendererRecoveryTimer.unref?.();
+        });
+        mainWindow.reload();
+      });
+      return;
+    }
+    void dialog.showMessageBox(mainWindow, {
+      type: "error",
+      title: "NGR AssetPilot 需要重新启动",
+      message: "界面进程连续异常退出。为保护当前数据，软件已停止自动恢复。",
+      detail: "请关闭并重新打开软件；本地素材和图库原文件不会被删除。",
+      buttons: ["知道了"],
+      noLink: true,
+    });
   });
   try {
     await mainWindow.loadURL(APP_URL);
@@ -228,9 +331,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   });
   app.once("will-quit", () => {
     disposeIpc();
-    updater.dispose();
     lifecycle.dispose();
-    void localImageSearch.dispose();
   });
 }
 

@@ -4,6 +4,7 @@
 
   const WEBSITE_URL = "https://ngr.lttlt.top/";
   const HISTORY_URL = "https://github.com/907609732/NGR-AssetPilot-App/releases";
+  const FEEDBACK_FORM_URL = "https://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=1";
   const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
   let updateState = null;
   let desktopInfo = { isDesktop: false, version: APP_VERSION.replace(/^V/i, ""), isPortable: false };
@@ -28,6 +29,63 @@
   function versionLabel(value) {
     const clean = String(value || "").replace(/^v/i, "");
     return clean ? `V${clean}` : "—";
+  }
+
+  function formatRate(bytesPerSecond) {
+    const value = Number(bytesPerSecond);
+    return Number.isFinite(value) && value > 0 ? `${formatBytes(value)}/秒` : "正在测速…";
+  }
+
+  function getProgressViewModel(state = {}) {
+    const phase = String(state.phase || "");
+    const downloading = phase === "downloading";
+    const downloaded = phase === "downloaded";
+    const installing = phase === "installing";
+    const visible = downloading || downloaded || installing;
+    const rawPercent = Number(state.progress?.percent || 0);
+    const percent = downloaded || installing ? 100 : Math.max(0, Math.min(100, rawPercent));
+    const transferred = Number(state.progress?.transferred || 0);
+    const total = Number(state.progress?.total || state.downloadSize || 0);
+    if (installing) {
+      return {
+        visible,
+        active: true,
+        indeterminate: true,
+        percent,
+        percentLabel: "准备中",
+        title: "正在启动安装向导",
+        text: "正在保存工作区并移交给 Windows 安装程序",
+        detail: "软件将在片刻后关闭，随后请在安装向导中确认安装",
+        speed: "请勿关闭软件",
+        stages: { download: "complete", verify: "complete", install: "active" },
+      };
+    }
+    if (downloaded) {
+      return {
+        visible,
+        active: false,
+        indeterminate: false,
+        percent,
+        percentLabel: "100%",
+        title: "更新包准备完毕",
+        text: "下载与完整性检查已经完成",
+        detail: "点击“打开安装向导”后，由你确认安装路径和安装操作",
+        speed: "安全校验通过",
+        stages: { download: "complete", verify: "complete", install: "active" },
+      };
+    }
+    return {
+      visible,
+      active: downloading,
+      indeterminate: false,
+      percent,
+      percentLabel: `${Math.round(percent)}%`,
+      title: "正在安全下载更新",
+      text: `新版本 ${versionLabel(state.availableVersion)} 正在传输`,
+      detail: `${transferred > 0 ? formatBytes(transferred) : "0 B"} / ${formatBytes(total)}`,
+      speed: formatRate(state.progress?.bytesPerSecond),
+      stages: { download: "active", verify: "waiting", install: "waiting" },
+    };
   }
 
   function isUpdateKnown() {
@@ -64,7 +122,7 @@
         available: `发现新版本 ${versionLabel(updateState.availableVersion)}。`,
         downloading: `正在下载新版本：${Math.round(updateState.progress?.percent || 0)}%。`,
         downloaded: "新版本已下载，可以重启安装。",
-        installing: "正在退出并安装新版本…",
+        installing: "正在保存工作区并启动安装向导…",
         error: "更新操作失败，可重试或前往官网下载。",
       };
       els.manualUpdateStatus.textContent = status[updateState.phase] || "更新状态未知。";
@@ -78,18 +136,33 @@
     if (els.updateDownloadSize) els.updateDownloadSize.textContent = formatBytes(updateState.downloadSize);
     if (els.updateReleaseDate) els.updateReleaseDate.textContent = formatReleaseDate(updateState.releaseDate);
     if (els.updateReleaseNotes) els.updateReleaseNotes.textContent = updateState.releaseNotes || "暂无更新说明";
-    const percent = Math.max(0, Math.min(100, Number(updateState.progress?.percent || 0)));
-    const showProgress = ["downloading", "downloaded"].includes(updateState.phase);
-    els.updateProgressWrap?.classList.toggle("hidden", !showProgress);
-    if (els.updateProgress) els.updateProgress.value = percent;
-    if (els.updateProgressText) els.updateProgressText.textContent = updateState.phase === "downloaded" ? "下载完成" : `已下载 ${Math.round(percent)}%`;
+    const progressView = getProgressViewModel(updateState);
+    els.updateProgressWrap?.classList.toggle("hidden", !progressView.visible);
+    els.updateProgressWrap?.classList.toggle("is-active", progressView.active);
+    els.updateProgressWrap?.classList.toggle("is-indeterminate", progressView.indeterminate);
+    if (els.updateProgressTitle) els.updateProgressTitle.textContent = progressView.title;
+    if (els.updateProgressText) els.updateProgressText.textContent = progressView.text;
+    if (els.updateProgressPercent) els.updateProgressPercent.textContent = progressView.percentLabel;
+    if (els.updateProgressBar) els.updateProgressBar.style.setProperty("--update-progress", `${progressView.percent}%`);
+    if (els.updateProgressTrack) {
+      els.updateProgressTrack.setAttribute("aria-valuenow", String(Math.round(progressView.percent)));
+      els.updateProgressTrack.setAttribute("aria-valuetext", progressView.text);
+    }
+    if (els.updateProgressDetail) els.updateProgressDetail.textContent = progressView.detail;
+    if (els.updateProgressSpeed) els.updateProgressSpeed.textContent = progressView.speed;
+    els.updateStageList?.querySelectorAll("[data-update-stage]").forEach((node) => {
+      node.dataset.state = progressView.stages[node.dataset.updateStage] || "waiting";
+    });
+    const busy = ["downloading", "installing"].includes(updateState.phase);
+    els.updateDialogOverlay?.querySelector(".update-dialog")?.setAttribute("data-update-busy", String(busy));
+    if (els.updateDialogClose) els.updateDialogClose.disabled = busy;
     if (els.updatePrimaryAction) {
       const portable = Boolean(desktopInfo.isPortable);
       const actions = {
         available: portable ? "前往官网下载" : "下载更新",
         downloading: "正在下载…",
-        downloaded: "重启并安装",
-        installing: "正在安装…",
+        downloaded: "打开安装向导",
+        installing: "正在启动安装向导…",
         error: portable ? "前往官网下载" : "重新下载",
       };
       els.updatePrimaryAction.textContent = actions[updateState.phase] || "检查更新";
@@ -106,6 +179,7 @@
   }
 
   function closeUpdateDialog() {
+    if (["downloading", "installing"].includes(updateState?.phase)) return;
     els.updateDialogOverlay?.classList.add("hidden");
     els.updateDialogOverlay?.setAttribute("aria-hidden", "true");
   }
@@ -142,7 +216,9 @@
     if (desktopInfo.isPortable || !updateState.enabled) return openTrustedExternal(updateState.websiteUrl || WEBSITE_URL);
     try {
       if (updateState.phase === "downloaded") {
-        if (!globalScope.confirm("新版本已经下载完成，是否立即退出软件并安装？")) return;
+        if (!globalScope.confirm("将关闭软件并打开安装向导，你可以再次确认安装路径和安装操作。是否继续？")) return;
+        updateState = { ...updateState, phase: "installing" };
+        renderUpdateState();
         await NgrDesktopBridge.installUpdate();
         return;
       }
@@ -163,6 +239,7 @@
     if (controlsBound) return;
     controlsBound = true;
     els.updateAvailableButton?.addEventListener("click", openUpdateDialog);
+    els.feedbackFormLink?.addEventListener("click", () => void openTrustedExternal(FEEDBACK_FORM_URL));
     els.updateDialogClose?.addEventListener("click", closeUpdateDialog);
     els.updateDialogOverlay?.addEventListener("click", (event) => {
       if (event.target === els.updateDialogOverlay) closeUpdateDialog();
@@ -206,5 +283,5 @@
   });
   globalScope.syncUpdateButtonVisibility = syncUpdateButtonVisibility;
   globalScope.initializeUpdates = initializeUpdates;
-  globalScope.NgrUpdateUi = Object.freeze({ formatBytes, formatReleaseDate, versionLabel });
+  globalScope.NgrUpdateUi = Object.freeze({ formatBytes, formatRate, formatReleaseDate, getProgressViewModel, versionLabel });
 })(window);

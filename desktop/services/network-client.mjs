@@ -153,39 +153,108 @@ function exposedHeaders(headers) {
 }
 
 export class NetworkClient {
-  constructor({ fetchImpl }) {
+  constructor({ fetchImpl, providerRegistry = null }) {
     if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl is required");
     this.fetchImpl = fetchImpl;
+    this.providerRegistry = providerRegistry;
+    this.active = new Map();
   }
 
-  async request(input) {
+  #requestKey(ownerId, requestId) {
+    const owner = Number(ownerId);
+    const id = String(requestId || "");
+    if (!Number.isSafeInteger(owner) || owner < 1 || !/^[A-Za-z0-9_-]{8,128}$/.test(id)) {
+      throw new DesktopError("NETWORK_REQUEST_ID_INVALID", "网络请求标识无效");
+    }
+    return `${owner}:${id}`;
+  }
+
+  cancel(input, ownerId) {
+    if (!isPlainRecord(input)) throw new DesktopError("NETWORK_REQUEST_INVALID", "网络取消请求格式无效");
+    const key = this.#requestKey(ownerId, input.requestId);
+    const active = this.active.get(key);
+    if (!active) return { canceled: false, requestId: input.requestId };
+    active.canceled = true;
+    active.controller.abort();
+    return { canceled: true, requestId: input.requestId };
+  }
+
+  cancelOwner(ownerId) {
+    const prefix = `${Number(ownerId)}:`;
+    let canceled = 0;
+    for (const [key, active] of this.active) {
+      if (!key.startsWith(prefix)) continue;
+      active.canceled = true;
+      active.controller.abort();
+      canceled += 1;
+    }
+    return canceled;
+  }
+
+  dispose() {
+    for (const active of this.active.values()) {
+      active.canceled = true;
+      active.controller.abort();
+    }
+    this.active.clear();
+  }
+
+  async request(input, ownerId = 1) {
     if (!isPlainRecord(input)) {
       throw new DesktopError("NETWORK_REQUEST_INVALID", "网络请求格式无效");
     }
-    const service = input.service;
-    let currentUrl = validateNetworkUrl(input.url, service);
-    let method = String(input.method || "GET").toUpperCase();
-    if (!ALLOWED_METHODS.has(method)) {
-      throw new DesktopError("NETWORK_METHOD_NOT_ALLOWED", "网络请求方法未获授权");
-    }
-
-    const headers = normalizeHeaders(input.headers);
-    let body = normalizeBody(input.body, headers);
-    if ((method === "GET" || method === "HEAD") && body !== undefined) {
-      throw new DesktopError("NETWORK_BODY_INVALID", "GET/HEAD 请求不能携带请求体");
-    }
-
-    const maximumTimeout = service === "translation" ? 30_000 : 120_000;
-    const requestedTimeout = input.timeoutMs === undefined ? maximumTimeout : Number(input.timeoutMs);
-    if (!Number.isFinite(requestedTimeout) || requestedTimeout < 1_000) {
-      throw new DesktopError("NETWORK_TIMEOUT_INVALID", "网络超时设置无效");
-    }
-    const timeoutMs = Math.min(Math.trunc(requestedTimeout), maximumTimeout);
+    const key = this.#requestKey(ownerId, input.requestId || "legacy-req");
+    if (this.active.has(key)) throw new DesktopError("NETWORK_REQUEST_DUPLICATE", "网络请求标识正在使用");
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    timer.unref?.();
+    const active = { controller, canceled: false, timedOut: false };
+    this.active.set(key, active);
+    let timer = null;
 
     try {
+      let provider = null;
+      let service;
+      let currentUrl;
+      let method;
+      let headers;
+      let body;
+      let maximumTimeout;
+      if (this.providerRegistry) {
+        if (!input.providerId) throw new DesktopError("PROVIDER_REQUIRED", "网络请求必须使用已授权的模型服务");
+        const resolved = await this.providerRegistry.resolveRequest(input);
+        provider = resolved.provider;
+        service = provider.service;
+        currentUrl = resolved.url;
+        method = resolved.method;
+        headers = normalizeHeaders(resolved.headers);
+        body = normalizeBody(resolved.body, headers);
+        maximumTimeout = resolved.maximumTimeout;
+      } else {
+        service = input.service;
+        currentUrl = validateNetworkUrl(input.url, service);
+        method = String(input.method || "GET").toUpperCase();
+        if (!ALLOWED_METHODS.has(method)) {
+          throw new DesktopError("NETWORK_METHOD_NOT_ALLOWED", "网络请求方法未获授权");
+        }
+        headers = normalizeHeaders(input.headers);
+        body = normalizeBody(input.body, headers);
+        maximumTimeout = service === "translation" ? 30_000 : 120_000;
+      }
+      if (controller.signal.aborted) throw new DesktopError("NETWORK_CANCELED", "网络请求已取消");
+      if ((method === "GET" || method === "HEAD") && body !== undefined) {
+        throw new DesktopError("NETWORK_BODY_INVALID", "GET/HEAD 请求不能携带请求体");
+      }
+
+      const requestedTimeout = input.timeoutMs === undefined ? maximumTimeout : Number(input.timeoutMs);
+      if (!Number.isFinite(requestedTimeout) || requestedTimeout < 1_000) {
+        throw new DesktopError("NETWORK_TIMEOUT_INVALID", "网络超时设置无效");
+      }
+      const timeoutMs = Math.min(Math.trunc(requestedTimeout), maximumTimeout);
+      timer = setTimeout(() => {
+        active.timedOut = true;
+        controller.abort();
+      }, timeoutMs);
+      timer.unref?.();
+
       for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
         let response;
         try {
@@ -198,6 +267,7 @@ export class NetworkClient {
           });
         } catch (error) {
           if (controller.signal.aborted) {
+            if (active.canceled) throw new DesktopError("NETWORK_CANCELED", "网络请求已取消");
             throw new DesktopError("NETWORK_TIMEOUT", "网络请求超时");
           }
           throw new DesktopError("NETWORK_REQUEST_FAILED", "网络请求失败");
@@ -211,8 +281,13 @@ export class NetworkClient {
           if (!location) {
             throw new DesktopError("NETWORK_REDIRECT_INVALID", "网络重定向缺少目标地址");
           }
-          const nextUrl = validateNetworkUrl(new URL(location, currentUrl).href, service);
-          if (nextUrl.origin !== currentUrl.origin) {
+          const nextUrl = this.providerRegistry
+            ? new URL(location, currentUrl)
+            : validateNetworkUrl(new URL(location, currentUrl).href, service);
+          if (
+            nextUrl.origin !== currentUrl.origin ||
+            (provider && !this.providerRegistry.isRedirectAuthorized(provider, nextUrl))
+          ) {
             throw new DesktopError("NETWORK_CROSS_ORIGIN_REDIRECT", "已阻止跨来源网络重定向");
           }
           if (response.status === 303 || ((response.status === 301 || response.status === 302) && method === "POST")) {
@@ -224,7 +299,16 @@ export class NetworkClient {
           continue;
         }
 
-        const bodyText = method === "HEAD" ? "" : await readBoundedBody(response, controller);
+        let bodyText;
+        try {
+          bodyText = method === "HEAD" ? "" : await readBoundedBody(response, controller);
+        } catch (error) {
+          if (controller.signal.aborted && !(error instanceof DesktopError)) {
+            if (active.canceled) throw new DesktopError("NETWORK_CANCELED", "网络请求已取消");
+            throw new DesktopError("NETWORK_TIMEOUT", "网络请求超时");
+          }
+          throw error;
+        }
         return {
           ok: Boolean(response.ok),
           status: Number(response.status),
@@ -235,8 +319,17 @@ export class NetworkClient {
         };
       }
       throw new DesktopError("NETWORK_TOO_MANY_REDIRECTS", "网络重定向次数过多");
+    } catch (error) {
+      if (active.canceled && error?.code !== "NETWORK_CANCELED") {
+        throw new DesktopError("NETWORK_CANCELED", "网络请求已取消");
+      }
+      if (active.timedOut && error?.code !== "NETWORK_TIMEOUT") {
+        throw new DesktopError("NETWORK_TIMEOUT", "网络请求超时");
+      }
+      throw error;
     } finally {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
+      this.active.delete(key);
     }
   }
 }
