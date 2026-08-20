@@ -97,13 +97,13 @@ module.exports = {
     legalTrademarks: productName,
   },
   nsis: {
-    // Keep this identity and install location stable across every production
-    // release so both a manual setup and electron-updater replace the old app.
+    // Keep the identity stable, while manual launches use the assisted wizard.
+    // electron-updater still supplies /S and the current install directory.
     guid: installerGuid,
-    oneClick: true,
+    oneClick: false,
     perMachine: false,
     allowElevation: false,
-    allowToChangeInstallationDirectory: false,
+    allowToChangeInstallationDirectory: true,
     runAfterFinish: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
