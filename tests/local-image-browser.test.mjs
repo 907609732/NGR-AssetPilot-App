@@ -137,7 +137,7 @@ test("本地搜图默认素材库支持文件夹、100张分页、筛选和快�
     await window.locator("#localSearchReturnToLibrary").click();
     await window.waitForFunction(() => window.NgrLocalImageBrowser.getMode() === "browse");
     assert.equal(await window.locator("#localSearchBrowser").isVisible(), true);
-    assert.equal(await window.evaluate(() => document.activeElement?.id), "localSearchContentTitle");
+    await window.waitForFunction(() => document.activeElement?.id === "localSearchContentTitle");
   } finally {
     await electronApp.close();
     fs.rmSync(runRoot, { recursive: true, force: true });

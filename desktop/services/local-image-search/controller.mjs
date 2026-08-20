@@ -767,7 +767,9 @@ export class LocalImageSearchController {
     const cached = await stat(outputPath).catch(() => null);
     if (!cached?.isFile()) {
       await this.acquireThumbnailSlot();
-      const temporaryPath = `${outputPath}.part-${randomUUID()}`;
+      // Keep the temporary basename short so deeply nested Windows CI/user-data
+      // paths stay below legacy MAX_PATH while the final cache key remains stable.
+      const temporaryPath = path.join(thumbnailDirectory, `.${imageId}-${randomUUID().slice(0, 8)}.tmp`);
       try {
         const racedCache = await stat(outputPath).catch(() => null);
         if (!racedCache?.isFile()) {
