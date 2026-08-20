@@ -410,10 +410,11 @@ function captureDroppedItem(item) {
   let entry = null;
   let file = null;
   try {
-    handlePromise = item.getAsFileSystemHandle?.() || null;
+    const pendingHandle = item.getAsFileSystemHandle?.() || null;
+    handlePromise = pendingHandle ? Promise.resolve(pendingHandle).catch(() => null) : null;
   } catch {}
   try {
-    entry = item.webkitGetAsEntry?.() || null;
+    entry = item.getAsEntry?.() || item.webkitGetAsEntry?.() || null;
   } catch {}
   try {
     file = item.getAsFile?.() || null;
@@ -422,11 +423,26 @@ function captureDroppedItem(item) {
 }
 
 async function readDroppedItem({ handlePromise, entry, file }) {
+  if (entry) {
+    // Electron's Chromium directory-entry API is tied directly to the native
+    // Explorer drag payload and has proved more reliable than the newer File
+    // System Access handle for recursive folder drops. Prefer it, but retain
+    // the standards-based handle as a fallback for other Chromium runtimes.
+    const entryFiles = await Promise.resolve().then(() => readEntryFiles(entry)).catch(() => []);
+    if (entryFiles.length) return entryFiles;
+  }
   if (handlePromise) {
     const handle = await Promise.resolve(handlePromise).catch(() => null);
-    if (handle) return readFileSystemHandleFiles(handle, []);
+    if (handle) {
+      // Chromium can resolve a native directory handle but reject traversal
+      // afterwards (for example when the dropped Explorer item has no usable
+      // File System Access permission). The legacy entry was captured during
+      // the same drop tick, so keep it as a real fallback instead of aborting
+      // the whole folder import.
+      const handleFiles = await readFileSystemHandleFiles(handle, []).catch(() => []);
+      if (handleFiles.length) return handleFiles;
+    }
   }
-  if (entry) return readEntryFiles(entry);
   return file ? [file] : [];
 }
 
