@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.2 module: updates.js */
+/* NGR AssetPilot updater UI */
 (function initializeUpdateUiModule(globalScope) {
   "use strict";
 
@@ -52,7 +52,9 @@
   function renderUpdateState() {
     if (!updateState) return;
     const currentVersion = updateState.currentVersion || desktopInfo.version;
-    if (els.currentAppVersion) els.currentAppVersion.textContent = versionLabel(currentVersion);
+    document.querySelectorAll("[data-app-version]").forEach((node) => {
+      node.textContent = versionLabel(currentVersion);
+    });
     if (els.manualUpdateStatus) {
       const status = {
         disabled: desktopInfo.isDesktop ? "当前运行方式不支持应用内更新，可前往官网下载。" : "网页版不支持应用内更新。",

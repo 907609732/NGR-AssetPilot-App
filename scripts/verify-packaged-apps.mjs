@@ -9,7 +9,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const runRoot = path.join(projectRoot, ".tmp", `packaged-smoke-${Date.now()}`);
 const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 const allTargets = [
-  { edition: "prod", product: "NGR AssetPilot", executable: "NGR AssetPilot.exe", artifact: `NGR-AssetPilot-${packageJson.version}-portable-x64.exe`, badge: null },
+  { edition: "prod", product: "NGR AssetPilot", executable: "NGR AssetPilot.exe", artifact: null, badge: null },
   { edition: "dev", product: "NGR AssetPilot Dev", executable: "NGR AssetPilot Dev.exe", artifact: `NGR-AssetPilot-Dev-${packageJson.version}-portable-x64.exe`, badge: "DEV 开发版" },
   { edition: "test", product: "NGR AssetPilot Test", executable: "NGR AssetPilot Test.exe", artifact: `NGR-AssetPilot-Test-${packageJson.version}-portable-x64.exe`, badge: "TEST 测试版" },
 ];
@@ -39,6 +39,7 @@ async function verifyTarget(target) {
       model: await window.ngrDesktop.localImageSearch.getModelStatus(),
       badge: document.querySelector("#editionBadge")?.textContent,
       badgeHidden: document.querySelector("#editionBadge")?.classList.contains("hidden"),
+      appVersionTexts: [...document.querySelectorAll("[data-app-version]")].map((node) => node.textContent),
       title: document.title,
       nodeRequireType: typeof window.require,
     }));
@@ -46,6 +47,8 @@ async function verifyTarget(target) {
     assert.equal(state.info.distribution, "installer");
     assert.equal(state.info.updaterEnabled, target.edition === "prod");
     assert.equal(state.info.updaterChannel, target.edition === "prod" ? "latest" : target.edition);
+    assert.ok(state.appVersionTexts.length > 0);
+    assert.deepEqual([...new Set(state.appVersionTexts)], [`V${packageJson.version}`]);
     if (target.badge) {
       assert.match(state.badge, new RegExp(target.badge));
       assert.equal(state.badgeHidden, false);
@@ -59,9 +62,13 @@ async function verifyTarget(target) {
     assert.equal(state.credentials.configured, false);
     assert.equal(typeof state.model.ready, "boolean");
 
-    const portablePath = path.join(projectRoot, "artifacts", target.edition, target.artifact);
-    const portableStats = fs.statSync(portablePath);
-    assert.ok(portableStats.size > 10 * 1024 * 1024, `${target.product} 便携包大小异常`);
+    let portableBytes = null;
+    if (target.artifact) {
+      const portablePath = path.join(projectRoot, "artifacts", target.edition, target.artifact);
+      const portableStats = fs.statSync(portablePath);
+      assert.ok(portableStats.size > 10 * 1024 * 1024, `${target.product} 便携包大小异常`);
+      portableBytes = portableStats.size;
+    }
 
     if (target.edition === "prod") {
       const resourcesPath = path.join(projectRoot, "artifacts", "prod", "win-unpacked", "resources");
@@ -83,7 +90,7 @@ async function verifyTarget(target) {
       assert.ok(latest.includes(`sha512: ${installerSha512}`));
       assert.equal(fs.existsSync(`${installerPath}.blockmap`), true);
     }
-    process.stdout.write(`${JSON.stringify({ edition: target.edition, product: target.product, packagedSmoke: true, portableBytes: portableStats.size })}\n`);
+    process.stdout.write(`${JSON.stringify({ edition: target.edition, product: target.product, packagedSmoke: true, portableBytes })}\n`);
   } finally {
     await electronApp.close();
   }

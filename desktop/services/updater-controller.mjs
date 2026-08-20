@@ -207,7 +207,9 @@ export class UpdaterController {
       throw new DesktopError("UPDATE_NOT_DOWNLOADED", "更新尚未下载完成");
     }
     this.#patch({ phase: "installing" });
-    setImmediate(() => this.autoUpdater.quitAndInstall(false, true));
+    // Silent mode is required for a downloaded NSIS update to replace the
+    // current per-user installation instead of reopening the setup wizard.
+    setImmediate(() => this.autoUpdater.quitAndInstall(true, true));
     return { accepted: true };
   }
 

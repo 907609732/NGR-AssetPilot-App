@@ -57,6 +57,10 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.equal(environment.platform, "win32");
     assert.equal(environment.edition, "dev");
     assert.equal(environment.distribution, "development");
+    await window.waitForFunction((version) => (
+      [...document.querySelectorAll("[data-app-version]")]
+        .every((node) => node.textContent === `V${version}`)
+    ), environment.version);
     await waitForMaximizedWindow(electronApp);
 
     const renderer = await window.evaluate(() => ({

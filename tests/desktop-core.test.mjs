@@ -359,7 +359,9 @@ test("updater is disabled for non-installer builds and uses an explicit download
       this.emit("download-progress", { percent: 50, transferred: 5, total: 10, bytesPerSecond: 2 });
       this.emit("update-downloaded", { version: "3.0.2" });
     }
-    quitAndInstall() {}
+    quitAndInstall(...args) {
+      this.quitAndInstallArgs = args;
+    }
   }
   const fake = new FakeUpdater();
   const updater = new UpdaterController({
@@ -387,6 +389,8 @@ test("updater is disabled for non-installer builds and uses an explicit download
   });
   assert.equal((await updater.download()).phase, "downloaded");
   assert.equal(updater.install().accepted, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(fake.quitAndInstallArgs, [true, true]);
   assert.ok(states.some((state) => state.phase === "downloading"));
   unsubscribe();
   updater.dispose();

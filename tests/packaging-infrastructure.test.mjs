@@ -45,6 +45,16 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
   assert.equal(prod.productName, "NGR AssetPilot");
   assert.equal(dev.productName, "NGR AssetPilot Dev");
   assert.equal(testConfig.productName, "NGR AssetPilot Test");
+  assert.equal(prod.nsis.guid, "3b6eb1bd-e46d-5424-a667-f8c65639ec5e");
+  assert.equal(dev.nsis.guid, "272695ec-f969-5e42-a779-b51db392d233");
+  assert.equal(testConfig.nsis.guid, "d6e22a5c-0be8-54e8-9315-5a7bb7c4dc98");
+  assert.equal(new Set([prod.nsis.guid, dev.nsis.guid, testConfig.nsis.guid]).size, 3);
+  assert.equal(prod.nsis.oneClick, true);
+  assert.equal(prod.nsis.allowToChangeInstallationDirectory, false);
+  assert.equal(prod.nsis.perMachine, false);
+  assert.deepEqual(prod.win.target, [{ target: "nsis", arch: ["x64"] }]);
+  assert.deepEqual(dev.win.target.map(({ target }) => target), ["nsis", "portable"]);
+  assert.deepEqual(testConfig.win.target.map(({ target }) => target), ["nsis", "portable"]);
   assert.equal(prod.extraMetadata.main, "desktop/main/prod-index.mjs");
   assert.equal(dev.extraMetadata.main, "desktop/main/index.mjs");
   assert.equal(testConfig.extraMetadata.main, "desktop/main/test-index.mjs");

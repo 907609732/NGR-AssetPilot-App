@@ -32,7 +32,7 @@ npm run build:test
 npm run build:all
 ```
 
-三版都会生成 Setup 与 portable x64 EXE、SBOM、SHA-256 和构建清单，均不内置平台 API 凭据。正式版不显示 DEV/TEST 徽标。
+正式版只生成支持应用内自动更新的 Setup x64 安装包；开发版和测试版额外生成 portable x64 EXE 供内部调试。三版都会生成 SBOM、SHA-256 和构建清单，均不内置平台 API 凭据。正式版不显示 DEV/TEST 徽标。
 
 ## 本地 AI 搜图与纯离线使用
 

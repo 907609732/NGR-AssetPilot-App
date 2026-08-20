@@ -10,6 +10,7 @@ const editionConfig = {
     packageName: "ngr-assetpilot",
     main: "desktop/main/prod-index.mjs",
     artifactBase: `NGR-AssetPilot-${packageJson.version}`,
+    installerGuid: "3b6eb1bd-e46d-5424-a667-f8c65639ec5e",
   },
   dev: {
     appId: "com.chenyuecai.ngrassetpilot.dev",
@@ -17,6 +18,7 @@ const editionConfig = {
     packageName: "ngr-assetpilot-dev",
     main: "desktop/main/index.mjs",
     artifactBase: `NGR-AssetPilot-Dev-${packageJson.version}`,
+    installerGuid: "272695ec-f969-5e42-a779-b51db392d233",
   },
   test: {
     appId: "com.chenyuecai.ngrassetpilot.test",
@@ -24,11 +26,12 @@ const editionConfig = {
     packageName: "ngr-assetpilot-test",
     main: "desktop/main/test-index.mjs",
     artifactBase: `NGR-AssetPilot-Test-${packageJson.version}`,
+    installerGuid: "d6e22a5c-0be8-54e8-9315-5a7bb7c4dc98",
   },
 }[edition];
 if (!editionConfig) throw new Error('NGR_BUILD_EDITION 必须是 prod、dev 或 test');
 
-const { appId, productName, packageName, main, artifactBase } = editionConfig;
+const { appId, productName, packageName, main, artifactBase, installerGuid } = editionConfig;
 const publish = edition === "prod"
   ? [{
       provider: "github",
@@ -38,6 +41,12 @@ const publish = edition === "prod"
       releaseType: "release",
     }]
   : null;
+const windowsTargets = edition === "prod"
+  ? [{ target: "nsis", arch: ["x64"] }]
+  : [
+      { target: "nsis", arch: ["x64"] },
+      { target: "portable", arch: ["x64"] },
+    ];
 
 module.exports = {
   appId,
@@ -83,18 +92,19 @@ module.exports = {
   extraResources: [],
   win: {
     icon: path.join(projectRoot, "build", "icon.ico"),
-    target: [
-      { target: "nsis", arch: ["x64"] },
-      { target: "portable", arch: ["x64"] },
-    ],
+    target: windowsTargets,
     verifyUpdateCodeSignature: false,
     legalTrademarks: productName,
   },
   nsis: {
-    oneClick: false,
+    // Keep this identity and install location stable across every production
+    // release so both a manual setup and electron-updater replace the old app.
+    guid: installerGuid,
+    oneClick: true,
     perMachine: false,
     allowElevation: false,
-    allowToChangeInstallationDirectory: true,
+    allowToChangeInstallationDirectory: false,
+    runAfterFinish: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: productName,
