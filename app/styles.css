@@ -3251,6 +3251,15 @@ button:disabled {
   gap: 8px;
 }
 
+.local-search-text-actions {
+  margin: 8px 0 0;
+}
+
+.local-search-text-actions .ghost-action {
+  min-height: 34px;
+  padding: 0 14px;
+}
+
 .local-search-text-row input {
   min-width: 0;
   min-height: 40px;

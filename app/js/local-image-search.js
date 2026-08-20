@@ -29,7 +29,7 @@
       "localSearchRemoveLibrary", "localSearchScanned", "localSearchAnalyzed", "localSearchReused", "localSearchSkipped",
       "localSearchErrors", "localSearchImageTab", "localSearchTextTab", "localSearchImagePanel", "localSearchTextPanel",
       "localSearchDropzone", "localSearchImageInput", "localSearchQueryPreview", "localSearchTextInput",
-      "localSearchTextSubmit", "localSearchQueryStatus", "localSearchResultCount", "localSearchResults",
+      "localSearchTextSubmit", "localSearchClearTextQuery", "localSearchQueryStatus", "localSearchResultCount", "localSearchResults",
       "localSearchClearImageQuery",
       "localSearchResultsEmpty", "localSearchLibrarySelect", "localSearchGuideOverlay", "localSearchGuideClose", "localSearchGuideStart",
     ].forEach((id) => { nodes[id] = $(`#${id}`); });
@@ -393,6 +393,13 @@
     showStatus("已清除查询图片，恢复到默认搜索态。", "");
   }
 
+  function clearTextQuery() {
+    if (nodes.localSearchTextInput) nodes.localSearchTextInput.value = "";
+    if (nodes.localSearchClearTextQuery) nodes.localSearchClearTextQuery.disabled = true;
+    clearResults();
+    showStatus("已清空文字查询，恢复到默认搜索态。", "");
+  }
+
   function clearResults() {
     clearResultUrls();
     nodes.localSearchResults.replaceChildren();
@@ -456,6 +463,7 @@
     if (!text) return showStatus("请输入要搜索的中文或英文描述。", "error");
     if (!state.activeLibraryId) return showStatus("请先选择图库。", "error");
     showStatus("正在本地计算文字向量并精确搜索…", "working");
+    if (nodes.localSearchClearTextQuery) nodes.localSearchClearTextQuery.disabled = false;
     try {
       const result = await bridge().searchByText({ libraryId: state.activeLibraryId, text });
       await renderResults(result);
@@ -497,6 +505,17 @@
     nodes.localSearchClearImageQuery?.addEventListener("click", (event) => {
       event.stopPropagation();
       clearImageQuery();
+    });
+    nodes.localSearchClearTextQuery?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      clearTextQuery();
+    });
+    nodes.localSearchTextInput?.addEventListener("input", () => {
+      nodes.localSearchClearTextQuery.disabled = !(nodes.localSearchTextInput.value || "").trim();
+      if (!nodes.localSearchTextInput.value) {
+        nodes.localSearchQueryStatus.dataset.tone = "";
+      }
     });
     document.addEventListener("paste", (event) => {
       if (!$("#localImageSearchView")?.classList.contains("active")) return;

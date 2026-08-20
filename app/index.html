@@ -163,7 +163,7 @@
                     <input id="localSearchImageInput" type="file" accept="image/*" />
                     <img class="hidden" id="localSearchQueryPreview" alt="查询图片预览" />
                     <div class="local-search-dropzone-actions">
-                      <button class="ghost-action" id="localSearchClearImageQuery" type="button" disabled>清除查询图</button>
+                      <button class="ghost-action" id="localSearchClearImageQuery" type="button" disabled>清空查询</button>
                     </div>
                   </div>
                 </div>
@@ -171,6 +171,9 @@
                   <div class="local-search-text-row">
                     <input id="localSearchTextInput" type="text" maxlength="200" placeholder="例如：红色跑车、blue ocean sunset" />
                     <button class="primary-action" id="localSearchTextSubmit" type="button">搜索</button>
+                  </div>
+                  <div class="local-search-text-actions">
+                    <button class="ghost-action" id="localSearchClearTextQuery" type="button" disabled>清空查询</button>
                   </div>
                   <small>支持中文和英文，最多 200 字符。</small>
                 </div>
