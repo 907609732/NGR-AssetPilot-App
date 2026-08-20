@@ -34,6 +34,26 @@ test("桌面依赖版本全部精确锁定", () => {
   assert.equal(packageJson.scripts["build:test"], "node scripts/run-build.mjs test");
 });
 
+test("应用版本、界面标识和静态资源缓存版本保持一致", () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+  const packageLock = JSON.parse(fs.readFileSync(path.join(projectRoot, "package-lock.json"), "utf8"));
+  const appConfig = fs.readFileSync(path.join(projectRoot, "app", "js", "config.js"), "utf8");
+  const appIndex = fs.readFileSync(path.join(projectRoot, "app", "index.html"), "utf8");
+  const escapedVersion = packageJson.version.replaceAll(".", "\\.");
+
+  assert.equal(packageLock.version, packageJson.version);
+  assert.equal(packageLock.packages[""].version, packageJson.version);
+  assert.match(appConfig, new RegExp(`const APP_VERSION = "V${escapedVersion}";`));
+
+  const visibleVersions = [...appIndex.matchAll(/data-app-version[^>]*>V(\d+\.\d+\.\d+)</g)].map((match) => match[1]);
+  assert.equal(visibleVersions.length, 3);
+  assert.deepEqual([...new Set(visibleVersions)], [packageJson.version]);
+
+  const cacheVersions = [...appIndex.matchAll(/[?&]v=V(\d+\.\d+\.\d+)/g)].map((match) => match[1]);
+  assert.equal(cacheVersions.length, 21);
+  assert.deepEqual([...new Set(cacheVersions)], [packageJson.version]);
+});
+
 test("正式版、开发版和测试版身份、入口、数据与产物完全隔离", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
   const prod = loadBuilderConfig("prod");
