@@ -125,12 +125,18 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.doesNotMatch(preloadSource, /require\(["']\.\.?[\\/]/, "sandboxed preload must be self-contained");
   assert.equal(typeof exposed.credentials.set, "function");
   assert.equal(typeof exposed.files.writeFile, "function");
-    assert.equal(typeof exposed.localImageSearch.searchByImage, "function");
-    assert.equal(typeof exposed.localImageSearch.importModel, "function");
-    assert.equal(typeof exposed.localImageSearch.exportModel, "function");
+  assert.equal(typeof exposed.localImageSearch.searchByImage, "function");
+  assert.equal(typeof exposed.localImageSearch.importModel, "function");
+  assert.equal(typeof exposed.localImageSearch.exportModel, "function");
+  assert.equal(typeof exposed.localImageSearch.listModels, "function");
+  assert.equal(typeof exposed.localImageSearch.validateModel, "function");
+  assert.equal(typeof exposed.localImageSearch.setActiveModel, "function");
+  assert.equal(typeof exposed.localImageSearch.getEngineStatus, "function");
   assert.equal(typeof exposed.app.onBeforeQuit, "function");
   await exposed.shell.openExternal({ url: "https://example.com" });
   assert.deepEqual(calls.at(-1), [ipcChannels.shellOpenExternal, { url: "https://example.com" }]);
+  await exposed.localImageSearch.setActiveModel({ modelId: "custom-model" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchSetActiveModel, { modelId: "custom-model" }]);
 });
 
 test("IPC handlers reject non-main-frame and non-app senders", async () => {

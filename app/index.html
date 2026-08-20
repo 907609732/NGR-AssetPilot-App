@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.3" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.4" />
   </head>
   <body>
     <div id="app">
@@ -15,7 +15,7 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.3</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.4</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
@@ -61,7 +61,7 @@
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.3</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.4</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
@@ -98,21 +98,42 @@
 
           <div class="local-search-layout" id="localSearchDesktopContent">
             <aside class="local-search-sidebar">
-              <section class="local-search-card">
+              <section class="local-search-card local-search-model-card">
                 <div class="local-search-card-head">
-                  <div><strong>本地模型</strong><small id="localSearchModelSummary">约 225 MB，首次使用需下载</small></div>
+                  <div><strong>本地模型</strong><small id="localSearchModelSummary">正在读取可用模型…</small></div>
                   <span class="local-search-state" id="localSearchModelState">检查中</span>
                 </div>
-                <progress id="localSearchModelProgress" max="100" value="0"></progress>
-                  <div class="action-row compact-actions">
-                    <button class="primary-action" id="localSearchDownloadModel" type="button">下载模型</button>
-                    <button class="ghost-action" id="localSearchImportModel" type="button">导入离线包</button>
-                    <button class="ghost-action hidden" id="localSearchExportModel" type="button">导出离线包</button>
-                    <button class="danger-action hidden" id="localSearchCancelDownload" type="button">取消</button>
-                  <button class="ghost-action hidden" id="localSearchRetryDownload" type="button">重试</button>
-                  <button class="danger-action hidden" id="localSearchRemoveModel" type="button">删除本地模型</button>
+                <div class="local-search-model-picker">
+                  <label>
+                    <span>当前模型</span>
+                    <select id="localSearchModelSelect" aria-label="当前本地搜图模型"></select>
+                  </label>
+                  <button class="ghost-action" id="localSearchManageModels" type="button">模型管理</button>
                 </div>
-                  <p class="local-search-privacy">纯离线电脑可导入 .ngrmodel 模型包；导入时会校验固定版本、文件大小和 SHA-256。模型就绪后远程访问始终关闭，图片和查询不会上传。</p>
+                <div class="local-search-model-meta" id="localSearchModelMeta">内置模型支持图片和中英文文字搜索</div>
+                <progress id="localSearchModelProgress" max="100" value="0"></progress>
+                <div class="action-row compact-actions">
+                  <button class="primary-action" id="localSearchDownloadModel" type="button">下载内置模型</button>
+                  <button class="ghost-action" id="localSearchImportModel" type="button">导入 .ngrmodel</button>
+                  <button class="ghost-action hidden" id="localSearchExportModel" type="button">导出 .ngrmodel</button>
+                  <button class="danger-action hidden" id="localSearchCancelDownload" type="button">取消</button>
+                  <button class="ghost-action hidden" id="localSearchRetryDownload" type="button">重试</button>
+                  <button class="danger-action hidden" id="localSearchRemoveModel" type="button">删除内置模型</button>
+                </div>
+                <p class="local-search-privacy">纯离线电脑可导入 .ngrmodel 模型包或本地 ONNX 特征模型。所有文件由主进程选择和校验；模型就绪后远程访问始终关闭，图片和查询不会上传。</p>
+              </section>
+
+              <section class="local-search-card local-search-engine-card">
+                <div class="local-search-card-head">
+                  <div><strong>AI 加速引擎</strong><small id="localSearchEngineDetails">正在检测本机推理设备…</small></div>
+                  <span class="local-search-state" id="localSearchEngineState">检测中</span>
+                </div>
+                <div class="local-search-engine-grid">
+                  <span>图片分析<strong id="localSearchVisionProvider">—</strong></span>
+                  <span>文字 / 单图<strong id="localSearchTextProvider">—</strong></span>
+                  <span>批量大小<strong id="localSearchEngineBatch">—</strong></span>
+                </div>
+                <p class="local-search-engine-fallback hidden" id="localSearchEngineFallback"></p>
               </section>
 
                 <section class="local-search-card local-search-library-card">
@@ -148,6 +169,12 @@
                   <span>复用 <strong id="localSearchReused">0</strong></span>
                   <span>跳过 <strong id="localSearchSkipped">0</strong></span>
                   <span>错误 <strong id="localSearchErrors">0</strong></span>
+                </div>
+                <div class="local-search-index-performance" aria-live="polite">
+                  <span id="localSearchJobStage">等待开始分析</span>
+                  <span id="localSearchJobSpeed">— 张/秒</span>
+                  <span id="localSearchJobEta">预计剩余 —</span>
+                  <span id="localSearchJobProvider">推理设备 —</span>
                 </div>
               </section>
 
@@ -193,7 +220,7 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.3</span><time class="version-date" datetime="2026-08-20">更新于 2026-08-20</time></h2>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.4</span><time class="version-date" datetime="2026-08-20">更新于 2026-08-20</time></h2>
             <p>配置命名规则、AI 接入、方案模板和工作区备份；更改会自动保存。</p>
           </div>
 
@@ -882,15 +909,153 @@
             <button class="settings-button" id="localSearchGuideClose" type="button" aria-label="关闭本地搜图引导">×</button>
           </div>
           <ol class="local-search-guide-list">
-            <li><strong>下载模型</strong>：首次使用需下载约 225MB 离线模型，完成后可纯离线运行。</li>
+            <li><strong>准备模型</strong>：可下载约 225MB 内置模型，也可导入 .ngrmodel 或经过验证的本地 ONNX 特征模型。</li>
             <li><strong>创建图库</strong>：选择一个本地图片文件夹作为图库。</li>
             <li><strong>开始分析</strong>：递归扫描并生成向量索引，生成后可持续增量更新。</li>
-            <li><strong>搜索测试</strong>：分别测试截图/图片搜索和中文或英文文字搜索。</li>
+            <li><strong>搜索测试</strong>：图文模型可测试截图、图片和中英文文字搜索；图像单塔只提供图片搜索。</li>
           </ol>
           <p class="local-search-guide-tip">说明：仅索引、缩略图会落在本机，不会上传原图或查询内容。</p>
           <div class="action-row">
             <button class="primary-action" id="localSearchGuideStart" type="button">我知道了，开始使用</button>
           </div>
+        </section>
+      </div>
+
+      <div class="modal-overlay hidden" id="localSearchModelManagerOverlay" aria-hidden="true">
+        <section class="app-modal local-search-model-manager" role="dialog" aria-modal="true" aria-labelledby="localSearchModelManagerTitle">
+          <div class="app-modal-head">
+            <div>
+              <h2 id="localSearchModelManagerTitle">本地搜图模型管理</h2>
+              <p>切换模型会使用该模型独立的图库向量；首次使用新模型需要重新分析。</p>
+            </div>
+            <button class="settings-button" id="localSearchModelManagerClose" type="button" aria-label="关闭模型管理">×</button>
+          </div>
+
+          <div class="local-search-model-manager-toolbar">
+            <div>
+              <strong>已安装模型</strong>
+              <small>内置模型经过认证；自定义 ONNX 模型会标记为未认证。</small>
+            </div>
+            <button class="primary-action" id="localSearchCustomImportStart" type="button">导入 ONNX 模型</button>
+          </div>
+          <div class="local-search-managed-models" id="localSearchManagedModels"></div>
+          <div class="local-search-empty" id="localSearchManagedModelsEmpty">尚无可用模型</div>
+
+          <form class="local-search-model-wizard hidden" id="localSearchModelWizard">
+            <div class="local-search-wizard-head">
+              <div>
+                <strong>高级 ONNX 导入</strong>
+                <small>仅支持输出固定长度特征向量的 ONNX；禁止脚本、自定义算子 DLL，不支持分类、检测或生成模型。</small>
+              </div>
+              <span class="local-search-uncertified">未认证</span>
+            </div>
+
+            <div class="local-search-wizard-grid">
+              <label>
+                <span>模型名称</span>
+                <input id="localSearchCustomModelName" type="text" maxlength="80" required placeholder="例如：团队素材检索模型" />
+              </label>
+              <label>
+                <span>模型类型</span>
+                <select id="localSearchCustomModelType">
+                  <option value="image">图像单塔（仅图片搜索）</option>
+                  <option value="image-text">图像塔 + 文字塔</option>
+                </select>
+              </label>
+              <label>
+                <span>许可证</span>
+                <input id="localSearchCustomModelLicense" type="text" maxlength="120" placeholder="例如：MIT / Apache-2.0" />
+              </label>
+              <label>
+                <span>张量布局</span>
+                <select id="localSearchCustomLayout">
+                  <option value="NCHW">NCHW</option>
+                  <option value="NHWC">NHWC</option>
+                </select>
+              </label>
+              <label>
+                <span>输入宽度</span>
+                <input id="localSearchCustomWidth" type="number" min="16" max="4096" step="1" value="224" />
+              </label>
+              <label>
+                <span>输入高度</span>
+                <input id="localSearchCustomHeight" type="number" min="16" max="4096" step="1" value="224" />
+              </label>
+              <label>
+                <span>颜色顺序</span>
+                <select id="localSearchCustomColorSpace">
+                  <option value="RGB">RGB</option>
+                  <option value="BGR">BGR</option>
+                </select>
+              </label>
+              <label>
+                <span>缩放方式</span>
+                <select id="localSearchCustomResizeMode">
+                  <option value="crop">等比缩放后居中裁剪</option>
+                  <option value="fit">等比完整适配</option>
+                  <option value="stretch">直接拉伸</option>
+                </select>
+              </label>
+              <label>
+                <span>输入类型</span>
+                <select id="localSearchCustomPixelType">
+                  <option value="float32">Float32</option>
+                  <option value="uint8">Uint8</option>
+                </select>
+              </label>
+              <label>
+                <span>像素缩放系数</span>
+                <input id="localSearchCustomScale" type="number" min="0" step="any" value="0.003921568627451" />
+              </label>
+              <label>
+                <span>输出维度（0 为自动）</span>
+                <input id="localSearchCustomDimensions" type="number" min="0" max="4096" step="1" value="0" />
+              </label>
+              <label class="local-search-checkbox-field">
+                <input id="localSearchCustomNormalize" type="checkbox" checked />
+                <span>对输出向量做 L2 归一化</span>
+              </label>
+              <label>
+                <span>图像输入节点（留空自动）</span>
+                <input id="localSearchCustomInputName" type="text" maxlength="120" placeholder="自动识别" />
+              </label>
+              <label>
+                <span>图像输出节点（留空自动）</span>
+                <input id="localSearchCustomOutputName" type="text" maxlength="120" placeholder="自动识别" />
+              </label>
+              <fieldset class="local-search-channel-values">
+                <legend>均值 Mean（R / G / B）</legend>
+                <input id="localSearchCustomMeanR" type="number" step="any" value="0.48145466" aria-label="Mean R" />
+                <input id="localSearchCustomMeanG" type="number" step="any" value="0.4578275" aria-label="Mean G" />
+                <input id="localSearchCustomMeanB" type="number" step="any" value="0.40821073" aria-label="Mean B" />
+              </fieldset>
+              <fieldset class="local-search-channel-values">
+                <legend>标准差 Std（R / G / B）</legend>
+                <input id="localSearchCustomStdR" type="number" min="0.0000001" step="any" value="0.26862954" aria-label="Std R" />
+                <input id="localSearchCustomStdG" type="number" min="0.0000001" step="any" value="0.26130258" aria-label="Std G" />
+                <input id="localSearchCustomStdB" type="number" min="0.0000001" step="any" value="0.27577711" aria-label="Std B" />
+              </fieldset>
+              <div class="local-search-text-tower-fields hidden" id="localSearchCustomTextFields">
+                <label>
+                  <span>文字输入节点（留空自动）</span>
+                  <input id="localSearchCustomTextInputName" type="text" maxlength="120" placeholder="自动识别" />
+                </label>
+                <label>
+                  <span>文字输出节点（留空自动）</span>
+                  <input id="localSearchCustomTextOutputName" type="text" maxlength="120" placeholder="自动识别" />
+                </label>
+                <p>验证时将依次选择文字 ONNX 和 Transformers.js 兼容 tokenizer 目录；图文向量维度必须一致。</p>
+              </div>
+            </div>
+
+            <div class="local-search-validation-status" id="localSearchModelValidationStatus">先配置预处理参数，再选择本地模型文件进行隔离验证。</div>
+            <div class="local-search-validation-files hidden" id="localSearchModelValidationFiles"></div>
+            <div class="action-row local-search-wizard-actions">
+              <button class="primary-action" id="localSearchValidateModel" type="button">选择文件并验证</button>
+              <button class="success-action" id="localSearchCommitModel" type="submit" disabled>导入并启用</button>
+              <button class="ghost-action" id="localSearchCancelModelWizard" type="button">取消</button>
+            </div>
+          </form>
         </section>
       </div>
 
@@ -916,25 +1081,25 @@
       <div id="toast" class="toast hidden" role="status"></div>
     </div>
 
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.3"></script>
-    <script src="historical-knowledge.js?v=V3.0.3"></script>
-    <script src="js/config.js?v=V3.0.3"></script>
-    <script src="js/prefix-library.js?v=V3.0.3"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.3"></script>
-    <script src="js/updates.js?v=V3.0.3"></script>
-    <script src="js/workspace-backup.js?v=V3.0.3"></script>
-    <script src="js/state-dom.js?v=V3.0.3"></script>
-    <script src="js/local-image-search.js?v=V3.0.3"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.3"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.3"></script>
-    <script src="js/ai-workflow.js?v=V3.0.3"></script>
-    <script src="js/assets-detection.js?v=V3.0.3"></script>
-    <script src="js/rendering.js?v=V3.0.3"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.3"></script>
-    <script src="js/export-template-storage.js?v=V3.0.3"></script>
-    <script src="js/toast.js?v=V3.0.3"></script>
-    <script src="js/workspace-storage.js?v=V3.0.3"></script>
-    <script src="js/workspace-migration.js?v=V3.0.3"></script>
-    <script src="js/main.js?v=V3.0.3"></script>
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.4"></script>
+    <script src="historical-knowledge.js?v=V3.0.4"></script>
+    <script src="js/config.js?v=V3.0.4"></script>
+    <script src="js/prefix-library.js?v=V3.0.4"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.4"></script>
+    <script src="js/updates.js?v=V3.0.4"></script>
+    <script src="js/workspace-backup.js?v=V3.0.4"></script>
+    <script src="js/state-dom.js?v=V3.0.4"></script>
+    <script src="js/local-image-search.js?v=V3.0.4"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.4"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.4"></script>
+    <script src="js/ai-workflow.js?v=V3.0.4"></script>
+    <script src="js/assets-detection.js?v=V3.0.4"></script>
+    <script src="js/rendering.js?v=V3.0.4"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.4"></script>
+    <script src="js/export-template-storage.js?v=V3.0.4"></script>
+    <script src="js/toast.js?v=V3.0.4"></script>
+    <script src="js/workspace-storage.js?v=V3.0.4"></script>
+    <script src="js/workspace-migration.js?v=V3.0.4"></script>
+    <script src="js/main.js?v=V3.0.4"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.2 module: desktop-bridge.js */
+/* NGR AssetPilot V3.0.4 module: desktop-bridge.js */
 (function initializeDesktopBridge(globalScope) {
   "use strict";
 
@@ -232,9 +232,13 @@
     getModelStatus: () => invoke("localImageSearch.getModelStatus"),
     downloadModel: () => invoke("localImageSearch.downloadModel"),
     cancelModelDownload: () => invoke("localImageSearch.cancelModelDownload"),
-    importModel: () => invoke("localImageSearch.importModel"),
+    listModels: () => invoke("localImageSearch.listModels"),
+    validateModel: (request) => invoke("localImageSearch.validateModel", request),
+    importModel: (request) => invoke("localImageSearch.importModel", request),
     exportModel: () => invoke("localImageSearch.exportModel"),
-    removeModel: () => invoke("localImageSearch.removeModel"),
+    removeModel: (request) => invoke("localImageSearch.removeModel", request),
+    setActiveModel: (request) => invoke("localImageSearch.setActiveModel", request),
+    getEngineStatus: (request) => invoke("localImageSearch.getEngineStatus", request),
     listLibraries: () => invoke("localImageSearch.listLibraries"),
     createLibrary: () => invoke("localImageSearch.createLibrary"),
     removeLibrary: (request) => invoke("localImageSearch.removeLibrary", request),

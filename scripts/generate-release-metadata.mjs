@@ -73,7 +73,7 @@ export function generateReleaseMetadata(edition) {
 
   const excluded = new Set([
     "SHA256SUMS.txt", "build-manifest.json", "sbom.cdx.json",
-    checksumsName, manifestName, sbomName,
+    checksumsName, manifestName, "builder-debug.yml",
   ]);
   const artifactFiles = fs.readdirSync(artifactDirectory, { withFileTypes: true })
     .filter((entry) => entry.isFile() && !excluded.has(entry.name))
