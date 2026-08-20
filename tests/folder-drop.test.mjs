@@ -53,6 +53,66 @@ test("新目录句柄失败后仍能使用同一 drop 周期捕获的文件夹�
   assert.equal(sameDropTick, false);
 });
 
+test("Electron 优先使用 Chromium 文件夹入口而不依赖目录句柄遍历", async () => {
+  const image = { name: "fallback.png", type: "image/png", size: 18, lastModified: 3 };
+  const entry = directoryEntry([fileEntry(image)]);
+  let handleTraversed = false;
+  const item = {
+    kind: "file",
+    getAsFileSystemHandle: () => Promise.resolve({
+      kind: "directory",
+      name: "icons",
+      values() {
+        handleTraversed = true;
+        throw new DOMException("Permission denied", "NotAllowedError");
+      },
+    }),
+    webkitGetAsEntry: () => entry,
+    getAsFile: () => null,
+  };
+
+  const files = await dropApi.collectDroppedFiles({ items: [item], files: [] });
+  assert.deepEqual(files, [image]);
+  assert.equal(handleTraversed, false);
+});
+
+test("Chromium 文件夹入口读取失败时回退到标准目录句柄", async () => {
+  const image = { name: "handle.png", type: "image/png", size: 19, lastModified: 5 };
+  const item = {
+    kind: "file",
+    getAsFileSystemHandle: () => Promise.resolve({
+      kind: "directory",
+      name: "icons",
+      async *values() {
+        yield { kind: "file", name: image.name, getFile: async () => image };
+      },
+    }),
+    webkitGetAsEntry: () => ({
+      isFile: false,
+      isDirectory: true,
+      createReader() { throw new DOMException("Entry unavailable", "NotAllowedError"); },
+    }),
+    getAsFile: () => null,
+  };
+
+  const files = await dropApi.collectDroppedFiles({ items: [item], files: [] });
+  assert.deepEqual(files, [image]);
+});
+
+test("优先兼容标准 getAsEntry 文件夹入口", async () => {
+  const image = { name: "standard.png", type: "image/png", size: 20, lastModified: 4 };
+  const item = {
+    kind: "file",
+    getAsFileSystemHandle: () => null,
+    getAsEntry: () => directoryEntry([fileEntry(image)]),
+    webkitGetAsEntry: () => null,
+    getAsFile: () => null,
+  };
+
+  const files = await dropApi.collectDroppedFiles({ items: [item], files: [] });
+  assert.deepEqual(files, [image]);
+});
+
 test("文件夹句柄递归导入并保留相对目录", async () => {
   const image = { name: "icon.png", type: "image/png", size: 24, lastModified: 2 };
   const fileHandle = { kind: "file", name: image.name, getFile: async () => image };
