@@ -35,6 +35,7 @@ test("桌面依赖版本全部精确锁定", () => {
 });
 
 test("正式版、开发版和测试版身份、入口、数据与产物完全隔离", () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
   const prod = loadBuilderConfig("prod");
   const dev = loadBuilderConfig("dev");
   const testConfig = loadBuilderConfig("test");
@@ -50,17 +51,25 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
   assert.equal(path.resolve(prod.directories.output), path.resolve(projectPaths.prodArtifacts));
   assert.equal(path.resolve(dev.directories.output), path.resolve(projectPaths.devArtifacts));
   assert.equal(path.resolve(testConfig.directories.output), path.resolve(projectPaths.testArtifacts));
-  assert.match(prod.nsis.artifactName, /NGR-AssetPilot-3\.0\.1/);
-  assert.match(dev.nsis.artifactName, /NGR-AssetPilot-Dev-3\.0\.1/);
-  assert.match(testConfig.nsis.artifactName, /NGR-AssetPilot-Test-3\.0\.1/);
+  assert.ok(prod.nsis.artifactName.includes(`NGR-AssetPilot-${packageJson.version}`));
+  assert.ok(dev.nsis.artifactName.includes(`NGR-AssetPilot-Dev-${packageJson.version}`));
+  assert.ok(testConfig.nsis.artifactName.includes(`NGR-AssetPilot-Test-${packageJson.version}`));
   for (const config of [prod, dev, testConfig]) {
     assert.deepEqual(config.extraResources, []);
     assert.ok(config.files.includes("!build/generated/**/*"));
     assert.ok(config.files.includes("!app/API配置文件/**/*"));
     assert.ok(config.files.includes("!desktop/services/test-secrets.mjs"));
     assert.ok(config.asarUnpack.some((pattern) => pattern.includes("onnxruntime-node/bin")));
-    assert.equal(config.publish, null);
   }
+  assert.deepEqual(prod.publish, [{
+    provider: "github",
+    owner: "907609732",
+    repo: "NGR-AssetPilot-App",
+    channel: "latest",
+    releaseType: "release",
+  }]);
+  assert.equal(dev.publish, null);
+  assert.equal(testConfig.publish, null);
 });
 
 test("三个入口明确选择版本且启动器不内置平台凭据", () => {
@@ -74,6 +83,9 @@ test("三个入口明确选择版本且启动器不内置平台凭据", () => {
   assert.match(bootstrap, /NGR AssetPilot Dev/);
   assert.match(bootstrap, /NGR AssetPilot Test/);
   assert.match(bootstrap, /com\.chenyuecai\.ngrassetpilot/);
+  assert.match(bootstrap, /app\.isPackaged\s*&&\s*isProductionEdition/);
+  assert.match(bootstrap, /channel:\s*updateChannel/);
+  assert.doesNotMatch(bootstrap, /updaterRequested\s*=\s*false/);
   assert.doesNotMatch(prodEntry + devEntry + testEntry + bootstrap, /local-config\.js|KIMI_API_KEY|BAIDU_SECRET/);
 });
 

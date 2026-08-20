@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.1 module: desktop-bridge.js */
+/* NGR AssetPilot V3.0.2 module: desktop-bridge.js */
 (function initializeDesktopBridge(globalScope) {
   "use strict";
 

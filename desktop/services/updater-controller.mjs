@@ -41,11 +41,17 @@ export class UpdaterController {
     autoUpdater = null,
     enabled = false,
     currentVersion = "0.0.0",
+    channel = "latest",
+    feed = null,
     websiteUrl = "https://ngr.lttlt.top/",
     historyUrl = "https://github.com/907609732/NGR-AssetPilot-App/releases",
   } = {}) {
     this.autoUpdater = autoUpdater;
     this.enabled = Boolean(enabled && autoUpdater);
+    this.channel = String(channel || "latest").trim() || "latest";
+    this.feed = feed && typeof feed === "object"
+      ? { ...feed, channel: this.channel }
+      : null;
     this.listeners = [];
     this.stateListeners = new Set();
     this.inFlight = null;
@@ -53,7 +59,7 @@ export class UpdaterController {
       enabled: this.enabled,
       phase: this.enabled ? "idle" : "disabled",
       currentVersion,
-      channel: "latest",
+      channel: this.channel,
       availableVersion: null,
       releaseName: null,
       releaseNotes: "",
@@ -69,10 +75,14 @@ export class UpdaterController {
   }
 
   #configure() {
+    if (this.feed && typeof this.autoUpdater.setFeedURL === "function") {
+      this.autoUpdater.setFeedURL(this.feed);
+    }
     this.autoUpdater.autoDownload = false;
     this.autoUpdater.autoInstallOnAppQuit = false;
     this.autoUpdater.allowPrerelease = false;
-    this.autoUpdater.channel = "latest";
+    this.autoUpdater.channel = this.channel;
+    this.autoUpdater.allowDowngrade = false;
 
     this.#on("checking-for-update", () => this.#patch({ phase: "checking", errorCode: null }));
     this.#on("update-available", (info) => this.#applyUpdateInfo(info, "available"));

@@ -29,6 +29,15 @@ const editionConfig = {
 if (!editionConfig) throw new Error('NGR_BUILD_EDITION 必须是 prod、dev 或 test');
 
 const { appId, productName, packageName, main, artifactBase } = editionConfig;
+const publish = edition === "prod"
+  ? [{
+      provider: "github",
+      owner: "907609732",
+      repo: "NGR-AssetPilot-App",
+      channel: "latest",
+      releaseType: "release",
+    }]
+  : null;
 
 module.exports = {
   appId,
@@ -96,5 +105,5 @@ module.exports = {
     artifactName: `${artifactBase}-portable-x64.\${ext}`,
     requestExecutionLevel: "user",
   },
-  publish: null,
+  publish,
 };

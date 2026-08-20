@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.1 module: prefix-library.js */
+/* NGR AssetPilot V3.0.2 module: prefix-library.js */
 (function initializePrefixLibrary(globalScope) {
   "use strict";
 

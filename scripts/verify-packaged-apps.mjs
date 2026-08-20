@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,6 +44,8 @@ async function verifyTarget(target) {
     }));
     assert.equal(state.info.edition, target.edition);
     assert.equal(state.info.distribution, "installer");
+    assert.equal(state.info.updaterEnabled, target.edition === "prod");
+    assert.equal(state.info.updaterChannel, target.edition === "prod" ? "latest" : target.edition);
     if (target.badge) {
       assert.match(state.badge, new RegExp(target.badge));
       assert.equal(state.badgeHidden, false);
@@ -59,6 +62,27 @@ async function verifyTarget(target) {
     const portablePath = path.join(projectRoot, "artifacts", target.edition, target.artifact);
     const portableStats = fs.statSync(portablePath);
     assert.ok(portableStats.size > 10 * 1024 * 1024, `${target.product} 便携包大小异常`);
+
+    if (target.edition === "prod") {
+      const resourcesPath = path.join(projectRoot, "artifacts", "prod", "win-unpacked", "resources");
+      const appUpdate = fs.readFileSync(path.join(resourcesPath, "app-update.yml"), "utf8");
+      assert.match(appUpdate, /^provider:\s*github$/m);
+      assert.match(appUpdate, /^owner:\s*['\"]?907609732['\"]?$/m);
+      assert.match(appUpdate, /^repo:\s*NGR-AssetPilot-App$/m);
+      assert.match(appUpdate, /^channel:\s*latest$/m);
+
+      const latestPath = path.join(projectRoot, "artifacts", "prod", "latest.yml");
+      const latest = fs.readFileSync(latestPath, "utf8");
+      const installerName = `NGR-AssetPilot-${packageJson.version}-Setup-x64.exe`;
+      const installerPath = path.join(projectRoot, "artifacts", "prod", installerName);
+      const installerSize = fs.statSync(installerPath).size;
+      const installerSha512 = crypto.createHash("sha512").update(fs.readFileSync(installerPath)).digest("base64");
+      assert.match(latest, new RegExp(`^version:\\s*${packageJson.version.replaceAll(".", "\\.")}$`, "m"));
+      assert.match(latest, new RegExp(`^path:\\s*${installerName.replaceAll(".", "\\.")}$`, "m"));
+      assert.match(latest, new RegExp(`^\\s*size:\\s*${installerSize}$`, "m"));
+      assert.ok(latest.includes(`sha512: ${installerSha512}`));
+      assert.equal(fs.existsSync(`${installerPath}.blockmap`), true);
+    }
     process.stdout.write(`${JSON.stringify({ edition: target.edition, product: target.product, packagedSmoke: true, portableBytes: portableStats.size })}\n`);
   } finally {
     await electronApp.close();

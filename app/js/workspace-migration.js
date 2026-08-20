@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.1 module: workspace-migration.js */
+/* NGR AssetPilot V3.0.2 module: workspace-migration.js */
 (function initializeWorkspaceMigrationModule(globalScope) {
   "use strict";
 

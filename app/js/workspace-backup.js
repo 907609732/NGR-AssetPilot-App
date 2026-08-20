@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.1 module: workspace-backup.js */
+/* NGR AssetPilot V3.0.2 module: workspace-backup.js */
 (function initializeWorkspaceBackup(globalScope) {
   "use strict";
 

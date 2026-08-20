@@ -341,25 +341,34 @@ test("updater is disabled for non-installer builds and uses an explicit download
   await assert.rejects(() => disabled.check(), { code: "UPDATER_DISABLED" });
 
   class FakeUpdater extends EventEmitter {
+    setFeedURL(feed) {
+      this.feed = feed;
+    }
     async checkForUpdates() {
       const updateInfo = {
-        version: "3.0.1",
+        version: "3.0.2",
         releaseName: "本地 AI 搜图增强",
         releaseNotes: "<p>新增自定义前缀<br>优化更新弹窗</p>",
         releaseDate: "2026-08-20T08:00:00.000Z",
-        files: [{ url: "NGR-AssetPilot-3.0.1-Setup-x64.exe", size: 123456789 }],
+        files: [{ url: "NGR-AssetPilot-3.0.2-Setup-x64.exe", size: 123456789 }],
       };
       this.emit("update-available", updateInfo);
       return { updateInfo };
     }
     async downloadUpdate() {
       this.emit("download-progress", { percent: 50, transferred: 5, total: 10, bytesPerSecond: 2 });
-      this.emit("update-downloaded", { version: "3.0.1" });
+      this.emit("update-downloaded", { version: "3.0.2" });
     }
     quitAndInstall() {}
   }
   const fake = new FakeUpdater();
-  const updater = new UpdaterController({ autoUpdater: fake, enabled: true, currentVersion: "3.0.0" });
+  const updater = new UpdaterController({
+    autoUpdater: fake,
+    enabled: true,
+    currentVersion: "3.0.1",
+    channel: "latest",
+    feed: { provider: "github", owner: "907609732", repo: "NGR-AssetPilot-App" },
+  });
   const states = [];
   const unsubscribe = updater.subscribe((state) => states.push(state));
   const available = await updater.check();
@@ -368,7 +377,14 @@ test("updater is disabled for non-installer builds and uses an explicit download
   assert.equal(available.releaseNotes, "新增自定义前缀\n优化更新弹窗");
   assert.equal(available.downloadSize, 123456789);
   assert.equal(fake.allowPrerelease, false);
+  assert.equal(fake.allowDowngrade, false);
   assert.equal(fake.channel, "latest");
+  assert.deepEqual(fake.feed, {
+    provider: "github",
+    owner: "907609732",
+    repo: "NGR-AssetPilot-App",
+    channel: "latest",
+  });
   assert.equal((await updater.download()).phase, "downloaded");
   assert.equal(updater.install().accepted, true);
   assert.ok(states.some((state) => state.phase === "downloading"));

@@ -137,12 +137,20 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
 
   const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
   const updateChannel = isProductionEdition ? "latest" : isTestEdition ? "test" : "dev";
-  const updaterRequested = false;
+  const updaterRequested = app.isPackaged && isProductionEdition;
   const autoUpdater = await resolveAutoUpdater(updaterRequested);
   const updater = new UpdaterController({
     autoUpdater,
     enabled: updaterRequested && Boolean(autoUpdater),
     currentVersion: app.getVersion(),
+    channel: updateChannel,
+    feed: isProductionEdition
+      ? {
+          provider: "github",
+          owner: "907609732",
+          repo: "NGR-AssetPilot-App",
+        }
+      : null,
   });
   const directoryTokens = new DirectoryTokenStore();
   const networkClient = new NetworkClient({ fetchImpl: net.fetch.bind(net) });

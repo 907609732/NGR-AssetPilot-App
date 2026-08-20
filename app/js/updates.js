@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.1 module: updates.js */
+/* NGR AssetPilot V3.0.2 module: updates.js */
 (function initializeUpdateUiModule(globalScope) {
   "use strict";
 
