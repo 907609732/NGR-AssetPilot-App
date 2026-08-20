@@ -1,8 +1,8 @@
 const FORBIDDEN_OBJECT_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 export class DesktopError extends Error {
-  constructor(code, message) {
-    super(message);
+  constructor(code, message, options = undefined) {
+    super(message, options);
     this.name = "DesktopError";
     this.code = code;
   }

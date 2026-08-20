@@ -742,8 +742,8 @@ export class LocalImageSearchController {
     try {
       const data = await task;
       return { mimeType: "image/webp", data };
-    } catch {
-      throw new DesktopError("LOCAL_SEARCH_THUMBNAIL_FAILED", "缩略图生成失败");
+    } catch (error) {
+      throw new DesktopError("LOCAL_SEARCH_THUMBNAIL_FAILED", "缩略图生成失败", { cause: error });
     }
   }
 
