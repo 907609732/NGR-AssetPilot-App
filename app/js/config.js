@@ -1,5 +1,5 @@
 /* NGR AssetPilot V2.26 module: config.js */
-const APP_VERSION = "V3.0.4";
+const APP_VERSION = "V3.0.5";
 const APP_VERSION_KEY = "ngr-ai-autoname-app-version";
 const STORAGE_KEY = "ngr-ai-autoname-rules";
 const SCHEME_KEY = "ngr-ai-autoname-rule-schemes";

@@ -64,7 +64,7 @@ const dataRoot = path.join(process.env.APPDATA, productName, "local-image-search
 const dbPath = path.join(dataRoot, "index.sqlite3");
 const modelRoot = path.join(dataRoot, "models");
 const db = new DatabaseSync(dbPath, { readOnly: true });
-assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='models'").get(), "请先启动 V3.0.4 完成索引迁移");
+assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='models'").get(), "请先启动当前桌面版完成索引迁移");
 const activeModelId = db.prepare("SELECT value FROM local_search_settings WHERE key='active_model_id'").get()?.value;
 const model = db.prepare(`
   SELECT * FROM models
