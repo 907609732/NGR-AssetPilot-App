@@ -270,6 +270,7 @@ function showView(name) {
     localImageSearchSettings: "管理本地 AI 模型与只读图库索引。",
   };
   els.pageHint.textContent = hints[name];
+  if (name === "localImageSearch") globalScope.showLocalImageSearchGuide?.();
   window.syncUpdateButtonVisibility?.();
 }
 

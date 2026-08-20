@@ -2,6 +2,9 @@
 (function initializeLocalImageSearchModule(globalScope) {
   "use strict";
 
+  const GUIDE_SEEN_KEY = "local-search-guide-seen";
+  const ACTIVE_LIBRARY_KEY = "local-search-active-library-id";
+
   const state = {
     initialized: false,
     libraries: [],
@@ -27,8 +30,28 @@
       "localSearchErrors", "localSearchImageTab", "localSearchTextTab", "localSearchImagePanel", "localSearchTextPanel",
       "localSearchDropzone", "localSearchImageInput", "localSearchQueryPreview", "localSearchTextInput",
       "localSearchTextSubmit", "localSearchQueryStatus", "localSearchResultCount", "localSearchResults",
-      "localSearchResultsEmpty",
+      "localSearchResultsEmpty", "localSearchLibrarySelect", "localSearchGuideOverlay", "localSearchGuideClose", "localSearchGuideStart",
     ].forEach((id) => { nodes[id] = $(`#${id}`); });
+  }
+
+  function readLocalStorageString(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  function writeLocalStorageString(key, value) {
+    try {
+      if (!value) {
+        localStorage.removeItem(key);
+        return;
+      }
+      localStorage.setItem(key, value);
+    } catch {
+      // ignore localStorage failures in restricted environments
+    }
   }
 
   function formatBytes(value) {
@@ -45,6 +68,54 @@
     return String(error?.message || "").includes("LOCAL_SEARCH_MODEL_REQUIRED")
       ? "请先下载本地 AI 模型"
       : String(error?.message || fallback || "操作失败，请重试");
+  }
+
+  function getStoredGuideSeen() {
+    return readLocalStorageString(GUIDE_SEEN_KEY) === "1";
+  }
+
+  function setGuideSeen() {
+    writeLocalStorageString(GUIDE_SEEN_KEY, "1");
+  }
+
+  function getStoredActiveLibraryId() {
+    const saved = readLocalStorageString(ACTIVE_LIBRARY_KEY);
+    return typeof saved === "string" && saved ? saved : null;
+  }
+
+  function persistActiveLibraryId(libraryId) {
+    writeLocalStorageString(ACTIVE_LIBRARY_KEY, libraryId || "");
+  }
+
+  function clearStoredActiveLibraryId() {
+    writeLocalStorageString(ACTIVE_LIBRARY_KEY, "");
+  }
+
+  function getActiveLibrary() {
+    return state.libraries.find((item) => item.id === state.activeLibraryId);
+  }
+
+  function showGuideOverlay() {
+    if (!nodes.localSearchGuideOverlay) return;
+    nodes.localSearchGuideOverlay.classList.remove("hidden");
+    nodes.localSearchGuideOverlay.setAttribute("aria-hidden", "false");
+    window.setTimeout(() => nodes.localSearchGuideStart?.focus(), 0);
+  }
+
+  function hideGuideOverlay() {
+    if (!nodes.localSearchGuideOverlay) return;
+    nodes.localSearchGuideOverlay.classList.add("hidden");
+    nodes.localSearchGuideOverlay.setAttribute("aria-hidden", "true");
+  }
+
+  function maybeShowGuide() {
+    if (getStoredGuideSeen()) return;
+    showGuideOverlay();
+  }
+
+  function markGuideComplete() {
+    setGuideSeen();
+    hideGuideOverlay();
   }
 
   async function refreshModelStatus() {
@@ -108,40 +179,112 @@
 
   async function refreshLibraries(preferredId = null) {
     state.libraries = await bridge().listLibraries();
-    if (preferredId && state.libraries.some((item) => item.id === preferredId)) state.activeLibraryId = preferredId;
-    if (!state.libraries.some((item) => item.id === state.activeLibraryId)) state.activeLibraryId = state.libraries[0]?.id || null;
+
+    const availableIds = new Set(state.libraries.map((item) => item.id));
+    const savedId = getStoredActiveLibraryId();
+    let nextActiveLibraryId = null;
+
+    if (preferredId && availableIds.has(preferredId)) {
+      nextActiveLibraryId = preferredId;
+    } else if (savedId && availableIds.has(savedId)) {
+      nextActiveLibraryId = savedId;
+    } else if (state.activeLibraryId && availableIds.has(state.activeLibraryId)) {
+      nextActiveLibraryId = state.activeLibraryId;
+    } else if (state.libraries[0]) {
+      nextActiveLibraryId = state.libraries[0].id;
+    }
+
+    state.activeLibraryId = nextActiveLibraryId;
+    if (state.activeLibraryId) persistActiveLibraryId(state.activeLibraryId);
+    else clearStoredActiveLibraryId();
+
     renderLibraries();
     renderActiveLibrary();
+  }
+
+  function setActiveLibrary(libraryId) {
+    if (!libraryId || !state.libraries.some((item) => item.id === libraryId)) return;
+    if (state.activeLibraryId === libraryId) return;
+    state.activeLibraryId = libraryId;
+    persistActiveLibraryId(libraryId);
+    renderLibraries();
+    renderActiveLibrary();
+    clearResults();
   }
 
   function renderLibraries() {
     nodes.localSearchLibraryList.replaceChildren();
     nodes.localSearchLibraryEmpty.classList.toggle("hidden", state.libraries.length > 0);
-    state.libraries.forEach((library) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `local-search-library${library.id === state.activeLibraryId ? " active" : ""}`;
-      button.innerHTML = `<strong></strong><span></span>`;
-      button.querySelector("strong").textContent = library.name;
-      button.querySelector("span").textContent = `${library.itemCount} 张 · ${library.status === "ready" ? "已就绪" : library.status === "indexing" ? "分析中" : "待分析"}`;
-      button.addEventListener("click", () => {
-        state.activeLibraryId = library.id;
-        renderLibraries();
-        renderActiveLibrary();
-        clearResults();
+    if (nodes.localSearchLibrarySelect) {
+      nodes.localSearchLibrarySelect.classList.toggle("hidden", state.libraries.length === 0);
+      nodes.localSearchLibrarySelect.replaceChildren();
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "选择当前图库";
+      nodes.localSearchLibrarySelect.appendChild(placeholder);
+      state.libraries.forEach((library) => {
+        const option = document.createElement("option");
+        option.value = library.id;
+        option.textContent = library.name;
+        if (library.id === state.activeLibraryId) option.selected = true;
+        nodes.localSearchLibrarySelect.appendChild(option);
       });
-      nodes.localSearchLibraryList.append(button);
+      if (!state.activeLibraryId) nodes.localSearchLibrarySelect.value = "";
+    }
+    state.libraries.forEach((library) => {
+      const card = document.createElement("article");
+      card.className = `local-search-library${library.id === state.activeLibraryId ? " active" : ""}`;
+      card.addEventListener("click", () => setActiveLibrary(library.id));
+
+      const body = document.createElement("div");
+      body.className = "local-search-library-body";
+      const name = document.createElement("strong");
+      const status = document.createElement("span");
+      name.textContent = library.name;
+      status.textContent = `${library.itemCount} 张 · ${library.status === "ready" ? "已就绪" : library.status === "indexing" ? "分析中" : "待分析"}`;
+      body.append(name, status);
+
+      const actions = document.createElement("div");
+      actions.className = "local-search-library-actions";
+
+      const switchButton = document.createElement("button");
+      switchButton.type = "button";
+      switchButton.className = "ghost-action";
+      if (library.id === state.activeLibraryId) {
+        switchButton.textContent = "当前图库";
+        switchButton.disabled = true;
+      } else {
+        switchButton.textContent = "切换";
+      }
+      switchButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setActiveLibrary(library.id);
+      });
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "danger-action";
+      removeButton.textContent = library.id === state.activeLibraryId ? "删除当前图库" : "删除该图库";
+      removeButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        removeSingleLibrary(library.id).catch((error) => showStatus(friendlyError(error, "删除图库失败"), "error"));
+      });
+
+      actions.append(switchButton, removeButton);
+      card.append(body, actions);
+      nodes.localSearchLibraryList.append(card);
     });
   }
 
   function renderActiveLibrary() {
-    const library = state.libraries.find((item) => item.id === state.activeLibraryId);
+    const library = getActiveLibrary();
     nodes.localSearchActiveLibraryName.textContent = library?.name || "尚未选择图库";
     nodes.localSearchLibraryMeta.textContent = library
       ? `${library.itemCount} 张已索引${library.errorCount ? ` · ${library.errorCount} 个错误` : ""}${library.lastIndexedAt ? ` · ${new Date(library.lastIndexedAt).toLocaleString()}` : ""}`
       : "创建图库后开始分析";
     nodes.localSearchStartIndex.disabled = !library;
     nodes.localSearchRemoveLibrary.disabled = !library;
+    if (nodes.localSearchLibrarySelect) nodes.localSearchLibrarySelect.value = library?.id || "";
     if (library?.itemCount) showStatus("图库已就绪，可以粘贴截图、选择图片或输入文字搜索。", "ready");
   }
 
@@ -156,9 +299,24 @@
   async function removeLibrary() {
     if (!state.activeLibraryId) return;
     const library = state.libraries.find((item) => item.id === state.activeLibraryId);
-    if (!globalScope.confirm(`只删除“${library?.name || "此图库"}”的索引和缩略图，不会删除原图片。是否继续？`)) return;
+    if (!globalScope.confirm(`仅删除“${library?.name || "此图库"}”的索引和缩略图，不会删除原始图片。是否继续？`)) return;
     await bridge().removeLibrary({ libraryId: state.activeLibraryId });
     state.activeLibraryId = null;
+    clearStoredActiveLibraryId();
+    clearResults();
+    await refreshLibraries();
+    showStatus("索引已删除，原图片未做任何修改。", "ready");
+  }
+
+  async function removeSingleLibrary(libraryId) {
+    if (!libraryId) return;
+    const library = state.libraries.find((item) => item.id === libraryId);
+    if (!globalScope.confirm(`仅删除“${library?.name || "此图库"}”的索引和缩略图，不会删除原始图片。是否继续？`)) return;
+    await bridge().removeLibrary({ libraryId });
+    if (state.activeLibraryId === libraryId) {
+      state.activeLibraryId = null;
+      clearStoredActiveLibraryId();
+    }
     clearResults();
     await refreshLibraries();
     showStatus("索引已删除，原图片未做任何修改。", "ready");
@@ -307,6 +465,10 @@
     nodes.localSearchTextTab.addEventListener("click", () => setTab("text"));
     nodes.localSearchTextSubmit.addEventListener("click", searchText);
     nodes.localSearchTextInput.addEventListener("keydown", (event) => { if (event.key === "Enter") searchText(); });
+    nodes.localSearchLibrarySelect?.addEventListener("change", () => {
+      const selectedId = nodes.localSearchLibrarySelect.value;
+      if (selectedId) setActiveLibrary(selectedId);
+    });
     nodes.localSearchDropzone.addEventListener("click", () => nodes.localSearchImageInput.click());
     nodes.localSearchDropzone.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") nodes.localSearchImageInput.click(); });
     nodes.localSearchImageInput.addEventListener("change", () => searchImage(nodes.localSearchImageInput.files?.[0]));
@@ -325,6 +487,11 @@
         searchImage(item.getAsFile());
       }
     });
+    nodes.localSearchGuideStart?.addEventListener("click", markGuideComplete);
+    nodes.localSearchGuideClose?.addEventListener("click", markGuideComplete);
+    nodes.localSearchGuideOverlay?.addEventListener("click", (event) => {
+      if (event.target === nodes.localSearchGuideOverlay) markGuideComplete();
+    });
   }
 
   async function initLocalImageSearch() {
@@ -341,4 +508,5 @@
   }
 
   globalScope.initLocalImageSearch = initLocalImageSearch;
+  globalScope.showLocalImageSearchGuide = maybeShowGuide;
 })(window);

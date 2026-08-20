@@ -115,14 +115,18 @@
                   <p class="local-search-privacy">纯离线电脑可导入 .ngrmodel 模型包；导入时会校验固定版本、文件大小和 SHA-256。模型就绪后远程访问始终关闭，图片和查询不会上传。</p>
               </section>
 
-              <section class="local-search-card local-search-library-card">
-                <div class="local-search-card-head">
-                  <div><strong>我的图库</strong><small>递归扫描，支持断点增量更新</small></div>
-                  <button class="primary-action" id="localSearchCreateLibrary" type="button">新建图库</button>
-                </div>
-                <div class="local-search-library-list" id="localSearchLibraryList"></div>
-                <div class="local-search-empty" id="localSearchLibraryEmpty">选择或创建一个存放图片的文件夹</div>
-              </section>
+                <section class="local-search-card local-search-library-card">
+                  <div class="local-search-card-head">
+                    <div><strong>我的图库</strong><small>递归扫描，支持断点增量更新</small></div>
+                    <button class="primary-action" id="localSearchCreateLibrary" type="button">新建图库</button>
+                  </div>
+                  <label class="local-search-library-switcher">
+                    <span>当前图库：</span>
+                    <select id="localSearchLibrarySelect" class="hidden"></select>
+                  </label>
+                  <div class="local-search-library-list" id="localSearchLibraryList"></div>
+                  <div class="local-search-empty" id="localSearchLibraryEmpty">选择或创建一个存放图片的文件夹</div>
+                </section>
             </aside>
 
             <div class="local-search-main">
@@ -858,6 +862,28 @@
             <button id="guidePrev" class="ghost-action" type="button">上一步</button>
             <button id="guideNext" class="primary-action" type="button">下一步</button>
             <button id="guideClose" class="danger-action" type="button">结束</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="modal-overlay hidden" id="localSearchGuideOverlay" aria-hidden="true">
+        <section class="app-modal local-search-guide-dialog" role="dialog" aria-modal="true" aria-labelledby="localSearchGuideTitle">
+          <div class="app-modal-head">
+            <div>
+              <h2 id="localSearchGuideTitle">本地 AI 搜图上手引导</h2>
+              <p>首次使用请按以下顺序完成。</p>
+            </div>
+            <button class="settings-button" id="localSearchGuideClose" type="button" aria-label="关闭本地搜图引导">×</button>
+          </div>
+          <ol class="local-search-guide-list">
+            <li><strong>下载模型</strong>：首次使用需下载约 225MB 离线模型，完成后可纯离线运行。</li>
+            <li><strong>创建图库</strong>：选择一个本地图片文件夹作为图库。</li>
+            <li><strong>开始分析</strong>：递归扫描并生成向量索引，生成后可持续增量更新。</li>
+            <li><strong>搜索测试</strong>：分别测试截图/图片搜索和中文或英文文字搜索。</li>
+          </ol>
+          <p class="local-search-guide-tip">说明：仅索引、缩略图会落在本机，不会上传原图或查询内容。</p>
+          <div class="action-row">
+            <button class="primary-action" id="localSearchGuideStart" type="button">我知道了，开始使用</button>
           </div>
         </section>
       </div>
