@@ -252,13 +252,19 @@ function translateFilename(source, knowledge, options = {}) {
 async function translateFilenameSmart(source, knowledge, options = {}) {
   const strictName = translateFilename(source, knowledge, { allowPinyin: false });
   const pinyinName = translateFilename(source, knowledge, { allowPinyin: true });
-  if (options.allowExternal === false || !containsChinese(source) || translationSettings.provider === "local" || strictName === pinyinName) {
+  if (
+    options.allowExternal === false ||
+    !containsChinese(source) ||
+    translationSettings.provider === "local" ||
+    (!options.forceExternal && strictName === pinyinName)
+  ) {
     return formatNamingName(pinyinName || strictName);
   }
   try {
     const externalName = await translateFilenameByConfiguredProvider(source);
     return formatNamingName(externalName || pinyinName || strictName);
-  } catch {
+  } catch (error) {
+    if (options.requireExternal) throw error;
     return formatNamingName(pinyinName || strictName);
   }
 }
