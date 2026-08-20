@@ -1,4 +1,4 @@
-name: Desktop Release Draft
+name: Desktop Production Release
 
 on:
   workflow_dispatch:
@@ -27,6 +27,14 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version $version"
+          }
       - name: Prepare project-local directories
         shell: pwsh
         run: New-Item -ItemType Directory -Force .cache/npm,.cache/electron,.cache/electron-builder,.cache/ms-playwright,.tmp,logs | Out-Null
@@ -36,6 +44,7 @@ jobs:
         run: |
           npm test
           npm run build
+          npm run verify:packaged:prod
       - name: Upload production build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -43,20 +52,22 @@ jobs:
           path: |
             artifacts/prod/*.exe
             artifacts/prod/*.blockmap
+            artifacts/prod/latest.yml
             artifacts/prod/*-SHA256SUMS.txt
             artifacts/prod/*-sbom.cdx.json
             artifacts/prod/*-build-manifest.json
           if-no-files-found: error
-      - name: Create draft GitHub Release for tag
+      - name: Publish GitHub Release for tag
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
           prerelease: false
           generate_release_notes: true
           files: |
             artifacts/prod/*.exe
             artifacts/prod/*.blockmap
+            artifacts/prod/latest.yml
             artifacts/prod/*-SHA256SUMS.txt
             artifacts/prod/*-sbom.cdx.json
             artifacts/prod/*-build-manifest.json

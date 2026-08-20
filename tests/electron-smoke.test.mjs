@@ -137,6 +137,32 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.deepEqual(localSearch.libraries, []);
     assert.ok(localSearch.exposedMethods.includes("searchByImage"));
     assert.ok(localSearch.exposedMethods.includes("revealResult"));
+    if (await window.locator("#localSearchGuideOverlay").isVisible()) {
+      await window.locator("#localSearchGuideStart").click();
+    }
+    await window.locator("#rulesEntry").click();
+    await window.waitForFunction(() => document.querySelector("#localImageSearchSettingsView")?.classList.contains("active"));
+    await window.locator("#localSearchManageModels").click();
+    await window.locator("#localSearchModelManagerOverlay:not(.hidden)").waitFor();
+    assert.equal(await window.locator("#localSearchManagedModels .local-search-managed-model").count(), 1);
+    assert.match(await window.locator("#localSearchManagedModels").innerText(), /内置|已认证/);
+    await window.locator("#localSearchCustomImportStart").click();
+    await window.locator("#localSearchCustomModelName").fill("E2E 离线向量模型");
+    await window.locator("#localSearchCustomModelType").selectOption("image-text");
+    assert.equal(await window.locator("#localSearchCustomTextFields").isVisible(), true);
+    await window.locator("#localSearchCustomPixelType").selectOption("uint8");
+    assert.equal(await window.locator("#localSearchCustomScale").inputValue(), "1");
+    assert.deepEqual(await Promise.all([
+      "#localSearchCustomMeanR", "#localSearchCustomMeanG", "#localSearchCustomMeanB",
+    ].map((selector) => window.locator(selector).inputValue())), ["0", "0", "0"]);
+    await window.locator("#localSearchCustomPixelType").selectOption("float32");
+    assert.equal(await window.locator("#localSearchCustomScale").inputValue(), "0.003921568627451");
+    await window.locator("#localSearchCancelModelWizard").click();
+    await window.locator("#localSearchModelManagerClose").click();
+    await window.locator("#backButton").click();
+    await window.waitForFunction(() => document.querySelector("#localImageSearchView")?.classList.contains("active"));
+    assert.equal(await window.locator("#localSearchClearImageQuery").isDisabled(), true);
+    assert.equal(await window.locator("#localSearchClearTextQuery").isDisabled(), true);
     await window.locator("#rulesEntry").click();
     await window.waitForFunction(() => document.querySelector("#localImageSearchSettingsView")?.classList.contains("active"));
     await window.locator("#backButton").click();

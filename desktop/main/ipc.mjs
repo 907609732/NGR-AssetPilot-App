@@ -93,11 +93,15 @@ export function registerDesktopIpc({
   });
 
   handle(channels.localImageSearchGetModelStatus, async () => localImageSearch.getModelStatus());
+  handle(channels.localImageSearchListModels, async () => localImageSearch.listModels());
+  handle(channels.localImageSearchValidateModel, async (_event, payload) => localImageSearch.validateModel(payload));
   handle(channels.localImageSearchDownloadModel, async () => localImageSearch.downloadModel());
   handle(channels.localImageSearchCancelModelDownload, async () => localImageSearch.cancelModelDownload());
-  handle(channels.localImageSearchImportModel, async () => localImageSearch.importModel());
+  handle(channels.localImageSearchImportModel, async (_event, payload) => localImageSearch.importModel(payload));
   handle(channels.localImageSearchExportModel, async () => localImageSearch.exportModel());
-  handle(channels.localImageSearchRemoveModel, async () => localImageSearch.removeModel());
+  handle(channels.localImageSearchRemoveModel, async (_event, payload) => localImageSearch.removeModel(payload));
+  handle(channels.localImageSearchSetActiveModel, async (_event, payload) => localImageSearch.setActiveModel(payload));
+  handle(channels.localImageSearchGetEngineStatus, async (_event, payload) => localImageSearch.getEngineStatus(payload));
   handle(channels.localImageSearchListLibraries, async () => localImageSearch.listLibraries());
   handle(channels.localImageSearchCreateLibrary, async () => localImageSearch.createLibrary());
   handle(channels.localImageSearchRemoveLibrary, async (_event, payload) => localImageSearch.removeLibrary(payload));

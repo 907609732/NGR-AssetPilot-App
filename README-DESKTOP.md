@@ -41,4 +41,16 @@ npm run build:all
 - 源图片目录只读；删除图库只删除索引和缩略图。
 - 支持 JPEG、PNG、WebP、BMP、GIF 首帧和 TIFF。
 - 查询图只在内存使用，不保存文字、截图或搜索历史。
-- DirectML 不兼容时自动回退 CPU，模型加载后禁用远程模型访问。
+- Windows 图库分析自动使用 DirectML 批量推理；显存不足时降低批量，DirectML 不兼容时自动回退 CPU。
+- V3.0.4 使用新的批量索引配置；首次升级会保留路径、哈希和尺寸信息，但旧版单张 CPU 向量必须重新分析，避免与 GPU 向量静默混用。执行设备或批量配置变化时也会自动重建该模型索引。
+- 内置量化模型追求检索速度，批量内容会带来轻微向量漂移；本机 100 图验证同图 Top 5 命中为 100%，但 CPU/GPU Top 5 列表重合约 83.4%，不承诺严格跨设备一致。对此有硬性要求时，请导入经验证的 FP16/FP32 embedding 模型并重新建立独立索引。
+- 模型管理器支持从本机导入图像单塔或图文双塔 ONNX embedding 模型；每个模型使用独立向量索引，切换模型不会覆盖其他索引。
+- 自定义模型在隔离进程内验证，只允许 ONNX 与声明的外部权重/tokenizer 数据，不加载脚本或自定义算子 DLL。
+- 图像单塔只提供图片相似搜索；只有通过维度与 tokenizer 校验的图文双塔才开放文字搜索。
+- 模型加载后禁用远程模型访问。
+
+完整索引性能验收使用独立临时数据库，不会修改正式版数据或源图库：
+
+```powershell
+npm run test:local-image-search:index -- --source "E:\path\to\library" --model-root "$env:APPDATA\NGR AssetPilot\local-image-search\models"
+```

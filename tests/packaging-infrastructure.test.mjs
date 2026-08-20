@@ -110,3 +110,20 @@ test("缓存、临时文件、日志和三版本产物全部定向工程目录",
   assert.equal(env.ELECTRON_BUILDER_CACHE, projectPaths.electronBuilderCache);
   assert.equal(env.PLAYWRIGHT_BROWSERS_PATH, projectPaths.playwrightCache);
 });
+
+test("正式版发布工作流同时上传自动更新元数据", () => {
+  const workflow = fs.readFileSync(path.join(projectRoot, ".github", "workflows", "desktop-release.yml"), "utf8");
+  const latestEntries = workflow.match(/artifacts\/prod\/latest\.yml/g) || [];
+  assert.equal(latestEntries.length, 2, "latest.yml 必须同时进入 Actions 构建产物和 GitHub Release");
+  assert.match(workflow, /artifacts\/prod\/\*\.exe/);
+  assert.match(workflow, /artifacts\/prod\/\*\.blockmap/);
+  assert.match(workflow, /GITHUB_REF_NAME/);
+  assert.match(workflow, /npm run verify:packaged:prod/);
+  assert.match(workflow, /draft:\s*false/);
+  assert.doesNotMatch(workflow, /draft:\s*true/);
+});
+
+test("发布校验清单不会引用未上传的 builder 调试文件", () => {
+  const generator = fs.readFileSync(path.join(projectRoot, "scripts", "generate-release-metadata.mjs"), "utf8");
+  assert.match(generator, /"builder-debug\.yml"/);
+});
