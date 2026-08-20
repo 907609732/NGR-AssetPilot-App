@@ -28,10 +28,13 @@ async function verifyTarget(target) {
     timeout: 60_000,
   });
   try {
+    // Wait for the renderer before evaluating the main process. On fresh
+    // Windows runners the packaged app can still be completing startup, and
+    // an immediate main-process evaluation may lose its Playwright promise.
+    const window = await electronApp.firstWindow({ timeout: 60_000 });
     const appInfo = await electronApp.evaluate(({ app }) => ({ name: app.getName(), userData: app.getPath("userData") }));
     assert.equal(appInfo.name, target.product);
     assert.equal(path.resolve(appInfo.userData), path.resolve(userDataPath));
-    const window = await electronApp.firstWindow({ timeout: 60_000 });
     await window.waitForFunction(() => Boolean(window.ngrDesktop?.environment));
     if (target.badge) {
       await window.waitForFunction(
