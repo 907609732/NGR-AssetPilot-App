@@ -88,6 +88,7 @@
 
   function translationProviderId(settings = translationSettings || {}) {
     if (settings.provider === "baidu") return "baidu";
+    if (settings.provider === "cfc") return "baidu-cfc";
     if (settings.provider === "model") return "user-translation-model";
     return "";
   }
@@ -156,7 +157,9 @@
       baiduSecret: "",
       textApiKey: "",
       hasSecret: Boolean(translation?.hasSecret),
-      baiduEndpoint: translation?.id === "baidu" ? translation.baseUrl : translationSettings.baiduEndpoint,
+      baiduEndpoint: ["baidu", "baidu-cfc"].includes(translation?.id)
+        ? translation.baseUrl
+        : translationSettings.baiduEndpoint,
       textBaseUrl: translation?.id === "user-translation-model" ? translation.baseUrl : translationSettings.textBaseUrl,
       textModel: translation?.id === "user-translation-model" ? translation.model : translationSettings.textModel,
     });
@@ -193,13 +196,13 @@
 
         const translationId = translationProviderId(translationSettings);
         if (translationId) {
-          const isBaidu = translationId === "baidu";
+          const isBaidu = translationId === "baidu" || translationId === "baidu-cfc";
           const secretPresent = isBaidu
             ? Boolean(translationSettings.baiduAppId && translationSettings.baiduSecret)
             : Boolean(translationSettings.textApiKey);
           const result = await globalScope.NgrDesktopBridge.upsertProvider({
             provider: isBaidu ? {
-              id: "baidu",
+              id: translationId,
               apiFormat: translationSettings.baiduCredentialType === "apiKey" ? "baidu-ai" : "baidu",
             } : {
               id: translationId,
@@ -265,7 +268,10 @@
     const id = translationProviderId(translationSettings);
     if (!id) return false;
     const result = await globalScope.NgrDesktopBridge.upsertProvider({
-      provider: id === "baidu" ? { id } : {
+      provider: id === "baidu" || id === "baidu-cfc" ? {
+        id,
+        apiFormat: translationSettings.baiduCredentialType === "apiKey" ? "baidu-ai" : "baidu",
+      } : {
         id,
         service: "translation",
         name: "自定义翻译模型",

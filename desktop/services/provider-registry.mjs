@@ -11,6 +11,7 @@ const IMPORT_JOURNAL_VERSION = 1;
 const CUSTOM_PROVIDER_IDS = new Set(["user-ai", "user-translation-model"]);
 const BAIDU_AI_ENDPOINT = "https://fanyi-api.baidu.com/ait/api/aiTextTranslate";
 const BAIDU_LEGACY_ENDPOINT = "https://fanyi-api.baidu.com/api/trans/vip/translate";
+const BAIDU_CFC_ID = "baidu-cfc";
 
 const BUILTIN_PROVIDERS = Object.freeze([
   Object.freeze({
@@ -20,6 +21,17 @@ const BUILTIN_PROVIDERS = Object.freeze([
     baseUrl: "https://api.openai.com/v1",
     apiFormat: "responses",
     model: "gpt-4.1-mini",
+    builtin: true,
+    trust: "builtin",
+    allowLoopback: false,
+  }),
+  Object.freeze({
+    id: BAIDU_CFC_ID,
+    name: "百度翻译 CFC",
+    service: "translation",
+    baseUrl: BAIDU_LEGACY_ENDPOINT,
+    apiFormat: "baidu",
+    model: "",
     builtin: true,
     trust: "builtin",
     allowLoopback: false,
@@ -125,6 +137,8 @@ function normalizeProvider(input, existing) {
   const builtin = BUILTIN_PROVIDERS.find((provider) => provider.id === id);
   if (builtin) {
     const baiduApiFormat = input.apiFormat === "baidu" ? "baidu" : "baidu-ai";
+    const providedBaseUrl = builtin.id === BAIDU_CFC_ID && input.baseUrl ? String(input.baseUrl).trim() : "";
+    const customBase = providedBaseUrl ? normalizeBaseUrl(providedBaseUrl, { builtin: true }).baseUrl : "";
     return {
       ...builtin,
       apiFormat: builtin.id === "baidu"
@@ -133,7 +147,9 @@ function normalizeProvider(input, existing) {
           : input.apiFormat === "responses" ? "responses"
             : existing?.apiFormat || builtin.apiFormat,
       model: String(input.model || existing?.model || builtin.model).trim().slice(0, 256),
-      baseUrl: builtin.id === "baidu" && baiduApiFormat === "baidu" ? BAIDU_LEGACY_ENDPOINT : builtin.baseUrl,
+      baseUrl: builtin.id === "baidu"
+        ? baiduApiFormat === "baidu" ? BAIDU_LEGACY_ENDPOINT : BAIDU_AI_ENDPOINT
+        : builtin.id === BAIDU_CFC_ID ? (customBase || BAIDU_LEGACY_ENDPOINT) : builtin.baseUrl,
     };
   }
   if (!CUSTOM_PROVIDER_IDS.has(id)) {
@@ -158,7 +174,7 @@ function normalizeProvider(input, existing) {
 }
 
 function normalizeSecret(provider, value) {
-  if (provider.id === "baidu") {
+  if (provider.id === "baidu" || provider.id === BAIDU_CFC_ID) {
     if (!isPlainRecord(value)) throw new DesktopError("PROVIDER_SECRET_INVALID", "百度翻译凭据无效");
     const appId = String(value.appId || "").trim();
     const apiKey = String(value.apiKey || "").trim();
@@ -184,7 +200,7 @@ function cloneSecretMap(value) {
 }
 
 function providerEndpoint(provider, operation) {
-  if (provider.id === "baidu") return provider.baseUrl;
+  if (provider.id === "baidu" || provider.id === BAIDU_CFC_ID) return provider.baseUrl;
   const suffix = operation === "responses" ? "/responses" : "/chat/completions";
   if (new RegExp(`${suffix.replace(/\//g, "\\/")}$`, "i").test(provider.baseUrl)) return provider.baseUrl;
   return `${provider.baseUrl}${suffix}`;
@@ -609,7 +625,7 @@ export class ProviderRegistry {
     if (!provider) throw new DesktopError("PROVIDER_NOT_FOUND", "模型服务未配置或未获授权");
     const secret = await this.credentialStore.getProviderSecret(providerId);
     if (!secret) throw new DesktopError("PROVIDER_SECRET_MISSING", "模型服务凭据尚未配置");
-    if (provider.id === "baidu") {
+    if (provider.id === "baidu" || provider.id === BAIDU_CFC_ID) {
       if (input.operation !== "translate") throw new DesktopError("PROVIDER_OPERATION_NOT_ALLOWED", "模型服务操作未获授权");
       if (secret.apiKey) {
         const request = baiduAiRequest(secret, input.body);

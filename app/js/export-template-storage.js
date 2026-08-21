@@ -849,10 +849,14 @@ function saveAiSettings(nextSettings, options = {}) {
 function collectTranslationSettings() {
   const provider = els.translatorProvider.value || "local";
   const providerId = provider === "baidu" ? "baidu"
+      : provider === "cfc" ? "baidu-cfc"
       : provider === "model" ? "user-translation-model" : "";
+  const baiduCredentialType = provider === "cfc"
+    ? "legacy"
+    : (els.baiduCredentialType?.value || "apiKey");
   return normalizeTranslationSettings({
     provider,
-    baiduCredentialType: els.baiduCredentialType?.value || "apiKey",
+    baiduCredentialType,
     baiduAppId: els.baiduTranslateAppId.value.trim(),
     baiduSecret: els.baiduTranslateSecret.value.trim(),
     baiduEndpoint: normalizeTranslateEndpoint(els.baiduTranslateEndpoint.value),
@@ -867,13 +871,16 @@ function collectTranslationSettings() {
 }
 
 function fillTranslationSettings() {
+  const isBaiduLikeProvider = translationSettings.provider === "baidu" || translationSettings.provider === "cfc";
   els.translatorProvider.value = translationSettings.provider;
-  if (els.baiduCredentialType) els.baiduCredentialType.value = translationSettings.baiduCredentialType;
+  if (els.baiduCredentialType) {
+    els.baiduCredentialType.value = translationSettings.provider === "cfc" ? "legacy" : translationSettings.baiduCredentialType;
+  }
   els.baiduTranslateAppId.value = translationSettings.baiduAppId;
   els.baiduTranslateSecret.value = translationSettings.baiduSecret;
-  els.baiduTranslateAppId.placeholder = translationSettings.provider === "baidu" && translationSettings.hasSecret
+  els.baiduTranslateAppId.placeholder = isBaiduLikeProvider && translationSettings.hasSecret
     ? "已安全保存；留空表示保持不变" : "请输入百度翻译 App ID";
-  els.baiduTranslateSecret.placeholder = translationSettings.provider === "baidu" && translationSettings.hasSecret
+  els.baiduTranslateSecret.placeholder = isBaiduLikeProvider && translationSettings.hasSecret
     ? "已安全保存；留空表示保持不变"
     : translationSettings.baiduCredentialType === "apiKey" ? "请输入百度大模型翻译 API Key" : "请输入百度传统密钥";
   els.baiduTranslateEndpoint.value = translationSettings.baiduEndpoint;
@@ -918,7 +925,7 @@ function saveMeaningCache() {
 
 function normalizeTranslationSettings(nextSettings = {}) {
   nextSettings = nextSettings || {};
-  const provider = ["local", "baidu", "model"].includes(nextSettings.provider) ? nextSettings.provider : "local";
+  const provider = ["local", "baidu", "cfc", "model"].includes(nextSettings.provider) ? nextSettings.provider : "local";
   return {
     provider,
     baiduCredentialType: nextSettings.baiduCredentialType === "apiKey"

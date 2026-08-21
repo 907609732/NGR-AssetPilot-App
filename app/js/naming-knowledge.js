@@ -288,7 +288,7 @@ async function translateFilenameByConfiguredProvider(source) {
     const offlineText = await translateTextOffline(source, "zh", "en");
     return cleanNamingName(String(offlineText || "").replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9_]+/g, "_"));
   }
-  if (translationSettings.provider === "baidu") {
+  if (translationSettings.provider === "baidu" || translationSettings.provider === "cfc") {
     const apiText = await translateTextByApi(source, "zh", "en");
     return cleanNamingName(String(apiText || "").replace(/([a-z])([A-Z])/g, "$1_$2").replace(/[^A-Za-z0-9_]+/g, "_"));
   }
@@ -317,7 +317,7 @@ async function translateTextOffline(text, from = "zh", to = "en") {
 }
 
 async function translateTextByApi(text, from, to) {
-  if (translationSettings.provider !== "baidu") return "";
+  if (translationSettings.provider !== "baidu" && translationSettings.provider !== "cfc") return "";
   const desktopCredential = window.NgrDesktopBridge?.isDesktopRuntime() && translationSettings.hasSecret;
   if (!desktopCredential && (!translationSettings.baiduAppId || !translationSettings.baiduSecret)) {
     throw new Error("请先填写百度翻译 App ID 和密钥");
@@ -336,8 +336,9 @@ async function translateTextByApi(text, from, to) {
 
 async function requestBaiduTranslate(query, from, to) {
   if (window.NgrDesktopBridge?.isDesktopRuntime()) {
+    const providerId = translationSettings.provider === "cfc" ? "baidu-cfc" : (translationSettings.providerId || "baidu");
     const response = await window.NgrDesktopBridge.requestProvider(
-      translationSettings.providerId || "baidu",
+      providerId,
       "translate",
       { q: query, from, to },
       { timeoutMs: 30000 },
@@ -513,7 +514,8 @@ function getMeaningKey(name) {
 function scheduleBaiduMeaningTranslation(name, key = getMeaningKey(name)) {
   if (!key || meaningCache[key] || pendingMeaningNames.has(key)) return;
   const desktopCredential = window.NgrDesktopBridge?.isDesktopRuntime() && translationSettings.hasSecret;
-  if (translationSettings.provider !== "baidu" || (!desktopCredential && (!translationSettings.baiduAppId || !translationSettings.baiduSecret))) return;
+  if ((translationSettings.provider !== "baidu" && translationSettings.provider !== "cfc")
+    || (!desktopCredential && (!translationSettings.baiduAppId || !translationSettings.baiduSecret))) return;
   pendingMeaningNames.add(key);
   meaningQueue.push({ name, key });
   runMeaningQueue();

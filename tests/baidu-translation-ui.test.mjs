@@ -39,5 +39,7 @@ test("百度翻译设置支持新版 API Key 和传统密钥两种鉴权", () =>
   assert.match(index, /id="baiduCredentialType"/);
   assert.match(index, /value="apiKey">新版 API Key/);
   assert.match(index, /value="legacy">App ID \+ 传统密钥/);
+  assert.match(index, /value="cfc">百度翻译 CFC/);
+  assert.match(translator, /if \(provider === "cfc"\) els\.baiduCredentialType\.value = "legacy"/);
   assert.match(translator, /aiTextTranslate/);
 });

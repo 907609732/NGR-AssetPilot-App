@@ -221,10 +221,14 @@ function revealTranslatorSettings() {
   openSettingsView("apiSettings", currentViewName);
   requestAnimationFrame(() => {
     const provider = translationSettings.provider || "local";
-    if (provider === "baidu") els.baiduTranslateAppId?.focus();
+    if (provider === "baidu" || provider === "cfc") els.baiduTranslateAppId?.focus();
     else if (provider === "model") els.textTranslateBaseUrl?.focus();
     else els.testTranslatorSettings?.focus();
   });
+}
+
+function isBaiduTranslationProvider() {
+  return (translationSettings.provider || "local") === "baidu" || translationSettings.provider === "cfc";
 }
 
 async function ensureTranslationProviderReady(options = {}) {
@@ -245,7 +249,7 @@ async function ensureTranslationProviderReady(options = {}) {
       return false;
     }
   }
-  if (provider === "baidu") {
+  if (provider === "baidu" || provider === "cfc") {
     const desktopReady = Boolean(isDesktop && translationSettings.hasSecret);
     const browserReady = Boolean(translationSettings.baiduAppId && translationSettings.baiduSecret);
     if (desktopReady || browserReady) return true;
@@ -370,12 +374,16 @@ function positionTranslatorPanel(left, top) {
 
 function syncTranslatorProviderFields() {
   const provider = els.translatorProvider.value || "local";
+  const isBaiduLike = provider === "baidu" || provider === "cfc";
   els.translatorProviderGroups.forEach((node) => {
     const group = node.dataset.providerGroup;
-    node.classList.toggle("hidden", group !== provider);
+    node.classList.toggle("hidden", group !== provider && !(isBaiduLike && group === "baidu"));
   });
   els.testTranslatorSettings.classList.remove("hidden");
   els.clearTranslatorCredential?.classList.toggle("hidden", provider === "local");
+  if (els.baiduCredentialType) {
+    if (provider === "cfc") els.baiduCredentialType.value = "legacy";
+  }
   syncBaiduCredentialFields();
 }
 
@@ -445,7 +453,7 @@ async function explainNameWithTranslation(name) {
   if (translationSettings.provider === "local") return localMeaning;
   try {
     const readable = cleanNamingName(name).replace(/_/g, " ");
-    const apiText = translationSettings.provider === "baidu" ? await translateTextByApi(readable, "en", "zh") : "";
+    const apiText = isBaiduTranslationProvider() ? await translateTextByApi(readable, "en", "zh") : "";
     return apiText || localMeaning;
   } catch (error) {
     return localMeaning + "\n提示：翻译 API 调用失败，已使用本地词库解释。";
@@ -468,7 +476,7 @@ async function testTranslationSettings() {
     return;
   }
   try {
-    const result = translationSettings.provider === "baidu"
+    const result = isBaiduTranslationProvider()
       ? await translateTextByApi("测试", "zh", "en") : await translateTextByModel("测试");
     els.translatorOutput.textContent = "测试成功：测试 -> " + result;
     showToast("翻译 API 测试成功");
