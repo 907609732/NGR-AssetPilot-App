@@ -1,6 +1,6 @@
 {
   "name": "ngr-assetpilot-desktop",
-  "version": "3.0.8",
+  "version": "3.0.10",
   "private": true,
   "description": "NGR AssetPilot Windows desktop application",
   "license": "MIT",
@@ -19,6 +19,8 @@
     "test:local-image-search:performance": "node scripts/benchmark-local-image-search.mjs",
     "test:local-image-search:index": "node scripts/benchmark-local-image-index.mjs",
     "prepare:offline-translation": "node scripts/prepare-offline-translation-model.mjs",
+    "prepare:managed-provider": "node scripts/prepare-managed-provider-config.mjs",
+    "package:cfc": "node scripts/package-baidu-cfc.mjs",
     "build:prod": "node scripts/run-build.mjs prod",
     "build:dev": "node scripts/run-build.mjs dev",
     "build:test": "node scripts/run-build.mjs test",

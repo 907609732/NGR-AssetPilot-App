@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.8" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.10" />
   </head>
   <body>
     <div id="app">
@@ -15,7 +15,7 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.8</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.10</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
@@ -65,7 +65,7 @@
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.8</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.10</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
@@ -293,7 +293,7 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.8</span><time class="version-date" datetime="2026-08-21">更新于 2026-08-21</time></h2>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.10</span><time class="version-date" datetime="2026-08-22">更新于 2026-08-22</time></h2>
             <p>配置命名规则、方案模板和项目知识库；在线服务统一在“API”页签管理。</p>
           </div>
 
@@ -888,7 +888,8 @@
               <span>翻译方式</span>
               <select id="translatorProvider">
                 <option value="local">内置离线 AI 翻译</option>
-                <option value="baidu">自有百度翻译 API</option>
+                <option value="baidu">自有百度翻译 API（传统/API Key）</option>
+                <option value="cfc">NGR 云翻译（百度 CFC，开箱即用）</option>
                 <option value="model">OpenAI兼容文本模型</option>
               </select>
             </label>
@@ -924,6 +925,7 @@
               <input id="textTranslateModel" type="text" placeholder="例如：gpt-4.1-mini" />
             </label>
             <p class="translator-provider-note" data-provider-group="local">内置离线中译英模型，断网可用；词库和拼音作为自动兜底，不需要 API Key。</p>
+            <p class="translator-provider-note" data-provider-group="cfc">NGR 云翻译由百度 CFC 托管，正式版无需填写 APP ID 或密钥；密钥只保存在云函数环境变量中。</p>
             <div class="translator-settings-actions">
               <button id="saveTranslatorSettings" class="primary-action" type="button">保存翻译设置</button>
               <button id="testTranslatorSettings" class="ghost-action" type="button">测试翻译</button>
@@ -1204,27 +1206,27 @@
       <div id="toast" class="toast hidden" role="status"></div>
     </div>
 
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.8"></script>
-    <script src="historical-knowledge.js?v=V3.0.8"></script>
-    <script src="js/config.js?v=V3.0.8"></script>
-    <script src="js/prefix-library.js?v=V3.0.8"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.8"></script>
-    <script src="js/external-app-launcher.js?v=V3.0.8"></script>
-    <script src="js/updates.js?v=V3.0.8"></script>
-    <script src="js/workspace-backup.js?v=V3.0.8"></script>
-    <script src="js/state-dom.js?v=V3.0.8"></script>
-    <script src="js/local-image-browser.js?v=V3.0.8"></script>
-    <script src="js/local-image-search.js?v=V3.0.8"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.8"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.8"></script>
-    <script src="js/ai-workflow.js?v=V3.0.8"></script>
-    <script src="js/assets-detection.js?v=V3.0.8"></script>
-    <script src="js/rendering.js?v=V3.0.8"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.8"></script>
-    <script src="js/export-template-storage.js?v=V3.0.8"></script>
-    <script src="js/toast.js?v=V3.0.8"></script>
-    <script src="js/workspace-storage.js?v=V3.0.8"></script>
-    <script src="js/workspace-migration.js?v=V3.0.8"></script>
-    <script src="js/main.js?v=V3.0.8"></script>
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.10"></script>
+    <script src="historical-knowledge.js?v=V3.0.10"></script>
+    <script src="js/config.js?v=V3.0.10"></script>
+    <script src="js/prefix-library.js?v=V3.0.10"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.10"></script>
+    <script src="js/external-app-launcher.js?v=V3.0.10"></script>
+    <script src="js/updates.js?v=V3.0.10"></script>
+    <script src="js/workspace-backup.js?v=V3.0.10"></script>
+    <script src="js/state-dom.js?v=V3.0.10"></script>
+    <script src="js/local-image-browser.js?v=V3.0.10"></script>
+    <script src="js/local-image-search.js?v=V3.0.10"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.10"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.10"></script>
+    <script src="js/ai-workflow.js?v=V3.0.10"></script>
+    <script src="js/assets-detection.js?v=V3.0.10"></script>
+    <script src="js/rendering.js?v=V3.0.10"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.10"></script>
+    <script src="js/export-template-storage.js?v=V3.0.10"></script>
+    <script src="js/toast.js?v=V3.0.10"></script>
+    <script src="js/workspace-storage.js?v=V3.0.10"></script>
+    <script src="js/workspace-migration.js?v=V3.0.10"></script>
+    <script src="js/main.js?v=V3.0.10"></script>
   </body>
 </html>

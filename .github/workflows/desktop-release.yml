@@ -24,6 +24,8 @@ jobs:
       TEMP: ${{ github.workspace }}\.tmp
       TMP: ${{ github.workspace }}\.tmp
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      NGR_BAIDU_CFC_ENDPOINT: ${{ vars.NGR_BAIDU_CFC_ENDPOINT }}
+      NGR_BAIDU_CFC_BEARER_TOKEN: ${{ secrets.NGR_BAIDU_CFC_BEARER_TOKEN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

@@ -88,6 +88,7 @@
 
   function translationProviderId(settings = translationSettings || {}) {
     if (settings.provider === "baidu") return "baidu";
+    if (settings.provider === "cfc") return "baidu-cfc";
     if (settings.provider === "model") return "user-translation-model";
     return "";
   }
@@ -121,6 +122,7 @@
 
   async function hydrateDesktopCredentials() {
     if (!isDesktop()) return false;
+    const hasSavedTranslationChoice = Boolean(localStorage.getItem(TRANSLATION_SETTINGS_KEY));
     const legacy = collectCurrentCredentials();
     try {
       if (legacy.ai.apiKey || legacy.translation.baiduSecret || legacy.translation.textApiKey) {
@@ -137,7 +139,10 @@
     }
     const byId = new Map(providers.map((provider) => [provider.id, provider]));
     const ai = byId.get(aiProviderId(aiSettings));
-    const translation = byId.get(translationProviderId(translationSettings));
+    const managedCfc = byId.get("baidu-cfc")?.managed ? byId.get("baidu-cfc") : null;
+    const translation = !hasSavedTranslationChoice && managedCfc
+      ? managedCfc
+      : byId.get(translationProviderId(translationSettings));
     aiSettings = normalizeAiSettings({
       ...aiSettings,
       providerId: ai?.id || aiProviderId(aiSettings),
@@ -150,13 +155,18 @@
     });
     translationSettings = normalizeTranslationSettings({
       ...translationSettings,
+      provider: !hasSavedTranslationChoice && managedCfc ? "cfc" : translationSettings.provider,
       providerId: translation?.id || translationProviderId(translationSettings),
       baiduCredentialType: translation?.apiFormat === "baidu-ai" ? "apiKey" : translationSettings.baiduCredentialType,
       baiduAppId: "",
       baiduSecret: "",
       textApiKey: "",
+      managed: Boolean(translation?.managed),
+      managedCfcAvailable: Boolean(managedCfc),
       hasSecret: Boolean(translation?.hasSecret),
-      baiduEndpoint: translation?.id === "baidu" ? translation.baseUrl : translationSettings.baiduEndpoint,
+      baiduEndpoint: ["baidu", "baidu-cfc"].includes(translation?.id)
+        ? translation.baseUrl
+        : translationSettings.baiduEndpoint,
       textBaseUrl: translation?.id === "user-translation-model" ? translation.baseUrl : translationSettings.textBaseUrl,
       textModel: translation?.id === "user-translation-model" ? translation.model : translationSettings.textModel,
     });
@@ -193,13 +203,13 @@
 
         const translationId = translationProviderId(translationSettings);
         if (translationId) {
-          const isBaidu = translationId === "baidu";
+          const isBaidu = translationId === "baidu" || translationId === "baidu-cfc";
           const secretPresent = isBaidu
             ? Boolean(translationSettings.baiduAppId && translationSettings.baiduSecret)
             : Boolean(translationSettings.textApiKey);
           const result = await globalScope.NgrDesktopBridge.upsertProvider({
             provider: isBaidu ? {
-              id: "baidu",
+              id: translationId,
               apiFormat: translationSettings.baiduCredentialType === "apiKey" ? "baidu-ai" : "baidu",
             } : {
               id: translationId,
@@ -219,6 +229,10 @@
               : { apiKey: translationSettings.textApiKey },
           });
           translationSettings.providerId = translationId;
+          translationSettings.managed = Boolean(result?.managed);
+          translationSettings.managedCfcAvailable = Boolean(
+            translationSettings.managedCfcAvailable || result?.managed,
+          );
           translationSettings.hasSecret = Boolean(result?.hasSecret);
           translationSettings.baiduAppId = "";
           translationSettings.baiduSecret = "";
@@ -265,7 +279,10 @@
     const id = translationProviderId(translationSettings);
     if (!id) return false;
     const result = await globalScope.NgrDesktopBridge.upsertProvider({
-      provider: id === "baidu" ? { id } : {
+      provider: id === "baidu" || id === "baidu-cfc" ? {
+        id,
+        apiFormat: translationSettings.baiduCredentialType === "apiKey" ? "baidu-ai" : "baidu",
+      } : {
         id,
         service: "translation",
         name: "自定义翻译模型",
@@ -278,6 +295,10 @@
     translationSettings.baiduAppId = "";
     translationSettings.baiduSecret = "";
     translationSettings.textApiKey = "";
+    translationSettings.managed = Boolean(result?.managed);
+    translationSettings.managedCfcAvailable = Boolean(
+      translationSettings.managedCfcAvailable || result?.managed,
+    );
     translationSettings.hasSecret = Boolean(result?.hasSecret);
     fillTranslationSettings();
     await saveTranslationSettings(translationSettings, { skipDesktopSync: true });

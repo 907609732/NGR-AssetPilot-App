@@ -1,3 +1,4 @@
+const fs = require("node:fs");
 const path = require("node:path");
 
 const projectRoot = path.resolve(__dirname, "..");
@@ -47,6 +48,20 @@ const windowsTargets = edition === "prod"
       { target: "nsis", arch: ["x64"] },
       { target: "portable", arch: ["x64"] },
     ];
+const extraResources = [
+  {
+    from: path.join(projectRoot, "build", "generated", "offline-translation"),
+    to: "offline-translation",
+    filter: ["**/*"],
+  },
+];
+const managedProviderConfigPath = path.join(projectRoot, "build", "generated", "managed-provider-config.json");
+if (fs.existsSync(managedProviderConfigPath)) {
+  extraResources.push({
+    from: managedProviderConfigPath,
+    to: "managed-provider-config.json",
+  });
+}
 
 module.exports = {
   appId,
@@ -89,13 +104,7 @@ module.exports = {
     "!**/*.map",
     "!**/.DS_Store",
   ],
-  extraResources: [
-    {
-      from: path.join(projectRoot, "build", "generated", "offline-translation"),
-      to: "offline-translation",
-      filter: ["**/*"],
-    },
-  ],
+  extraResources,
   win: {
     icon: path.join(projectRoot, "build", "icon.ico"),
     target: windowsTargets,

@@ -15,6 +15,7 @@ import { ProviderRegistry } from "../services/provider-registry.mjs";
 import { RuntimeLogger } from "../services/runtime-logger.mjs";
 import { UpdaterController } from "../services/updater-controller.mjs";
 import { LocalImageSearchController } from "../services/local-image-search/controller.mjs";
+import { loadManagedProviderConfig } from "../services/managed-provider-config.mjs";
 import { registerDesktopIpc } from "./ipc.mjs";
 import { QuitCoordinator } from "./lifecycle.mjs";
 import { installAppProtocol, registerAppScheme } from "./protocol.mjs";
@@ -147,13 +148,21 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   await installAppProtocol({ protocol, appRoot });
   writeStartupLog(app, "protocol-ready");
   hardenSession(session.defaultSession);
+  const managedProviderConfigPath = app.isPackaged
+    ? path.join(process.resourcesPath, "managed-provider-config.json")
+    : path.resolve(moduleDirectory, "../../build/generated/managed-provider-config.json");
+  const managedProviderConfig = await loadManagedProviderConfig(managedProviderConfigPath).catch((error) => {
+    writeStartupLog(app, "managed-provider-config-failed", { code: errorCodeOnly(error) });
+    return null;
+  });
   const credentialStore = new CredentialStore({ safeStorage, userDataPath: app.getPath("userData") });
   const providerRegistry = new ProviderRegistry({
     credentialStore,
     userDataPath: app.getPath("userData"),
+    managedProviderConfig,
   });
   await providerRegistry.initialize();
-  writeStartupLog(app, "credentials-ready");
+  writeStartupLog(app, "credentials-ready", { managedTranslation: Boolean(managedProviderConfig?.baiduCfc?.enabled) });
 
   const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
   const updateChannel = isProductionEdition ? "latest" : isTestEdition ? "test" : "dev";

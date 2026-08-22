@@ -4,6 +4,7 @@ import path from "node:path";
 import { generateReleaseMetadata } from "./generate-release-metadata.mjs";
 import { createProjectEnvironment, projectPaths, projectRoot } from "./project-env.mjs";
 import { scanArtifacts } from "./scan-package-secrets.mjs";
+import { prepareManagedProviderConfig } from "./prepare-managed-provider-config.mjs";
 import { prepareOfflineTranslationModel } from "./prepare-offline-translation-model.mjs";
 
 const edition = process.argv[2];
@@ -63,6 +64,7 @@ const releaseBuildLock = acquireBuildLock();
 try {
   safelyResetOutput(artifactDirectory);
   await prepareOfflineTranslationModel();
+  prepareManagedProviderConfig({ required: edition === "prod" });
   const env = createProjectEnvironment({ CSC_IDENTITY_AUTO_DISCOVERY: "false", NGR_BUILD_EDITION: edition });
   runBuilder(env);
   const manifest = generateReleaseMetadata(edition);
