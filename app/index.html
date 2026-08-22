@@ -19,6 +19,22 @@
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
+        <div class="topbar-external-apps" id="externalAppQuickList" aria-label="快捷打开电脑应用"></div>
+        <details id="externalAppMenu" class="compact-action-menu external-app-menu topbar-app-menu">
+          <summary id="externalAppPrimary" class="external-app-config-trigger topbar-tooltip" aria-label="配置快捷应用" title="配置快捷应用" data-tooltip="配置快捷应用">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM17 14v6m-3-3h6" /></svg>
+          </summary>
+          <div class="compact-menu-panel external-app-menu-panel">
+            <div class="external-app-menu-head">
+              <div><strong>快捷打开应用</strong><small>顶部显示 ArtHub、Figma 和自定义软件</small></div>
+              <button id="externalAppAdd" class="ghost-action compact-button" type="button">＋ 添加</button>
+            </div>
+            <div id="externalAppList" class="external-app-list" role="list">
+              <p class="external-app-empty">正在读取电脑应用…</p>
+            </div>
+            <p id="externalAppStatus" class="external-app-status" aria-live="polite"></p>
+          </div>
+        </details>
         <button class="settings-button tutorial-button" id="tutorialEntry" type="button" aria-label="UI切图检测教程" title="UI切图检测教程">教程</button>
         <button class="settings-button guide-button" id="guideEntry" type="button" aria-label="操作指引" title="操作指引">?</button>
         <button class="update-available-button hidden" id="updateAvailableButton" type="button">发现新版本</button>
@@ -542,23 +558,6 @@
               </label>
               <button id="runSelectedNaming" class="primary-action" type="button">运行 NGR 云翻译命名</button>
               <button id="stopNaming" class="danger-action hidden" type="button">终止命名</button>
-              <details id="externalAppMenu" class="compact-action-menu external-app-menu">
-                <summary id="externalAppPrimary" class="external-app-trigger" aria-label="打开快捷应用菜单" title="快速打开 ArtHub 或其他电脑软件">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5H5v14h14v-3M11 13 20 4m0 0h-6m6 0v6" /></svg>
-                  <span id="externalAppPrimaryLabel">打开 ArtHub</span>
-                  <svg class="menu-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
-                </summary>
-                <div class="compact-menu-panel external-app-menu-panel">
-                  <div class="external-app-menu-head">
-                    <div><strong>快速打开应用</strong><small>命名完成后直接拉起上传工具</small></div>
-                    <button id="externalAppAdd" class="ghost-action compact-button" type="button">＋ 添加</button>
-                  </div>
-                  <div id="externalAppList" class="external-app-list" role="list">
-                    <p class="external-app-empty">正在读取电脑应用…</p>
-                  </div>
-                  <p id="externalAppStatus" class="external-app-status" aria-live="polite"></p>
-                </div>
-              </details>
               <details id="exportMenu" class="compact-action-menu export-action-menu">
                 <summary class="toolbar-download-action" aria-label="打开导出菜单" title="下载命名完成的图片">
                   <svg viewBox="0 0 24 24" aria-hidden="true">

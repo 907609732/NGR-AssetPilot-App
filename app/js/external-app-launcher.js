@@ -8,11 +8,41 @@
     return {
       menu: document.querySelector("#externalAppMenu"),
       primary: document.querySelector("#externalAppPrimary"),
-      primaryLabel: document.querySelector("#externalAppPrimaryLabel"),
+      quickList: document.querySelector("#externalAppQuickList"),
       add: document.querySelector("#externalAppAdd"),
       list: document.querySelector("#externalAppList"),
       status: document.querySelector("#externalAppStatus"),
     };
+  }
+
+  function createIcon(appId) {
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("viewBox", "0 0 24 24");
+    icon.setAttribute("aria-hidden", "true");
+    if (appId === "arthub") {
+      icon.innerHTML = '<path d="M5 5h9v4h5v10H5zM9 14h6m-3-3v6" />';
+    } else if (appId === "figma") {
+      icon.classList.add("figma-mark");
+      icon.innerHTML = '<circle cx="9" cy="5" r="3"/><circle cx="15" cy="5" r="3"/><circle cx="9" cy="11" r="3"/><circle cx="15" cy="11" r="3"/><circle cx="9" cy="17" r="3"/>';
+    } else {
+      icon.innerHTML = '<path d="M5 6h14v12H5zM8 10h8m-8 4h5" />';
+    }
+    return icon;
+  }
+
+  function createQuickButton(app) {
+    const button = document.createElement("button");
+    const tooltip = app.available ? `打开 ${app.name}` : `配置 ${app.name}`;
+    button.type = "button";
+    button.className = "topbar-app-button topbar-tooltip";
+    button.classList.toggle("is-unavailable", !app.available);
+    button.dataset.appId = app.id;
+    button.dataset.appKind = app.id;
+    button.dataset.tooltip = tooltip;
+    button.title = tooltip;
+    button.setAttribute("aria-label", tooltip);
+    button.append(createIcon(app.id));
+    return button;
   }
 
   function setStatus(message, error = false) {
@@ -29,9 +59,7 @@
   function render() {
     const dom = elements();
     if (!dom.menu) return;
-    const defaultApp = state.apps.find((app) => app.id === state.defaultAppId) || state.apps[0];
-    dom.primaryLabel.textContent = defaultApp?.available ? `打开 ${defaultApp.name}` : "配置 ArtHub";
-    dom.primary.dataset.appId = defaultApp?.id || "arthub";
+    dom.quickList.replaceChildren(...state.apps.slice(0, 6).map(createQuickButton));
     dom.list.replaceChildren();
     for (const app of state.apps) {
       const row = document.createElement("div");
@@ -129,12 +157,12 @@
     if (!dom.menu) return;
     if (!globalScope.NgrDesktopBridge?.externalApps?.isAvailable()) {
       dom.menu.classList.add("hidden");
+      dom.quickList?.classList.add("hidden");
       return;
     }
-    dom.primary.addEventListener("click", (event) => {
-      if (event.target.closest(".menu-chevron")) return;
-      event.preventDefault();
-      void launch(dom.primary.dataset.appId || state.defaultAppId);
+    dom.quickList.addEventListener("click", (event) => {
+      const launchButton = event.target.closest("[data-app-id]");
+      if (launchButton) void launch(launchButton.dataset.appId);
     });
     dom.add.addEventListener("click", () => void choose());
     dom.list.addEventListener("click", (event) => {

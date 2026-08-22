@@ -157,7 +157,23 @@ test("Electron development app boots with the Dev identity and an isolated rende
     await window.locator("#namingModeSelect").selectOption("translate:local");
     await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "local");
     await window.locator("#externalAppMenu").waitFor({ state: "visible" });
-    assert.match(await window.locator("#externalAppPrimaryLabel").innerText(), /ArtHub/);
+    assert.equal(await window.locator("#workView #externalAppMenu").count(), 0);
+    assert.equal(await window.locator(".topbar #externalAppMenu").count(), 1);
+    await window.locator('#externalAppQuickList [data-app-id="arthub"]').waitFor({ state: "visible" });
+    await window.locator('#externalAppQuickList [data-app-id="figma"]').waitFor({ state: "visible" });
+    assert.match(await window.locator('#externalAppQuickList [data-app-id="arthub"]').getAttribute("data-tooltip"), /ArtHub/);
+    assert.match(await window.locator('#externalAppQuickList [data-app-id="figma"]').getAttribute("data-tooltip"), /Figma/);
+    assert.equal(await window.locator("#externalAppPrimary").getAttribute("data-tooltip"), "配置快捷应用");
+    await window.locator('#externalAppQuickList [data-app-id="figma"]').hover();
+    assert.match(await window.locator('#externalAppQuickList [data-app-id="figma"]').evaluate((node) => (
+      getComputedStyle(node, "::after").content
+    )), /Figma/);
+    await window.locator("#externalAppPrimary").click();
+    await window.locator("#externalAppList").waitFor({ state: "visible" });
+    assert.match(await window.locator("#externalAppList").innerText(), /ArtHub/);
+    assert.match(await window.locator("#externalAppList").innerText(), /Figma/);
+    assert.equal(await window.locator("#externalAppAdd").isVisible(), true);
+    await window.locator("#externalAppPrimary").click();
     await window.evaluate(() => {
       const image = new File(
         ['<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#0f766e"/></svg>'],
