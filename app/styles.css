@@ -678,7 +678,7 @@ button:disabled {
 }
 
 .naming-mode-field {
-  grid-template-columns: auto minmax(160px, 190px);
+  grid-template-columns: auto minmax(220px, 260px);
 }
 
 .export-mode-field {

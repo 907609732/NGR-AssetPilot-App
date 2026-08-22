@@ -892,6 +892,7 @@ function fillTranslationSettings() {
     ? "已安全保存；留空表示保持不变" : "请输入文本翻译模型 API Key";
   els.textTranslateModel.value = translationSettings.textModel;
   if (typeof syncTranslatorProviderFields === "function") syncTranslatorProviderFields();
+  if (typeof syncNamingModeWithTranslationSettings === "function") syncNamingModeWithTranslationSettings();
 }
 
 function loadTranslationSettings() {

@@ -140,6 +140,22 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.equal(await window.locator("#feedbackFormLink").isHidden(), true);
     assert.equal(await window.locator("#workProjectName").inputValue(), "");
     assert.match(await window.locator(".toolbar-download-action").innerText(), /下载命名完成的图片/);
+    assert.deepEqual(await window.locator("#namingModeSelect option").evaluateAll((options) => (
+      options.map((option) => option.value)
+    )), ["translate:local", "translate:cfc", "translate:baidu", "translate:model", "local", "ai"]);
+    assert.equal(await window.locator("#namingModeSelect").inputValue(), "translate:local");
+    assert.equal(await window.locator("#translatorProvider").inputValue(), "local");
+    await window.locator("#namingModeSelect").selectOption("translate:cfc");
+    await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "cfc");
+    assert.match(await window.locator("#runSelectedNaming").innerText(), /NGR 云翻译/);
+    await window.locator("#namingModeSelect").selectOption("translate:baidu");
+    await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "baidu");
+    assert.match(await window.locator("#runSelectedNaming").innerText(), /自有百度翻译/);
+    await window.locator("#namingModeSelect").selectOption("local");
+    assert.equal(await window.locator("#translatorProvider").inputValue(), "baidu");
+    assert.match(await window.locator("#runSelectedNaming").innerText(), /本地知识库/);
+    await window.locator("#namingModeSelect").selectOption("translate:local");
+    await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "local");
     await window.locator("#externalAppMenu").waitFor({ state: "visible" });
     assert.match(await window.locator("#externalAppPrimaryLabel").innerText(), /ArtHub/);
     await window.evaluate(() => {
@@ -269,6 +285,11 @@ test("Electron development app boots with the Dev identity and an isolated rende
       translatorGearExists: false,
       activeTab: "page",
     });
+    await window.locator("#translatorProvider").selectOption("model");
+    await window.waitForFunction(() => document.querySelector("#namingModeSelect")?.value === "translate:model");
+    assert.match(await window.locator("#runSelectedNaming").innerText(), /OpenAI 兼容模型/);
+    await window.locator("#translatorProvider").selectOption("local");
+    await window.waitForFunction(() => document.querySelector("#namingModeSelect")?.value === "translate:local");
   } finally {
     await electronApp.close();
     fs.rmSync(runRoot, { recursive: true, force: true });

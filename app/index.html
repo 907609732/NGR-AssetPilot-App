@@ -526,14 +526,21 @@
             </div>
             <div class="toolbar-actions">
               <label class="toolbar-select naming-mode-field">
-                <span>命名模式</span>
-                <select id="namingModeSelect">
-                  <option value="translate" selected>翻译服务命名</option>
-                  <option value="local">本地知识库命名</option>
-                  <option value="ai">AI视觉命名</option>
+                <span>命名服务</span>
+                <select id="namingModeSelect" aria-label="选择命名服务">
+                  <optgroup label="翻译服务命名">
+                    <option value="translate:local">内置离线 AI 翻译</option>
+                    <option value="translate:cfc" selected>NGR 云翻译（开箱即用）</option>
+                    <option value="translate:baidu">自有百度翻译 API</option>
+                    <option value="translate:model">OpenAI 兼容文本模型</option>
+                  </optgroup>
+                  <optgroup label="其他命名方式">
+                    <option value="local">本地知识库命名</option>
+                    <option value="ai">AI 视觉命名</option>
+                  </optgroup>
                 </select>
               </label>
-              <button id="runSelectedNaming" class="primary-action" type="button">运行翻译服务命名</button>
+              <button id="runSelectedNaming" class="primary-action" type="button">运行 NGR 云翻译命名</button>
               <button id="stopNaming" class="danger-action hidden" type="button">终止命名</button>
               <details id="externalAppMenu" class="compact-action-menu external-app-menu">
                 <summary id="externalAppPrimary" class="external-app-trigger" aria-label="打开快捷应用菜单" title="快速打开 ArtHub 或其他电脑软件">
