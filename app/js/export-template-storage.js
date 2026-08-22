@@ -864,6 +864,8 @@ function collectTranslationSettings() {
     textApiKey: els.textTranslateApiKey.value.trim(),
     textModel: els.textTranslateModel.value.trim(),
     providerId,
+    managed: provider === "cfc" && Boolean(translationSettings?.managed || translationSettings?.managedCfcAvailable),
+    managedCfcAvailable: Boolean(translationSettings?.managedCfcAvailable || translationSettings?.managed),
     hasSecret: typeof translationSettings === "object"
       ? providerId === translationSettings.providerId && Boolean(translationSettings.hasSecret)
       : false,
@@ -938,6 +940,8 @@ function normalizeTranslationSettings(nextSettings = {}) {
     textApiKey: nextSettings.textApiKey || "",
     textModel: nextSettings.textModel || "gpt-4.1-mini",
     providerId: nextSettings.providerId || "",
+    managed: Boolean(nextSettings.managed),
+    managedCfcAvailable: Boolean(nextSettings.managedCfcAvailable || nextSettings.managed),
     hasSecret: Boolean(nextSettings.hasSecret),
   };
 }

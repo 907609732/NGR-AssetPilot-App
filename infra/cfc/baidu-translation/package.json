@@ -1,0 +1,10 @@
+{
+  "name": "ngr-assetpilot-baidu-translation-cfc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NGR AssetPilot managed Baidu translation proxy for Baidu CFC",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -221,7 +221,10 @@ function revealTranslatorSettings() {
   openSettingsView("apiSettings", currentViewName);
   requestAnimationFrame(() => {
     const provider = translationSettings.provider || "local";
-    if (provider === "baidu" || provider === "cfc") els.baiduTranslateAppId?.focus();
+    if (provider === "cfc" && (translationSettings.managed || translationSettings.managedCfcAvailable)) {
+      els.testTranslatorSettings?.focus();
+    }
+    else if (provider === "baidu" || provider === "cfc") els.baiduTranslateAppId?.focus();
     else if (provider === "model") els.textTranslateBaseUrl?.focus();
     else els.testTranslatorSettings?.focus();
   });
@@ -375,12 +378,17 @@ function positionTranslatorPanel(left, top) {
 function syncTranslatorProviderFields() {
   const provider = els.translatorProvider.value || "local";
   const isBaiduLike = provider === "baidu" || provider === "cfc";
+  const isManagedCfc = provider === "cfc"
+    && Boolean(translationSettings.managed || translationSettings.managedCfcAvailable);
   els.translatorProviderGroups.forEach((node) => {
     const group = node.dataset.providerGroup;
-    node.classList.toggle("hidden", group !== provider && !(isBaiduLike && group === "baidu"));
+    const visible = isManagedCfc
+      ? group === "cfc"
+      : group === provider || (isBaiduLike && group === "baidu");
+    node.classList.toggle("hidden", !visible);
   });
   els.testTranslatorSettings.classList.remove("hidden");
-  els.clearTranslatorCredential?.classList.toggle("hidden", provider === "local");
+  els.clearTranslatorCredential?.classList.toggle("hidden", provider === "local" || isManagedCfc);
   if (els.baiduCredentialType) {
     if (provider === "cfc") els.baiduCredentialType.value = "legacy";
   }

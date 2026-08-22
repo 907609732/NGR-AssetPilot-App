@@ -71,6 +71,7 @@ function clonePublicProvider(provider, hasSecret = false) {
     builtin: Boolean(provider.builtin),
     trust: provider.trust,
     allowLoopback: Boolean(provider.allowLoopback),
+    managed: Boolean(provider.managed),
     hasSecret: Boolean(hasSecret),
   });
 }
@@ -136,6 +137,12 @@ function normalizeProvider(input, existing) {
   const id = String(input.id || "").trim();
   const builtin = BUILTIN_PROVIDERS.find((provider) => provider.id === id);
   if (builtin) {
+    if (builtin.id === BAIDU_CFC_ID && existing?.managed) {
+      return {
+        ...existing,
+        model: "",
+      };
+    }
     const baiduApiFormat = input.apiFormat === "baidu" ? "baidu" : "baidu-ai";
     const providedBaseUrl = builtin.id === BAIDU_CFC_ID && input.baseUrl ? String(input.baseUrl).trim() : "";
     const customBase = providedBaseUrl ? normalizeBaseUrl(providedBaseUrl, { builtin: true }).baseUrl : "";
@@ -214,14 +221,19 @@ function isPathAuthorized(provider, candidateUrl) {
   return basePath === "/" || candidate.pathname === basePath || candidate.pathname.startsWith(`${basePath}/`);
 }
 
-function baiduSignedUrl(provider, secret, body) {
+function normalizeBaiduTranslateInput(body) {
   if (!isPlainRecord(body)) throw new DesktopError("NETWORK_BODY_INVALID", "百度翻译请求数据无效");
   const query = String(body.q || "").trim();
   const from = String(body.from || "auto").trim();
   const to = String(body.to || "zh").trim();
-  if (!query || query.length > 6000 || !/^[a-z]{2,8}$/i.test(from) || !/^[a-z]{2,8}$/i.test(to)) {
+  if (!query || query.length > 200 || !/^[a-z]{2,8}$/i.test(from) || !/^[a-z]{2,8}$/i.test(to)) {
     throw new DesktopError("NETWORK_BODY_INVALID", "百度翻译请求数据无效");
   }
+  return { query, from, to };
+}
+
+function baiduSignedUrl(provider, secret, body) {
+  const { query, from, to } = normalizeBaiduTranslateInput(body);
   const salt = randomBytes(12).toString("hex");
   const sign = createHash("md5").update(`${secret.appId}${query}${salt}${secret.secret}`, "utf8").digest("hex");
   const url = new URL(provider.baseUrl);
@@ -230,13 +242,7 @@ function baiduSignedUrl(provider, secret, body) {
 }
 
 function baiduAiRequest(secret, body) {
-  if (!isPlainRecord(body)) throw new DesktopError("NETWORK_BODY_INVALID", "百度翻译请求数据无效");
-  const query = String(body.q || "").trim();
-  const from = String(body.from || "auto").trim();
-  const to = String(body.to || "zh").trim();
-  if (!query || query.length > 6000 || !/^[a-z]{2,8}$/i.test(from) || !/^[a-z]{2,8}$/i.test(to)) {
-    throw new DesktopError("NETWORK_BODY_INVALID", "百度翻译请求数据无效");
-  }
+  const { query, from, to } = normalizeBaiduTranslateInput(body);
   return {
     url: new URL(BAIDU_AI_ENDPOINT),
     headers: {
@@ -248,8 +254,26 @@ function baiduAiRequest(secret, body) {
   };
 }
 
+function managedBaiduCfcRequest(config, input) {
+  const { query, from, to } = normalizeBaiduTranslateInput(input.body);
+  const headers = {
+    accept: "application/json",
+    "content-type": "application/json",
+  };
+  if (config.bearerToken) headers.authorization = `Bearer ${config.bearerToken}`;
+  if (/^[A-Za-z0-9_-]{8,128}$/.test(String(input.requestId || ""))) {
+    headers["x-request-id"] = String(input.requestId);
+  }
+  return {
+    url: new URL(config.endpoint),
+    method: "POST",
+    headers,
+    body: { q: query, from, to },
+  };
+}
+
 export class ProviderRegistry {
-  constructor({ credentialStore, userDataPath, fileName = "providers.v1.json" }) {
+  constructor({ credentialStore, userDataPath, fileName = "providers.v1.json", managedProviderConfig = null }) {
     if (!credentialStore) throw new TypeError("credentialStore is required");
     if (!path.isAbsolute(userDataPath)) throw new TypeError("userDataPath must be absolute");
     this.credentialStore = credentialStore;
@@ -257,7 +281,9 @@ export class ProviderRegistry {
     this.importJournalPath = path.join(userDataPath, "provider-import-transaction.v1.json");
     this.providerRollbackPath = `${this.filePath}.ngr-import-rollback`;
     this.credentialRollbackPath = `${this.credentialStore.filePath}.ngr-import-rollback`;
-    this.providers = new Map(BUILTIN_PROVIDERS.map((provider) => [provider.id, { ...provider }]));
+    this.managedProviderConfig = managedProviderConfig;
+    this.providers = new Map();
+    this.#resetProviders();
     this.activeImportTransactionId = null;
     this.initialized = false;
     this.initializePromise = null;
@@ -283,6 +309,18 @@ export class ProviderRegistry {
 
   #resetProviders() {
     this.providers = new Map(BUILTIN_PROVIDERS.map((provider) => [provider.id, { ...provider }]));
+    const cfc = this.managedProviderConfig?.baiduCfc;
+    if (cfc?.enabled) {
+      const builtin = this.providers.get(BAIDU_CFC_ID);
+      this.providers.set(BAIDU_CFC_ID, {
+        ...builtin,
+        name: "NGR 云翻译（百度 CFC）",
+        baseUrl: cfc.endpoint,
+        apiFormat: "managed-baidu-cfc",
+        managed: true,
+        trust: "managed-builtin",
+      });
+    }
   }
 
   async #loadProvidersFromDisk() {
@@ -463,7 +501,10 @@ export class ProviderRegistry {
   async list() {
     await this.initialize();
     const status = await this.credentialStore.getStatus();
-    return [...this.providers.values()].map((provider) => clonePublicProvider(provider, status.providers?.[provider.id]));
+    return [...this.providers.values()].map((provider) => clonePublicProvider(
+      provider,
+      provider.managed || status.providers?.[provider.id],
+    ));
   }
 
   async upsert(input) {
@@ -471,10 +512,11 @@ export class ProviderRegistry {
     this.#assertMutationAllowed();
     if (!isPlainRecord(input)) throw new DesktopError("PROVIDER_INVALID", "模型服务配置无效");
     const provider = normalizeProvider(input.provider, this.providers.get(input.provider?.id));
-    const action = input.secretAction || "keep";
-    if (!["keep", "replace", "clear"].includes(action)) {
+    const requestedAction = input.secretAction || "keep";
+    if (!["keep", "replace", "clear"].includes(requestedAction)) {
       throw new DesktopError("PROVIDER_SECRET_ACTION_INVALID", "凭据保存方式无效");
     }
+    const action = provider.managed ? "keep" : requestedAction;
     const secret = action === "replace" ? normalizeSecret(provider, input.secret) : undefined;
     const previousProvider = this.providers.get(provider.id);
     const previousSecret = await this.credentialStore.getProviderSecret(provider.id);
@@ -623,6 +665,17 @@ export class ProviderRegistry {
     const providerId = String(input.providerId || "");
     const provider = this.providers.get(providerId);
     if (!provider) throw new DesktopError("PROVIDER_NOT_FOUND", "模型服务未配置或未获授权");
+    if (provider.managed && provider.id === BAIDU_CFC_ID) {
+      if (input.operation !== "translate") {
+        throw new DesktopError("PROVIDER_OPERATION_NOT_ALLOWED", "模型服务操作未获授权");
+      }
+      const request = managedBaiduCfcRequest(this.managedProviderConfig.baiduCfc, input);
+      return {
+        provider,
+        ...request,
+        maximumTimeout: 30_000,
+      };
+    }
     const secret = await this.credentialStore.getProviderSecret(providerId);
     if (!secret) throw new DesktopError("PROVIDER_SECRET_MISSING", "模型服务凭据尚未配置");
     if (provider.id === "baidu" || provider.id === BAIDU_CFC_ID) {

@@ -122,6 +122,7 @@
 
   async function hydrateDesktopCredentials() {
     if (!isDesktop()) return false;
+    const hasSavedTranslationChoice = Boolean(localStorage.getItem(TRANSLATION_SETTINGS_KEY));
     const legacy = collectCurrentCredentials();
     try {
       if (legacy.ai.apiKey || legacy.translation.baiduSecret || legacy.translation.textApiKey) {
@@ -138,7 +139,10 @@
     }
     const byId = new Map(providers.map((provider) => [provider.id, provider]));
     const ai = byId.get(aiProviderId(aiSettings));
-    const translation = byId.get(translationProviderId(translationSettings));
+    const managedCfc = byId.get("baidu-cfc")?.managed ? byId.get("baidu-cfc") : null;
+    const translation = !hasSavedTranslationChoice && managedCfc
+      ? managedCfc
+      : byId.get(translationProviderId(translationSettings));
     aiSettings = normalizeAiSettings({
       ...aiSettings,
       providerId: ai?.id || aiProviderId(aiSettings),
@@ -151,11 +155,14 @@
     });
     translationSettings = normalizeTranslationSettings({
       ...translationSettings,
+      provider: !hasSavedTranslationChoice && managedCfc ? "cfc" : translationSettings.provider,
       providerId: translation?.id || translationProviderId(translationSettings),
       baiduCredentialType: translation?.apiFormat === "baidu-ai" ? "apiKey" : translationSettings.baiduCredentialType,
       baiduAppId: "",
       baiduSecret: "",
       textApiKey: "",
+      managed: Boolean(translation?.managed),
+      managedCfcAvailable: Boolean(managedCfc),
       hasSecret: Boolean(translation?.hasSecret),
       baiduEndpoint: ["baidu", "baidu-cfc"].includes(translation?.id)
         ? translation.baseUrl
@@ -222,6 +229,10 @@
               : { apiKey: translationSettings.textApiKey },
           });
           translationSettings.providerId = translationId;
+          translationSettings.managed = Boolean(result?.managed);
+          translationSettings.managedCfcAvailable = Boolean(
+            translationSettings.managedCfcAvailable || result?.managed,
+          );
           translationSettings.hasSecret = Boolean(result?.hasSecret);
           translationSettings.baiduAppId = "";
           translationSettings.baiduSecret = "";
@@ -284,6 +295,10 @@
     translationSettings.baiduAppId = "";
     translationSettings.baiduSecret = "";
     translationSettings.textApiKey = "";
+    translationSettings.managed = Boolean(result?.managed);
+    translationSettings.managedCfcAvailable = Boolean(
+      translationSettings.managedCfcAvailable || result?.managed,
+    );
     translationSettings.hasSecret = Boolean(result?.hasSecret);
     fillTranslationSettings();
     await saveTranslationSettings(translationSettings, { skipDesktopSync: true });
