@@ -132,6 +132,23 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.match(await disguisedDetectionRow.innerText(), /检测到 JPEG/);
     await window.locator("#detectionModeSelect").selectOption("planner");
     assert.match(await wrongDetectionRow.innerText(), /NGR只允许png格式，不允许其他格式/);
+    await window.locator("#detectionSettingsEntry").click();
+    await window.waitForFunction(() => document.querySelector("#detectionSettingsView")?.classList.contains("active"));
+    assert.equal(await window.locator('[data-detection-modes="planner"]').isVisible(), true);
+    assert.equal(await window.locator('[data-detection-modes="ngr"]').first().isHidden(), true);
+    await window.locator("#detectionProfileMode").selectOption("ngr");
+    assert.equal(await window.locator('[data-detection-modes="ngr"]').first().isVisible(), true);
+    assert.equal(await window.locator('[data-detection-modes="planner"]').isHidden(), true);
+    await window.locator("#detectionMinWidth").fill("64");
+    await window.locator("#detectionMaxFileSizeMb").fill("2.5");
+    await window.locator("#detectionPcEffectWidth").fill("3000");
+    await window.locator("#saveDetectionProfile").click();
+    await window.locator("#backToDetection").click();
+    await window.waitForFunction(() => document.querySelector("#detectView")?.classList.contains("active"));
+    assert.match(await validDetectionRow.getAttribute("class"), /\bhas-issue\b/);
+    await window.locator("#detectionRulesToggle").click();
+    assert.match(await window.locator("#detectionActiveRuleSummary").innerText(), /图集宽高为 2 的倍数/);
+    assert.match(await window.locator("#detectionGeneralRuleSummary").innerText(), /最小尺寸 64x1 px/);
     await window.locator("#backButton").click();
     await window.waitForFunction(() => document.querySelector("#homeView")?.classList.contains("active"));
 

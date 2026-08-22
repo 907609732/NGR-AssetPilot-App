@@ -775,9 +775,8 @@
 
           <div id="detectionRulesPanel" class="detection-rules-panel hidden">
             <h3>UI切图检测规范</h3>
-            <p>NGR切图规范：所有图片宽高必须是双数；背景图规范尺寸为 3440x1440，左右两边不要忘记加带鱼屏渐变；效果图规范尺寸为 PC 2560x1440、移动端 2340x1080；NGR 不允许 1024 分辨率以上的普通切图进引擎，分辨率单边不能超过 1024；单边 2048 的图片无法直接上传，需要走白名单审批；单边超过 512 的大图需要是 4 的倍数；512 以下图集只要不是单数即可。</p>
-            <p>策划配置切图规范：不能有 4 倍图片，宽高都需要是 2 的幂次，例如 32、64、128、256、512、1024。</p>
-            <p>图标尺寸检测规范：Icon 只允许正方形，尺寸只允许 32x32、64x64、128x128、256x256、512x512、1024x1024。</p>
+            <p id="detectionActiveRuleSummary"></p>
+            <p id="detectionGeneralRuleSummary"></p>
             <p>格式规范：NGR 只允许有效的 .png 格式图片；系统同时校验扩展名和 PNG 文件内容。JPG、JPEG、WebP、GIF、SVG、BMP、TIFF、AVIF、HEIC、ICO、损坏文件或伪装成 .png 的其他格式都会报错。</p>
             <p>重复资源检测：默认关闭。开启后系统会对上传图片生成缩略像素指纹，像素比较接近的资源会标黄提示为疑似重复资源；高档更容易发现相似资源，也更可能出现误报。</p>
           </div>
@@ -812,55 +811,168 @@
           </div>
 
           <div class="detection-config">
-            <label>
-              <span>检测项目组</span>
-              <select id="detectionSettingsProfileSelect"></select>
-            </label>
-            <label>
-              <span>项目组名称</span>
-              <input id="detectionProfileName" type="text" placeholder="例如：NGR检测规范" />
-            </label>
-            <label>
-              <span>检测模式</span>
-              <select id="detectionProfileMode">
-                <option value="ngr">NGR切图规范</option>
-                <option value="planner">策划配置切图规范</option>
-                <option value="icon">图标尺寸检测规范</option>
-              </select>
-            </label>
-            <label>
-              <span>重复检测灵敏度</span>
-              <select id="duplicateSensitivityProfile">
-                <option value="off">关闭（默认）</option>
-                <option value="low">低（误报少）</option>
-                <option value="medium">中</option>
-                <option value="high">高（更敏感）</option>
-              </select>
-            </label>
-            <label>
-              <span>单边上限</span>
-              <input id="detectionMaxSide" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>背景图宽</span>
-              <input id="detectionBgWidth" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>背景图高</span>
-              <input id="detectionBgHeight" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>大图阈值</span>
-              <input id="detectionLargeThreshold" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>大图倍数</span>
-              <input id="detectionLargeMultiple" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>图集倍数</span>
-              <input id="detectionAtlasMultiple" type="number" min="1" step="1" />
-            </label>
+            <section class="detection-config-section" data-detection-modes="all">
+              <div class="detection-config-heading">
+                <h3>项目与通用规则</h3>
+                <p>每个项目组独立保存。格式检测固定为严格 PNG，其他规则可按项目调整。</p>
+              </div>
+              <label>
+                <span>检测项目组</span>
+                <select id="detectionSettingsProfileSelect"></select>
+              </label>
+              <label>
+                <span>项目组名称</span>
+                <input id="detectionProfileName" type="text" maxlength="40" placeholder="例如：NGR检测规范" />
+              </label>
+              <label>
+                <span>检测模式</span>
+                <select id="detectionProfileMode">
+                  <option value="ngr">NGR切图规范</option>
+                  <option value="planner">策划配置切图规范</option>
+                  <option value="icon">图标尺寸检测规范</option>
+                </select>
+              </label>
+              <label>
+                <span>重复检测灵敏度</span>
+                <select id="duplicateSensitivityProfile">
+                  <option value="off">关闭（默认）</option>
+                  <option value="low">低（误报少）</option>
+                  <option value="medium">中</option>
+                  <option value="high">高（更敏感）</option>
+                </select>
+              </label>
+              <label>
+                <span>最小宽度（px）</span>
+                <input id="detectionMinWidth" type="number" min="1" max="16384" step="1" />
+              </label>
+              <label>
+                <span>最小高度（px）</span>
+                <input id="detectionMinHeight" type="number" min="1" max="16384" step="1" />
+              </label>
+              <label>
+                <span>文件大小上限（MB）</span>
+                <input id="detectionMaxFileSizeMb" type="number" min="0" max="10240" step="0.1" />
+                <small>填 0 表示不限制</small>
+              </label>
+              <label>
+                <span>允许格式</span>
+                <input type="text" value="PNG（扩展名与文件内容双重校验）" disabled />
+              </label>
+            </section>
+
+            <section class="detection-config-section" data-detection-modes="ngr">
+              <div class="detection-config-heading">
+                <h3>NGR 普通切图与大图</h3>
+                <p>可独立设置普通切图上限、风险尺寸以及图集和大图的尺寸倍数。</p>
+              </div>
+              <label>
+                <span>普通切图单边上限</span>
+                <input id="detectionMaxSide" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>超出上限时</span>
+                <select id="detectionOversizeSeverity">
+                  <option value="error">报错</option>
+                  <option value="warning">仅警告</option>
+                  <option value="off">不检测</option>
+                </select>
+              </label>
+              <label>
+                <span>特殊风险单边</span>
+                <input id="detectionRiskSide" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>命中风险单边时</span>
+                <select id="detectionRiskSideSeverity">
+                  <option value="warning">仅警告</option>
+                  <option value="error">报错</option>
+                  <option value="off">不检测</option>
+                </select>
+              </label>
+              <label>
+                <span>大图阈值</span>
+                <input id="detectionLargeThreshold" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>大图宽高倍数</span>
+                <input id="detectionLargeMultiple" type="number" min="1" max="1024" step="1" />
+              </label>
+              <label>
+                <span>图集宽高倍数</span>
+                <input id="detectionAtlasMultiple" type="number" min="1" max="1024" step="1" />
+                <small>填 1 可关闭双数限制</small>
+              </label>
+            </section>
+
+            <section class="detection-config-section" data-detection-modes="ngr">
+              <div class="detection-config-heading">
+                <h3>NGR 特殊尺寸白名单</h3>
+                <p>命中这些精确尺寸时按背景图或效果图处理，不套用普通切图单边上限。</p>
+              </div>
+              <label>
+                <span>背景图宽</span>
+                <input id="detectionBgWidth" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>背景图高</span>
+                <input id="detectionBgHeight" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>PC 效果图宽</span>
+                <input id="detectionPcEffectWidth" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>PC 效果图高</span>
+                <input id="detectionPcEffectHeight" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>移动端效果图宽</span>
+                <input id="detectionMobileEffectWidth" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>移动端效果图高</span>
+                <input id="detectionMobileEffectHeight" type="number" min="1" max="32768" step="1" />
+              </label>
+            </section>
+
+            <section class="detection-config-section" data-detection-modes="planner">
+              <div class="detection-config-heading">
+                <h3>策划配置规则</h3>
+                <p>可分别控制双数检查与 2 的幂次检查。</p>
+              </div>
+              <label>
+                <span>要求宽高为双数</span>
+                <select id="detectionPlannerRequireEven">
+                  <option value="true">开启</option>
+                  <option value="false">关闭</option>
+                </select>
+              </label>
+              <label>
+                <span>要求宽高为 2 的幂次</span>
+                <select id="detectionPlannerRequirePowerOfTwo">
+                  <option value="true">开启</option>
+                  <option value="false">关闭</option>
+                </select>
+              </label>
+            </section>
+
+            <section class="detection-config-section" data-detection-modes="icon">
+              <div class="detection-config-heading">
+                <h3>Icon 规则</h3>
+                <p>允许尺寸用英文逗号分隔，例如 32,64,128,256。</p>
+              </div>
+              <label>
+                <span>要求正方形</span>
+                <select id="detectionIconRequireSquare">
+                  <option value="true">开启</option>
+                  <option value="false">关闭</option>
+                </select>
+              </label>
+              <label class="detection-config-wide">
+                <span>允许的宽高尺寸（px）</span>
+                <input id="detectionIconAllowedSizes" type="text" maxlength="160" placeholder="32,64,128,256,512,1024" />
+              </label>
+            </section>
           </div>
 
           <div class="signature page-signature">

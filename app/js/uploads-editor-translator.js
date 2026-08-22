@@ -131,14 +131,40 @@ function bindDetection() {
   els.detectionSettingsProfileSelect.addEventListener("change", () => {
     switchDetectionProfile(els.detectionSettingsProfileSelect.value);
   });
-  [els.detectionProfileName, els.detectionProfileMode, els.duplicateSensitivityProfile, els.detectionMaxSide, els.detectionBgWidth, els.detectionBgHeight, els.detectionLargeThreshold, els.detectionLargeMultiple, els.detectionAtlasMultiple].forEach((input) => {
+  [
+    els.detectionProfileName,
+    els.detectionProfileMode,
+    els.duplicateSensitivityProfile,
+    els.detectionMinWidth,
+    els.detectionMinHeight,
+    els.detectionMaxFileSizeMb,
+    els.detectionMaxSide,
+    els.detectionOversizeSeverity,
+    els.detectionRiskSide,
+    els.detectionRiskSideSeverity,
+    els.detectionBgWidth,
+    els.detectionBgHeight,
+    els.detectionPcEffectWidth,
+    els.detectionPcEffectHeight,
+    els.detectionMobileEffectWidth,
+    els.detectionMobileEffectHeight,
+    els.detectionLargeThreshold,
+    els.detectionLargeMultiple,
+    els.detectionAtlasMultiple,
+    els.detectionPlannerRequireEven,
+    els.detectionPlannerRequirePowerOfTwo,
+    els.detectionIconRequireSquare,
+    els.detectionIconAllowedSizes,
+  ].forEach((input) => {
     input.addEventListener("input", () => {
       updateActiveDetectionProfile(collectDetectionProfileForm(), false);
+      if (input === els.detectionProfileMode) updateDetectionSettingsVisibility(els.detectionProfileMode.value);
       revalidateDetectionAssets();
     });
   });
   els.saveDetectionProfile.addEventListener("click", () => {
     updateActiveDetectionProfile(collectDetectionProfileForm(), true);
+    fillDetectionProfileForm();
     showToast("检测参数已保存");
   });
   els.newDetectionProfile.addEventListener("click", createDetectionProfile);

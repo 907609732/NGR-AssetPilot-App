@@ -1760,17 +1760,58 @@ button:disabled {
 
 .detection-config {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 10px;
-  padding: 12px;
+}
+
+.detection-config-section {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface);
 }
 
+.detection-config-section[hidden] {
+  display: none;
+}
+
+.detection-config-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.detection-config-heading h3,
+.detection-config-heading p {
+  margin: 0;
+}
+
+.detection-config-heading h3 {
+  font-size: 16px;
+}
+
+.detection-config-heading p,
+.detection-config label small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .detection-config label {
+  display: grid;
   gap: 6px;
+  align-content: start;
+}
+
+.detection-config-wide {
+  grid-column: span 2;
 }
 
 .detection-rules-panel {
@@ -2230,13 +2271,23 @@ button:disabled {
   }
 
   .job-config label,
-  .detection-config,
+  .detection-config-section,
   .detection-upload-grid,
   .asset-item,
   .inline-name-row,
   .inline-prefix,
   .inline-final-name {
     grid-template-columns: 1fr;
+  }
+
+  .detection-config-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .detection-config-wide {
+    grid-column: auto;
   }
 
   .naming-history-bar {

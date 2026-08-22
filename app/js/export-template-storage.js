@@ -593,6 +593,7 @@ function renderDetectionProfileSelect() {
   els.detectionSettingsProfileSelect.value = activeDetectionProfileId;
   els.detectionModeSelect.value = getActiveDetectionProfile().mode;
   els.duplicateSensitivitySelect.value = getActiveDetectionProfile().duplicateSensitivity;
+  renderActiveDetectionRules();
 }
 
 function fillDetectionProfileForm() {
@@ -600,12 +601,55 @@ function fillDetectionProfileForm() {
   els.detectionProfileName.value = profile.name;
   els.detectionProfileMode.value = profile.mode;
   els.duplicateSensitivityProfile.value = profile.duplicateSensitivity;
+  els.detectionMinWidth.value = profile.minWidth;
+  els.detectionMinHeight.value = profile.minHeight;
+  els.detectionMaxFileSizeMb.value = profile.maxFileSizeMb;
   els.detectionMaxSide.value = profile.maxSide;
+  els.detectionOversizeSeverity.value = profile.oversizeSeverity;
+  els.detectionRiskSide.value = profile.riskSide;
+  els.detectionRiskSideSeverity.value = profile.riskSideSeverity;
   els.detectionBgWidth.value = profile.backgroundWidth;
   els.detectionBgHeight.value = profile.backgroundHeight;
+  els.detectionPcEffectWidth.value = profile.pcEffectWidth;
+  els.detectionPcEffectHeight.value = profile.pcEffectHeight;
+  els.detectionMobileEffectWidth.value = profile.mobileEffectWidth;
+  els.detectionMobileEffectHeight.value = profile.mobileEffectHeight;
   els.detectionLargeThreshold.value = profile.largeThreshold;
   els.detectionLargeMultiple.value = profile.largeMultiple;
   els.detectionAtlasMultiple.value = profile.atlasMultiple;
+  els.detectionPlannerRequireEven.value = String(profile.plannerRequireEven);
+  els.detectionPlannerRequirePowerOfTwo.value = String(profile.plannerRequirePowerOfTwo);
+  els.detectionIconRequireSquare.value = String(profile.iconRequireSquare);
+  els.detectionIconAllowedSizes.value = profile.iconAllowedSizes.join(",");
+  updateDetectionSettingsVisibility(profile.mode);
+  renderActiveDetectionRules();
+}
+
+function updateDetectionSettingsVisibility(mode) {
+  document.querySelectorAll("[data-detection-modes]").forEach((section) => {
+    const modes = String(section.dataset.detectionModes || "").split(/\s+/).filter(Boolean);
+    section.hidden = !modes.includes("all") && !modes.includes(mode);
+  });
+}
+
+function renderActiveDetectionRules() {
+  const profile = getActiveDetectionProfile();
+  if (!profile || !els.detectionActiveRuleSummary || !els.detectionGeneralRuleSummary) return;
+  const severityLabel = { error: "报错", warning: "仅警告", off: "不检测" };
+  if (profile.mode === "planner") {
+    const enabledRules = [];
+    if (profile.plannerRequireEven) enabledRules.push("宽高为双数");
+    if (profile.plannerRequirePowerOfTwo) enabledRules.push("宽高为 2 的幂次");
+    els.detectionActiveRuleSummary.textContent = "当前“" + profile.name + "”使用策划配置模式：" + (enabledRules.length ? enabledRules.join("；") : "未启用额外尺寸规则") + "。";
+  } else if (profile.mode === "icon") {
+    els.detectionActiveRuleSummary.textContent = "当前“" + profile.name + "”使用 Icon 模式：" + (profile.iconRequireSquare ? "要求正方形；" : "允许非正方形；") + "允许宽高 " + profile.iconAllowedSizes.join("、") + " px。";
+  } else {
+    els.detectionActiveRuleSummary.textContent = "当前“" + profile.name + "”使用 NGR 模式：图集宽高为 " + profile.atlasMultiple + " 的倍数；单边超过 " + profile.largeThreshold + " 的大图宽高为 " + profile.largeMultiple + " 的倍数；普通切图单边上限 " + profile.maxSide + "（" + severityLabel[profile.oversizeSeverity] + "）；风险单边 " + profile.riskSide + "（" + severityLabel[profile.riskSideSeverity] + "）。";
+  }
+  const specialDimensions = profile.mode === "ngr"
+    ? "；背景 " + profile.backgroundWidth + "x" + profile.backgroundHeight + "，PC 效果图 " + profile.pcEffectWidth + "x" + profile.pcEffectHeight + "，移动端效果图 " + profile.mobileEffectWidth + "x" + profile.mobileEffectHeight
+    : "";
+  els.detectionGeneralRuleSummary.textContent = "通用规则：最小尺寸 " + profile.minWidth + "x" + profile.minHeight + " px；文件大小" + (profile.maxFileSizeMb ? "不超过 " + profile.maxFileSizeMb + " MB" : "不限") + specialDimensions + "。";
 }
 
 function collectDetectionProfileForm() {
@@ -615,12 +659,26 @@ function collectDetectionProfileForm() {
     name: els.detectionProfileName.value,
     mode: els.detectionProfileMode.value,
     duplicateSensitivity: els.duplicateSensitivityProfile.value,
+    minWidth: els.detectionMinWidth.value,
+    minHeight: els.detectionMinHeight.value,
+    maxFileSizeMb: els.detectionMaxFileSizeMb.value,
     maxSide: els.detectionMaxSide.value,
+    oversizeSeverity: els.detectionOversizeSeverity.value,
+    riskSide: els.detectionRiskSide.value,
+    riskSideSeverity: els.detectionRiskSideSeverity.value,
     backgroundWidth: els.detectionBgWidth.value,
     backgroundHeight: els.detectionBgHeight.value,
+    pcEffectWidth: els.detectionPcEffectWidth.value,
+    pcEffectHeight: els.detectionPcEffectHeight.value,
+    mobileEffectWidth: els.detectionMobileEffectWidth.value,
+    mobileEffectHeight: els.detectionMobileEffectHeight.value,
     largeThreshold: els.detectionLargeThreshold.value,
     largeMultiple: els.detectionLargeMultiple.value,
     atlasMultiple: els.detectionAtlasMultiple.value,
+    plannerRequireEven: els.detectionPlannerRequireEven.value,
+    plannerRequirePowerOfTwo: els.detectionPlannerRequirePowerOfTwo.value,
+    iconRequireSquare: els.detectionIconRequireSquare.value,
+    iconAllowedSizes: els.detectionIconAllowedSizes.value,
   });
 }
 
@@ -631,6 +689,7 @@ function updateActiveDetectionProfile(nextProfile, shouldSave) {
     saveDetectionProfiles();
     renderDetectionProfileSelect();
   }
+  renderActiveDetectionRules();
 }
 
 function createDetectionProfile() {
@@ -667,13 +726,20 @@ function revalidateDetectionAssets() {
   const profile = getActiveDetectionProfile();
   detectionAssets = detectionAssets.map((asset) => {
     const dimensionValidation = validateDetectionDimensions(asset.dimensions, profile);
+    const fileValidation = typeof validateDetectionFileConstraints === "function"
+      ? validateDetectionFileConstraints(asset.file, profile)
+      : { messages: [] };
     const formatMessages = Array.isArray(asset.formatMessages)
       ? asset.formatMessages
       : (asset.messages || []).filter((message) => message.startsWith(DETECTION_PNG_ERROR_MESSAGE));
     return {
       ...asset,
       formatMessages,
-      ...mergeDetectionValidation(dimensionValidation, { messages: formatMessages }),
+      ...mergeDetectionValidation(
+        dimensionValidation,
+        { messages: formatMessages },
+        fileValidation,
+      ),
     };
   });
   updateSimilarResourceWarnings();
@@ -997,12 +1063,26 @@ function getDefaultDetectionProfiles() {
       id: "ngr-detection",
       name: "NGR",
       mode: "ngr",
+      minWidth: 1,
+      minHeight: 1,
+      maxFileSizeMb: 0,
       maxSide: 1024,
+      oversizeSeverity: "error",
+      riskSide: 2048,
+      riskSideSeverity: "warning",
       backgroundWidth: 3440,
       backgroundHeight: 1440,
+      pcEffectWidth: 2560,
+      pcEffectHeight: 1440,
+      mobileEffectWidth: 2340,
+      mobileEffectHeight: 1080,
       largeThreshold: 512,
       largeMultiple: 4,
       atlasMultiple: 2,
+      plannerRequireEven: true,
+      plannerRequirePowerOfTwo: true,
+      iconRequireSquare: true,
+      iconAllowedSizes: [32, 64, 128, 256, 512, 1024],
       duplicateSensitivity: "off",
       duplicateSensitivityMigrated: true,
     },
@@ -1010,12 +1090,26 @@ function getDefaultDetectionProfiles() {
       id: "more-detection",
       name: "更多项目组正在开发中",
       mode: "ngr",
+      minWidth: 1,
+      minHeight: 1,
+      maxFileSizeMb: 0,
       maxSide: 1024,
+      oversizeSeverity: "error",
+      riskSide: 2048,
+      riskSideSeverity: "warning",
       backgroundWidth: 3440,
       backgroundHeight: 1440,
+      pcEffectWidth: 2560,
+      pcEffectHeight: 1440,
+      mobileEffectWidth: 2340,
+      mobileEffectHeight: 1080,
       largeThreshold: 512,
       largeMultiple: 4,
       atlasMultiple: 2,
+      plannerRequireEven: true,
+      plannerRequirePowerOfTwo: true,
+      iconRequireSquare: true,
+      iconAllowedSizes: [32, 64, 128, 256, 512, 1024],
       duplicateSensitivity: "off",
       duplicateSensitivityMigrated: true,
     },
@@ -1066,18 +1160,58 @@ function normalizeDetectionProfile(profile = {}) {
     mode: ["ngr", "planner", "icon"].includes(profile.mode) ? profile.mode : defaults.mode,
     duplicateSensitivity: ["off", "low", "medium", "high"].includes(profile.duplicateSensitivity) ? profile.duplicateSensitivity : defaults.duplicateSensitivity,
     duplicateSensitivityMigrated: profile.duplicateSensitivityMigrated === true,
-    maxSide: toPositiveInt(profile.maxSide, defaults.maxSide),
-    backgroundWidth: toPositiveInt(profile.backgroundWidth, defaults.backgroundWidth),
-    backgroundHeight: toPositiveInt(profile.backgroundHeight, defaults.backgroundHeight),
-    largeThreshold: toPositiveInt(profile.largeThreshold, defaults.largeThreshold),
-    largeMultiple: toPositiveInt(profile.largeMultiple, defaults.largeMultiple),
-    atlasMultiple: toPositiveInt(profile.atlasMultiple, defaults.atlasMultiple),
+    minWidth: toBoundedInt(profile.minWidth, defaults.minWidth, 1, 16384),
+    minHeight: toBoundedInt(profile.minHeight, defaults.minHeight, 1, 16384),
+    maxFileSizeMb: toBoundedNumber(profile.maxFileSizeMb, defaults.maxFileSizeMb, 0, 10240),
+    maxSide: toBoundedInt(profile.maxSide, defaults.maxSide, 1, 32768),
+    oversizeSeverity: normalizeDetectionSeverity(profile.oversizeSeverity, defaults.oversizeSeverity),
+    riskSide: toBoundedInt(profile.riskSide, defaults.riskSide, 1, 32768),
+    riskSideSeverity: normalizeDetectionSeverity(profile.riskSideSeverity, defaults.riskSideSeverity),
+    backgroundWidth: toBoundedInt(profile.backgroundWidth, defaults.backgroundWidth, 1, 32768),
+    backgroundHeight: toBoundedInt(profile.backgroundHeight, defaults.backgroundHeight, 1, 32768),
+    pcEffectWidth: toBoundedInt(profile.pcEffectWidth, defaults.pcEffectWidth, 1, 32768),
+    pcEffectHeight: toBoundedInt(profile.pcEffectHeight, defaults.pcEffectHeight, 1, 32768),
+    mobileEffectWidth: toBoundedInt(profile.mobileEffectWidth, defaults.mobileEffectWidth, 1, 32768),
+    mobileEffectHeight: toBoundedInt(profile.mobileEffectHeight, defaults.mobileEffectHeight, 1, 32768),
+    largeThreshold: toBoundedInt(profile.largeThreshold, defaults.largeThreshold, 1, 32768),
+    largeMultiple: toBoundedInt(profile.largeMultiple, defaults.largeMultiple, 1, 1024),
+    atlasMultiple: toBoundedInt(profile.atlasMultiple, defaults.atlasMultiple, 1, 1024),
+    plannerRequireEven: toBoolean(profile.plannerRequireEven, defaults.plannerRequireEven),
+    plannerRequirePowerOfTwo: toBoolean(profile.plannerRequirePowerOfTwo, defaults.plannerRequirePowerOfTwo),
+    iconRequireSquare: toBoolean(profile.iconRequireSquare, defaults.iconRequireSquare),
+    iconAllowedSizes: normalizeDetectionAllowedSizes(profile.iconAllowedSizes, defaults.iconAllowedSizes),
   };
 }
 
-function toPositiveInt(value, fallback) {
+function toBoundedInt(value, fallback, minimum, maximum) {
   const number = Number.parseInt(value, 10);
-  return Number.isFinite(number) && number > 0 ? number : fallback;
+  return Number.isFinite(number) && number >= minimum && number <= maximum ? number : fallback;
+}
+
+function toBoundedNumber(value, fallback, minimum, maximum) {
+  if (value === "" || value === null || value === undefined) return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= minimum && number <= maximum ? Math.round(number * 10) / 10 : fallback;
+}
+
+function toBoolean(value, fallback) {
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  return fallback;
+}
+
+function normalizeDetectionSeverity(value, fallback) {
+  return ["error", "warning", "off"].includes(value) ? value : fallback;
+}
+
+function normalizeDetectionAllowedSizes(value, fallback) {
+  const candidates = Array.isArray(value) ? value : String(value || "").split(/[，,\s]+/);
+  const sizes = [...new Set(candidates
+    .map((entry) => Number.parseInt(entry, 10))
+    .filter((entry) => Number.isFinite(entry) && entry >= 1 && entry <= 32768))]
+    .sort((left, right) => left - right)
+    .slice(0, 32);
+  return sizes.length ? sizes : [...fallback];
 }
 
 function getActiveDetectionProfile() {
