@@ -248,11 +248,6 @@
     return invoke("updater.download");
   }
 
-  async function installUpdate() {
-    if (!hasCapability("updater.install")) return null;
-    return invoke("updater.install");
-  }
-
   function onUpdateStateChanged(callback) {
     if (typeof callback !== "function") throw new TypeError("更新状态回调必须是函数");
     if (!hasCapability("updater.onStateChanged")) return () => {};
@@ -348,7 +343,6 @@
     getUpdateState,
     checkForUpdates,
     downloadUpdate,
-    installUpdate,
     onUpdateStateChanged,
     onBeforeQuit,
     readyToQuit,

@@ -30,7 +30,6 @@ module.exports = Object.freeze({
   backupFinalizeApply: "ngr:backup:finalize-apply",
   updaterCheck: "ngr:updater:check",
   updaterDownload: "ngr:updater:download",
-  updaterInstall: "ngr:updater:install",
   updaterGetState: "ngr:updater:get-state",
   updaterStateChanged: "ngr:updater:state-changed",
   shellOpenExternal: "ngr:shell:open-external",

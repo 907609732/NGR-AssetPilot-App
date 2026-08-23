@@ -52,10 +52,10 @@
         active: true,
         indeterminate: true,
         percent,
-        percentLabel: "准备中",
-        title: "正在启动安装向导",
-        text: "正在保存工作区并移交给 Windows 安装程序",
-        detail: "软件将在片刻后关闭，随后请在安装向导中确认安装",
+        percentLabel: "安装中",
+        title: "正在自动安装更新",
+        text: "安装包已验证，正在保存工作区",
+        detail: "软件即将自动关闭，安装完成后会重新打开",
         speed: "请勿关闭软件",
         stages: { download: "complete", verify: "complete", install: "active" },
       };
@@ -63,13 +63,13 @@
     if (downloaded) {
       return {
         visible,
-        active: false,
-        indeterminate: false,
+        active: true,
+        indeterminate: true,
         percent,
         percentLabel: "100%",
-        title: "更新包准备完毕",
+        title: "更新包准备完毕，正在自动安装",
         text: "下载与完整性检查已经完成",
-        detail: "点击“打开安装向导”后，由你确认安装路径和安装操作",
+        detail: "无需再次确认，软件即将自动关闭并完成安装",
         speed: "安全校验通过",
         stages: { download: "complete", verify: "complete", install: "active" },
       };
@@ -121,8 +121,8 @@
         "not-available": "当前已经是最新版本。",
         available: `发现新版本 ${versionLabel(updateState.availableVersion)}。`,
         downloading: `正在下载新版本：${Math.round(updateState.progress?.percent || 0)}%。`,
-        downloaded: "新版本已下载，可以重启安装。",
-        installing: "正在保存工作区并启动安装向导…",
+        downloaded: "新版本已下载，正在自动安装…",
+        installing: "正在保存工作区并自动安装…",
         error: "更新操作失败，可重试或前往官网下载。",
       };
       els.manualUpdateStatus.textContent = status[updateState.phase] || "更新状态未知。";
@@ -153,7 +153,7 @@
     els.updateStageList?.querySelectorAll("[data-update-stage]").forEach((node) => {
       node.dataset.state = progressView.stages[node.dataset.updateStage] || "waiting";
     });
-    const busy = ["downloading", "installing"].includes(updateState.phase);
+    const busy = ["downloading", "downloaded", "installing"].includes(updateState.phase);
     els.updateDialogOverlay?.querySelector(".update-dialog")?.setAttribute("data-update-busy", String(busy));
     if (els.updateDialogClose) els.updateDialogClose.disabled = busy;
     if (els.updatePrimaryAction) {
@@ -161,12 +161,12 @@
       const actions = {
         available: portable ? "前往官网下载" : "下载更新",
         downloading: "正在下载…",
-        downloaded: "打开安装向导",
-        installing: "正在启动安装向导…",
+        downloaded: "正在自动安装…",
+        installing: "正在自动安装…",
         error: portable ? "前往官网下载" : "重新下载",
       };
       els.updatePrimaryAction.textContent = actions[updateState.phase] || "检查更新";
-      els.updatePrimaryAction.disabled = ["downloading", "installing"].includes(updateState.phase);
+      els.updatePrimaryAction.disabled = ["downloading", "downloaded", "installing"].includes(updateState.phase);
     }
     syncUpdateButtonVisibility();
   }
@@ -179,7 +179,7 @@
   }
 
   function closeUpdateDialog() {
-    if (["downloading", "installing"].includes(updateState?.phase)) return;
+    if (["downloading", "downloaded", "installing"].includes(updateState?.phase)) return;
     els.updateDialogOverlay?.classList.add("hidden");
     els.updateDialogOverlay?.setAttribute("aria-hidden", "true");
   }
@@ -215,13 +215,6 @@
     if (!updateState) return;
     if (desktopInfo.isPortable || !updateState.enabled) return openTrustedExternal(updateState.websiteUrl || WEBSITE_URL);
     try {
-      if (updateState.phase === "downloaded") {
-        if (!globalScope.confirm("将关闭软件并打开安装向导，你可以再次确认安装路径和安装操作。是否继续？")) return;
-        updateState = { ...updateState, phase: "installing" };
-        renderUpdateState();
-        await NgrDesktopBridge.installUpdate();
-        return;
-      }
       if (updateState.phase === "available" || updateState.phase === "error") {
         updateState = await NgrDesktopBridge.downloadUpdate();
         renderUpdateState();

@@ -35,7 +35,6 @@ const channels = Object.freeze({
   backupFinalizeApply: "ngr:backup:finalize-apply",
   updaterCheck: "ngr:updater:check",
   updaterDownload: "ngr:updater:download",
-  updaterInstall: "ngr:updater:install",
   updaterGetState: "ngr:updater:get-state",
   updaterStateChanged: "ngr:updater:state-changed",
   shellOpenExternal: "ngr:shell:open-external",
@@ -125,7 +124,6 @@ const api = deepFreeze({
   updater: {
     check: () => invoke(channels.updaterCheck),
     download: () => invoke(channels.updaterDownload),
-    install: () => invoke(channels.updaterInstall),
     getState: () => invoke(channels.updaterGetState),
     onStateChanged(callback) {
       if (typeof callback !== "function") throw new TypeError("callback must be a function");

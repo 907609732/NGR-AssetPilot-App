@@ -114,6 +114,7 @@ export class UpdaterController {
     this.#on("update-downloaded", (info) => {
       this.#applyUpdateInfo(info, "downloaded");
       this.#patch({ progress: { ...(this.state.progress || {}), percent: 100 } });
+      this.#scheduleAutomaticInstall();
     });
     this.#on("error", (error) =>
       this.#patch({ phase: "error", errorCode: errorCodeOnly(error, "UPDATER_ERROR"), progress: null }),
@@ -148,6 +149,21 @@ export class UpdaterController {
     if (!this.enabled) {
       throw new DesktopError("UPDATER_DISABLED", "当前版本不支持应用内更新");
     }
+  }
+
+  #scheduleAutomaticInstall() {
+    if (this.installTimer || this.state.phase === "installing") return;
+    this.#patch({ phase: "installing", errorCode: null });
+    // The download button is the user's install consent. Give the renderer a
+    // brief hand-off window, then use NSIS silent mode and reopen after update.
+    this.installTimer = setTimeout(() => {
+      this.installTimer = null;
+      try {
+        this.autoUpdater.quitAndInstall(true, true);
+      } catch (error) {
+        this.#patch({ phase: "error", errorCode: errorCodeOnly(error, "UPDATE_INSTALL_FAILED") });
+      }
+    }, this.installLaunchDelayMs);
   }
 
   getState() {
@@ -202,21 +218,6 @@ export class UpdaterController {
       }
     })();
     return this.inFlight;
-  }
-
-  install() {
-    this.#assertEnabled();
-    if (this.state.phase !== "downloaded") {
-      throw new DesktopError("UPDATE_NOT_DOWNLOADED", "更新尚未下载完成");
-    }
-    this.#patch({ phase: "installing" });
-    // Give the renderer time to paint its hand-off state, then open the
-    // assisted NSIS installer so installation never appears to happen silently.
-    this.installTimer = setTimeout(() => {
-      this.installTimer = null;
-      this.autoUpdater.quitAndInstall(false, true);
-    }, this.installLaunchDelayMs);
-    return { accepted: true };
   }
 
   dispose() {

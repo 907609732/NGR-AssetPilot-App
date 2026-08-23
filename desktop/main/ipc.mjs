@@ -21,7 +21,6 @@ const AUDITED_CHANNELS = new Map([
   [channels.backupFinalizeApply, "backup-apply-finalize"],
   [channels.updaterCheck, "updater-check"],
   [channels.updaterDownload, "updater-download"],
-  [channels.updaterInstall, "updater-install"],
   [channels.localImageSearchValidateModel, "local-model-validate"],
   [channels.localImageSearchDownloadModel, "local-model-download"],
   [channels.localImageSearchCancelModelDownload, "local-model-download-cancel"],
@@ -143,7 +142,6 @@ export function registerDesktopIpc({
   handle(channels.updaterGetState, async () => updater.getState());
   handle(channels.updaterCheck, async () => updater.check());
   handle(channels.updaterDownload, async () => updater.download());
-  handle(channels.updaterInstall, async () => updater.install());
   const disposeUpdaterSubscription = typeof updater.subscribe === "function"
     ? updater.subscribe((state) => {
         const window = getWindow();

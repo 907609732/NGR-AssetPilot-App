@@ -990,7 +990,7 @@ test("test-secret binary format decrypts only after hash, key-share, and GCM val
   plaintext.fill(0);
 });
 
-test("updater is disabled for non-installer builds and uses an explicit download phase", async () => {
+test("updater is disabled for non-installer builds and auto installs silently after download", async () => {
   const disabled = new UpdaterController({ enabled: false, currentVersion: "3.0.0" });
   assert.equal(disabled.getState().phase, "disabled");
   await assert.rejects(() => disabled.check(), { code: "UPDATER_DISABLED" });
@@ -1043,11 +1043,12 @@ test("updater is disabled for non-installer builds and uses an explicit download
     repo: "NGR-AssetPilot-App",
     channel: "latest",
   });
-  assert.equal((await updater.download()).phase, "downloaded");
-  assert.equal(updater.install().accepted, true);
+  assert.equal((await updater.download()).phase, "installing");
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(fake.quitAndInstallArgs, [false, true]);
+  assert.deepEqual(fake.quitAndInstallArgs, [true, true]);
   assert.ok(states.some((state) => state.phase === "downloading"));
+  assert.ok(states.some((state) => state.phase === "downloaded"));
+  assert.ok(states.some((state) => state.phase === "installing"));
   unsubscribe();
   updater.dispose();
   assert.equal(updaterMetadata.normalizeReleaseNotes("<script>x</script><p>A&amp;B</p>"), "xA&B");
