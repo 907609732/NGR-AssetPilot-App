@@ -448,13 +448,30 @@ async function validateDetectionFormat(file) {
   };
 }
 
-function mergeDetectionValidation(dimensionValidation, formatValidation = {}) {
-  const formatMessages = Array.isArray(formatValidation.messages) ? formatValidation.messages : [];
+function mergeDetectionValidation(dimensionValidation, ...additionalValidations) {
+  const additionalMessages = additionalValidations.flatMap((validation) => (
+    Array.isArray(validation?.messages) ? validation.messages : []
+  ));
+  const additionalWarnings = additionalValidations.flatMap((validation) => (
+    Array.isArray(validation?.warnings) ? validation.warnings : []
+  ));
   return {
     ...dimensionValidation,
-    messages: [...(dimensionValidation.messages || []), ...formatMessages],
-    hasIssue: Boolean(dimensionValidation.hasIssue || formatMessages.length),
+    messages: [...(dimensionValidation.messages || []), ...additionalMessages],
+    warnings: [...(dimensionValidation.warnings || []), ...additionalWarnings],
+    hasIssue: Boolean(dimensionValidation.hasIssue || additionalMessages.length),
+    hasWarning: Boolean(dimensionValidation.hasWarning || additionalWarnings.length),
   };
+}
+
+function validateDetectionFileConstraints(file, profile) {
+  if (!Number.isFinite(file?.size)) return { messages: [] };
+  const config = normalizeDetectionProfile(profile);
+  if (!config.maxFileSizeMb) return { messages: [] };
+  const limitBytes = config.maxFileSizeMb * 1024 * 1024;
+  if (file.size <= limitBytes) return { messages: [] };
+  const actualMb = Math.round(file.size / 1024 / 1024 * 10) / 10;
+  return { messages: ["文件大小 " + actualMb + " MB，超过项目组上限 " + config.maxFileSizeMb + " MB"] };
 }
 
 async function mapWithConcurrency(items, mapper, limit = UPLOAD_CONCURRENCY) {
@@ -513,11 +530,13 @@ async function fileToDetectionAsset(file) {
   const dimensions = await readImageDimensions(url).catch(() => ({ width: 0, height: 0 }));
   URL.revokeObjectURL(url);
   const formatValidation = await validateDetectionFormat(file);
+  const profile = getActiveDetectionProfile();
   const result = mergeDetectionValidation(
-    validateDetectionDimensions(dimensions, getActiveDetectionProfile()),
+    validateDetectionDimensions(dimensions, profile),
     formatValidation,
+    validateDetectionFileConstraints(file, profile),
   );
-  const duplicateConfig = getDuplicateSensitivityConfig(getActiveDetectionProfile().duplicateSensitivity);
+  const duplicateConfig = getDuplicateSensitivityConfig(profile.duplicateSensitivity);
   const fingerprint = duplicateConfig.disabled ? null : await imageFileToFingerprint(file).catch(() => null);
   const id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random();
   const key = (file.webkitRelativePath || file.name) + "-" + file.size + "-" + file.lastModified;
@@ -546,8 +565,10 @@ function revokeAssetPreviewUrl(asset) {
   asset.url = "";
 }
 
-const NGR_2048_RISK_MESSAGE = "NGR原则上不支持1024分辨率以上的图片进引擎，单边2048的图片无法直接上传，需要通过走白名单审批，P4需要选择对应同意的owner进行审批。";
-const NGR_BACKGROUND_TIP_MESSAGE = "背景图规范分辨率是3440x1440；背景图左右两边不要忘记加带鱼屏渐变哦！";
+function getNgrRiskMessage(profile) {
+  const config = normalizeDetectionProfile(profile);
+  return "NGR原则上不支持单边超过" + config.maxSide + "的普通切图进引擎，单边" + config.riskSide + "的图片需要通过白名单审批，P4需要选择对应同意的owner进行审批。";
+}
 
 function getNgrSpecialDimensionSpec(width, height, profile) {
   const config = normalizeDetectionProfile(profile);
@@ -555,24 +576,29 @@ function getNgrSpecialDimensionSpec(width, height, profile) {
     return {
       type: "background",
       label: "背景图",
-      message: NGR_BACKGROUND_TIP_MESSAGE,
+      message: "背景图规范分辨率是" + config.backgroundWidth + "x" + config.backgroundHeight + "；背景图左右两边不要忘记加带鱼屏渐变哦！",
     };
   }
-  if (width === 2560 && height === 1440) {
+  if (width === config.pcEffectWidth && height === config.pcEffectHeight) {
     return {
       type: "pc-effect",
       label: "PC效果图",
-      message: "请确认你出的是不是效果图，PC效果图尺寸是2560x1440；背景图规范3440x1440；NGR不允许1024分辨率以上的普通切图进引擎，请确认不要作为引擎切图提交",
+      message: "请确认你出的是不是效果图，PC效果图尺寸是" + config.pcEffectWidth + "x" + config.pcEffectHeight + "；背景图规范" + config.backgroundWidth + "x" + config.backgroundHeight + "；普通切图单边上限为" + config.maxSide + "，请确认不要作为引擎切图提交",
     };
   }
-  if (width === 2340 && height === 1080) {
+  if (width === config.mobileEffectWidth && height === config.mobileEffectHeight) {
     return {
       type: "mobile-effect",
       label: "移动端效果图",
-      message: "移动端效果图尺寸是2340x1080；NGR不允许1024分辨率以上的普通切图进引擎，请确认不要作为引擎切图提交",
+      message: "移动端效果图尺寸是" + config.mobileEffectWidth + "x" + config.mobileEffectHeight + "；普通切图单边上限为" + config.maxSide + "，请确认不要作为引擎切图提交",
     };
   }
   return null;
+}
+
+function appendDetectionSeverity(messages, warnings, severity, message) {
+  if (severity === "error") messages.push(message);
+  if (severity === "warning") warnings.push(message);
 }
 
 function validateDetectionDimensions(dimensions, profile) {
@@ -585,14 +611,17 @@ function validateDetectionDimensions(dimensions, profile) {
   const messages = [];
   const warnings = [];
   const notes = [];
-  if (config.mode === "planner") return validatePlannerDetectionDimensions(width, height);
-  if (config.mode === "icon") return validateIconDetectionDimensions(width, height);
+  if (width < config.minWidth || height < config.minHeight) {
+    messages.push("图片尺寸不得小于 " + config.minWidth + "x" + config.minHeight);
+  }
+  if (config.mode === "planner") return mergeDimensionRuleResult(messages, warnings, validatePlannerDetectionDimensions(width, height, config));
+  if (config.mode === "icon") return mergeDimensionRuleResult(messages, warnings, validateIconDetectionDimensions(width, height, config));
   const specialSpec = getNgrSpecialDimensionSpec(width, height, config);
   const isEngineException = specialSpec?.type === "background" || specialSpec?.type === "pc-effect" || specialSpec?.type === "mobile-effect";
   let label = specialSpec?.label || (maxSide > config.largeThreshold ? "大图" : "图集");
 
-  if (width % 2 !== 0 || height % 2 !== 0) {
-    messages.push("分辨率不是双数，不允许单数");
+  if (width % config.atlasMultiple !== 0 || height % config.atlasMultiple !== 0) {
+    messages.push("图集宽高需要是" + config.atlasMultiple + "的倍数");
   }
   if (specialSpec?.type === "background") {
     notes.push(specialSpec.message);
@@ -600,10 +629,20 @@ function validateDetectionDimensions(dimensions, profile) {
   if (specialSpec?.type === "pc-effect" || specialSpec?.type === "mobile-effect") {
     warnings.push(specialSpec.message);
   }
-  if (maxSide === 2048 && !isEngineException) {
-    warnings.push(NGR_2048_RISK_MESSAGE);
+  if (maxSide === config.riskSide && config.riskSideSeverity !== "off" && !isEngineException) {
+    appendDetectionSeverity(
+      messages,
+      warnings,
+      config.riskSideSeverity,
+      getNgrRiskMessage(config),
+    );
   } else if (maxSide > config.maxSide && !isEngineException) {
-    messages.push("NGR不允许1024分辨率以上的图片进引擎；分辨率单边不能超过" + config.maxSide);
+    appendDetectionSeverity(
+      messages,
+      warnings,
+      config.oversizeSeverity,
+      "普通切图分辨率单边不能超过" + config.maxSide,
+    );
   }
   if (!specialSpec && maxSide > config.largeThreshold) {
     label = "大图";
@@ -622,11 +661,24 @@ function validateDetectionDimensions(dimensions, profile) {
   };
 }
 
-function validatePlannerDetectionDimensions(width, height) {
+function mergeDimensionRuleResult(baseMessages, baseWarnings, result) {
+  const messages = [...baseMessages, ...(result.messages || [])];
+  const warnings = [...baseWarnings, ...(result.warnings || [])];
+  return {
+    ...result,
+    messages,
+    warnings,
+    hasIssue: messages.length > 0,
+    hasWarning: warnings.length > 0,
+  };
+}
+
+function validatePlannerDetectionDimensions(width, height, profile) {
+  const config = normalizeDetectionProfile(profile);
   const messages = [];
   const warnings = [];
-  if (width % 2 !== 0 || height % 2 !== 0) messages.push("分辨率不是双数，不允许单数");
-  if (!isPowerOfTwo(width) || !isPowerOfTwo(height)) messages.push("策划配置切图规范：宽高都需要是2的幂次");
+  if (config.plannerRequireEven && (width % 2 !== 0 || height % 2 !== 0)) messages.push("分辨率不是双数，不允许单数");
+  if (config.plannerRequirePowerOfTwo && (!isPowerOfTwo(width) || !isPowerOfTwo(height))) messages.push("策划配置切图规范：宽高都需要是2的幂次");
   return {
     hasIssue: messages.length > 0,
     hasWarning: warnings.length > 0,
@@ -636,11 +688,12 @@ function validatePlannerDetectionDimensions(width, height) {
   };
 }
 
-function validateIconDetectionDimensions(width, height) {
-  const allowedSizes = [32, 64, 128, 256, 512, 1024];
+function validateIconDetectionDimensions(width, height, profile) {
+  const config = normalizeDetectionProfile(profile);
+  const allowedSizes = config.iconAllowedSizes;
   const messages = [];
-  if (width !== height) messages.push("Icon尺寸只允许正方形");
-  if (!allowedSizes.includes(width) || !allowedSizes.includes(height)) messages.push("Icon尺寸只允许32x32、64x64、128x128、256x256、512x512、1024x1024");
+  if (config.iconRequireSquare && width !== height) messages.push("Icon尺寸只允许正方形");
+  if (!allowedSizes.includes(width) || !allowedSizes.includes(height)) messages.push("Icon宽高只允许：" + allowedSizes.join("、"));
   return {
     hasIssue: messages.length > 0,
     hasWarning: false,
@@ -654,10 +707,14 @@ function validateUploadDimensions(dimensions) {
   const { width, height } = dimensions || {};
   if (!isNgrProject(getActiveProject())) return { valid: true, category: "", label: "" };
   if (!width || !height) return { valid: true, category: "unknown", label: "未知规格" };
-  const specialSpec = getNgrSpecialDimensionSpec(width, height, getActiveDetectionProfile());
+  const config = normalizeDetectionProfile(getActiveDetectionProfile());
+  const specialSpec = getNgrSpecialDimensionSpec(width, height, config);
   const maxDimension = Math.max(width, height);
-  if (width % 2 !== 0 || height % 2 !== 0) {
-    return { valid: true, problem: true, category: "invalid", label: "问题图片", reason: "分辨率宽高不能是单数" };
+  if (width < config.minWidth || height < config.minHeight) {
+    return { valid: true, problem: true, category: "invalid", label: "问题图片", reason: "图片尺寸不得小于 " + config.minWidth + "x" + config.minHeight };
+  }
+  if (width % config.atlasMultiple !== 0 || height % config.atlasMultiple !== 0) {
+    return { valid: true, problem: true, category: "invalid", label: "问题图片", reason: "图集宽高需要是" + config.atlasMultiple + "的倍数" };
   }
   if (specialSpec?.type === "background") {
     return { valid: true, category: "background", label: specialSpec.label, info: specialSpec.message };
@@ -665,20 +722,31 @@ function validateUploadDimensions(dimensions) {
   if (specialSpec?.type === "pc-effect" || specialSpec?.type === "mobile-effect") {
     return { valid: true, warning: true, category: "effect", label: specialSpec.label, reason: specialSpec.message };
   }
-  if (maxDimension === 2048) {
-    return { valid: true, warning: true, category: "large", label: "大图风险", reason: NGR_2048_RISK_MESSAGE };
+  if (maxDimension === config.riskSide && config.riskSideSeverity !== "off") {
+    return {
+      valid: true,
+      problem: config.riskSideSeverity === "error",
+      warning: config.riskSideSeverity === "warning",
+      category: "large",
+      label: "大图风险",
+      reason: getNgrRiskMessage(config),
+    };
   }
-  if (maxDimension > 1024) {
-    return { valid: true, problem: true, category: "invalid", label: "问题图片", reason: "NGR不允许1024分辨率以上的图片进引擎；分辨率单边不能超过1024" };
+  if (maxDimension > config.maxSide && config.oversizeSeverity !== "off") {
+    return {
+      valid: true,
+      problem: config.oversizeSeverity === "error",
+      warning: config.oversizeSeverity === "warning",
+      category: "invalid",
+      label: config.oversizeSeverity === "error" ? "问题图片" : "尺寸警告",
+      reason: "普通切图分辨率单边不能超过" + config.maxSide,
+    };
   }
-  if (maxDimension > 512) {
-    if (width % 4 !== 0 || height % 4 !== 0) {
-      return { valid: true, problem: true, category: "invalid", label: "问题图片", reason: "单边超过512的大图需要是4的倍数" };
+  if (maxDimension > config.largeThreshold) {
+    if (width % config.largeMultiple !== 0 || height % config.largeMultiple !== 0) {
+      return { valid: true, problem: true, category: "invalid", label: "问题图片", reason: "单边超过" + config.largeThreshold + "的大图需要是" + config.largeMultiple + "的倍数" };
     }
     return { valid: true, category: "large", label: "大图" };
-  }
-  if (width % 2 !== 0 || height % 2 !== 0) {
-    return { valid: true, problem: true, category: "invalid", label: "问题图片", reason: "512 以下图集宽高必须是 2 的倍数" };
   }
   return { valid: true, category: "atlas", label: "图集" };
 }

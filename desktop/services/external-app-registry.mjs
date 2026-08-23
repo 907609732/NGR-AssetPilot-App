@@ -7,6 +7,12 @@ import { DesktopError, isPlainRecord } from "../shared/core.mjs";
 
 const STORE_VERSION = 1;
 const BUILTIN_ARTHUB_ID = "arthub";
+const BUILTIN_FIGMA_ID = "figma";
+const BUILTIN_APPS = Object.freeze([
+  Object.freeze({ id: BUILTIN_ARTHUB_ID, name: "ArtHub" }),
+  Object.freeze({ id: BUILTIN_FIGMA_ID, name: "Figma" }),
+]);
+const BUILTIN_APP_IDS = new Set(BUILTIN_APPS.map(({ id }) => id));
 const MAX_APPS = 20;
 
 function publicEntry(entry, available) {
@@ -44,6 +50,18 @@ function defaultArtHubCandidates() {
   return [...roots].map((root) => path.join(root, "ArtHub", "ArtHub.exe"));
 }
 
+function defaultFigmaCandidates() {
+  return [
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Figma", "Figma.exe") : null,
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "Figma", "Figma.exe") : null,
+    process.env.ProgramFiles ? path.join(process.env.ProgramFiles, "Figma", "Figma.exe") : null,
+    process.env["ProgramFiles(x86)"] ? path.join(process.env["ProgramFiles(x86)"], "Figma", "Figma.exe") : null,
+    "C:\\Program Files\\Figma\\Figma.exe",
+    "D:\\Program Files\\Figma\\Figma.exe",
+    "E:\\Program Files\\Figma\\Figma.exe",
+  ].filter(Boolean);
+}
+
 function validateId(payload) {
   const id = String(payload?.appId || "");
   if (!/^[a-z0-9_-]{1,80}$/i.test(id)) throw new DesktopError("APP_ID_INVALID", "快捷应用标识无效");
@@ -51,13 +69,14 @@ function validateId(payload) {
 }
 
 export class ExternalAppRegistry {
-  constructor({ userDataPath, dialog, shell, getWindow, artHubCandidates = null }) {
+  constructor({ userDataPath, dialog, shell, getWindow, artHubCandidates = null, figmaCandidates = null }) {
     this.dialog = dialog;
     this.shell = shell;
     this.getWindow = getWindow;
     this.storePath = path.join(userDataPath, "external-apps.json");
     this.entries = [];
     this.artHubCandidates = artHubCandidates || defaultArtHubCandidates();
+    this.figmaCandidates = figmaCandidates || defaultFigmaCandidates();
   }
 
   async initialize() {
@@ -72,22 +91,41 @@ export class ExternalAppRegistry {
           id: entry.id,
           name: entry.name.slice(0, 60),
           executablePath: entry.executablePath ? path.resolve(entry.executablePath) : "",
-          builtin: entry.id === BUILTIN_ARTHUB_ID,
+          builtin: BUILTIN_APP_IDS.has(entry.id),
         }));
       }
     } catch (error) {
       if (error?.code !== "ENOENT") throw new DesktopError("APP_REGISTRY_CORRUPT", "快捷应用配置损坏", { cause: error });
     }
-    if (!this.entries.some((entry) => entry.id === BUILTIN_ARTHUB_ID)) {
-      const detectedPath = await this.#detectArtHub();
-      this.entries.unshift({ id: BUILTIN_ARTHUB_ID, name: "ArtHub", executablePath: detectedPath || "", builtin: true });
+    let changed = false;
+    for (const builtin of BUILTIN_APPS) {
+      const existing = this.entries.find((entry) => entry.id === builtin.id);
+      if (existing) {
+        existing.name = builtin.name;
+        existing.builtin = true;
+        continue;
+      }
+      const detectedPath = await this.#detectBuiltin(builtin.id);
+      this.entries.push({ ...builtin, executablePath: detectedPath || "", builtin: true });
+      changed = true;
+    }
+    this.entries.sort((left, right) => {
+      const leftIndex = BUILTIN_APPS.findIndex(({ id }) => id === left.id);
+      const rightIndex = BUILTIN_APPS.findIndex(({ id }) => id === right.id);
+      if (leftIndex >= 0 && rightIndex >= 0) return leftIndex - rightIndex;
+      if (leftIndex >= 0) return -1;
+      if (rightIndex >= 0) return 1;
+      return 0;
+    });
+    if (changed) {
       await this.#save();
     }
     return this.list();
   }
 
-  async #detectArtHub() {
-    for (const candidate of this.artHubCandidates) {
+  async #detectBuiltin(appId) {
+    const candidates = appId === BUILTIN_FIGMA_ID ? this.figmaCandidates : this.artHubCandidates;
+    for (const candidate of candidates) {
       if (await isLaunchableExecutable(candidate)) return path.resolve(candidate);
     }
     return "";
@@ -149,7 +187,7 @@ export class ExternalAppRegistry {
     const id = validateId(payload);
     const entry = this.entries.find((item) => item.id === id);
     if (!entry) throw new DesktopError("APP_NOT_FOUND", "快捷应用不存在");
-    if (entry.builtin) throw new DesktopError("BUILTIN_APP_REQUIRED", "默认 ArtHub 快捷入口不能删除，可以重新选择路径");
+    if (entry.builtin) throw new DesktopError("BUILTIN_APP_REQUIRED", `默认 ${entry.name} 快捷入口不能删除，可以重新选择路径`);
     this.entries = this.entries.filter((item) => item.id !== id);
     await this.#save();
     return this.list();

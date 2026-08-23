@@ -427,7 +427,7 @@ const guideSteps = [
     view: "work",
     selector: ".work-toolbar .toolbar-actions",
     title: "运行命名",
-    text: "先选择命名模式，再点击运行按钮。支持当前翻译服务、本地知识库和 AI 视觉命名，命名过程中可随时终止。",
+    text: "先选择命名服务，再点击运行按钮。翻译命名可直接选择内置离线、NGR 云翻译、自有百度或 OpenAI 兼容模型，也支持本地知识库和 AI 视觉命名。",
   },
   {
     view: "work",

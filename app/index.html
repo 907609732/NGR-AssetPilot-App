@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.10" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.11" />
   </head>
   <body>
     <div id="app">
@@ -15,10 +15,26 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.10</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.11</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
+        <div class="topbar-external-apps" id="externalAppQuickList" aria-label="快捷打开电脑应用"></div>
+        <details id="externalAppMenu" class="compact-action-menu external-app-menu topbar-app-menu">
+          <summary id="externalAppPrimary" class="external-app-config-trigger topbar-tooltip" aria-label="配置快捷应用" title="配置快捷应用" data-tooltip="配置快捷应用">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM17 14v6m-3-3h6" /></svg>
+          </summary>
+          <div class="compact-menu-panel external-app-menu-panel">
+            <div class="external-app-menu-head">
+              <div><strong>快捷打开应用</strong><small>顶部显示 ArtHub、Figma 和自定义软件</small></div>
+              <button id="externalAppAdd" class="ghost-action compact-button" type="button">＋ 添加</button>
+            </div>
+            <div id="externalAppList" class="external-app-list" role="list">
+              <p class="external-app-empty">正在读取电脑应用…</p>
+            </div>
+            <p id="externalAppStatus" class="external-app-status" aria-live="polite"></p>
+          </div>
+        </details>
         <button class="settings-button tutorial-button" id="tutorialEntry" type="button" aria-label="UI切图检测教程" title="UI切图检测教程">教程</button>
         <button class="settings-button guide-button" id="guideEntry" type="button" aria-label="操作指引" title="操作指引">?</button>
         <button class="update-available-button hidden" id="updateAvailableButton" type="button">发现新版本</button>
@@ -65,7 +81,7 @@
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.10</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.11</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
@@ -293,7 +309,7 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.10</span><time class="version-date" datetime="2026-08-22">更新于 2026-08-22</time></h2>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.11</span><time class="version-date" datetime="2026-08-23">更新于 2026-08-23</time></h2>
             <p>配置命名规则、方案模板和项目知识库；在线服务统一在“API”页签管理。</p>
           </div>
 
@@ -526,32 +542,22 @@
             </div>
             <div class="toolbar-actions">
               <label class="toolbar-select naming-mode-field">
-                <span>命名模式</span>
-                <select id="namingModeSelect">
-                  <option value="translate" selected>翻译服务命名</option>
-                  <option value="local">本地知识库命名</option>
-                  <option value="ai">AI视觉命名</option>
+                <span>命名服务</span>
+                <select id="namingModeSelect" aria-label="选择命名服务">
+                  <optgroup label="翻译服务命名">
+                    <option value="translate:local">内置离线 AI 翻译</option>
+                    <option value="translate:cfc" selected>NGR 云翻译（开箱即用）</option>
+                    <option value="translate:baidu">自有百度翻译 API</option>
+                    <option value="translate:model">OpenAI 兼容文本模型</option>
+                  </optgroup>
+                  <optgroup label="其他命名方式">
+                    <option value="local">本地知识库命名</option>
+                    <option value="ai">AI 视觉命名</option>
+                  </optgroup>
                 </select>
               </label>
-              <button id="runSelectedNaming" class="primary-action" type="button">运行翻译服务命名</button>
+              <button id="runSelectedNaming" class="primary-action" type="button">运行 NGR 云翻译命名</button>
               <button id="stopNaming" class="danger-action hidden" type="button">终止命名</button>
-              <details id="externalAppMenu" class="compact-action-menu external-app-menu">
-                <summary id="externalAppPrimary" class="external-app-trigger" aria-label="打开快捷应用菜单" title="快速打开 ArtHub 或其他电脑软件">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5H5v14h14v-3M11 13 20 4m0 0h-6m6 0v6" /></svg>
-                  <span id="externalAppPrimaryLabel">打开 ArtHub</span>
-                  <svg class="menu-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
-                </summary>
-                <div class="compact-menu-panel external-app-menu-panel">
-                  <div class="external-app-menu-head">
-                    <div><strong>快速打开应用</strong><small>命名完成后直接拉起上传工具</small></div>
-                    <button id="externalAppAdd" class="ghost-action compact-button" type="button">＋ 添加</button>
-                  </div>
-                  <div id="externalAppList" class="external-app-list" role="list">
-                    <p class="external-app-empty">正在读取电脑应用…</p>
-                  </div>
-                  <p id="externalAppStatus" class="external-app-status" aria-live="polite"></p>
-                </div>
-              </details>
               <details id="exportMenu" class="compact-action-menu export-action-menu">
                 <summary class="toolbar-download-action" aria-label="打开导出菜单" title="下载命名完成的图片">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -769,9 +775,8 @@
 
           <div id="detectionRulesPanel" class="detection-rules-panel hidden">
             <h3>UI切图检测规范</h3>
-            <p>NGR切图规范：所有图片宽高必须是双数；背景图规范尺寸为 3440x1440，左右两边不要忘记加带鱼屏渐变；效果图规范尺寸为 PC 2560x1440、移动端 2340x1080；NGR 不允许 1024 分辨率以上的普通切图进引擎，分辨率单边不能超过 1024；单边 2048 的图片无法直接上传，需要走白名单审批；单边超过 512 的大图需要是 4 的倍数；512 以下图集只要不是单数即可。</p>
-            <p>策划配置切图规范：不能有 4 倍图片，宽高都需要是 2 的幂次，例如 32、64、128、256、512、1024。</p>
-            <p>图标尺寸检测规范：Icon 只允许正方形，尺寸只允许 32x32、64x64、128x128、256x256、512x512、1024x1024。</p>
+            <p id="detectionActiveRuleSummary"></p>
+            <p id="detectionGeneralRuleSummary"></p>
             <p>格式规范：NGR 只允许有效的 .png 格式图片；系统同时校验扩展名和 PNG 文件内容。JPG、JPEG、WebP、GIF、SVG、BMP、TIFF、AVIF、HEIC、ICO、损坏文件或伪装成 .png 的其他格式都会报错。</p>
             <p>重复资源检测：默认关闭。开启后系统会对上传图片生成缩略像素指纹，像素比较接近的资源会标黄提示为疑似重复资源；高档更容易发现相似资源，也更可能出现误报。</p>
           </div>
@@ -806,55 +811,168 @@
           </div>
 
           <div class="detection-config">
-            <label>
-              <span>检测项目组</span>
-              <select id="detectionSettingsProfileSelect"></select>
-            </label>
-            <label>
-              <span>项目组名称</span>
-              <input id="detectionProfileName" type="text" placeholder="例如：NGR检测规范" />
-            </label>
-            <label>
-              <span>检测模式</span>
-              <select id="detectionProfileMode">
-                <option value="ngr">NGR切图规范</option>
-                <option value="planner">策划配置切图规范</option>
-                <option value="icon">图标尺寸检测规范</option>
-              </select>
-            </label>
-            <label>
-              <span>重复检测灵敏度</span>
-              <select id="duplicateSensitivityProfile">
-                <option value="off">关闭（默认）</option>
-                <option value="low">低（误报少）</option>
-                <option value="medium">中</option>
-                <option value="high">高（更敏感）</option>
-              </select>
-            </label>
-            <label>
-              <span>单边上限</span>
-              <input id="detectionMaxSide" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>背景图宽</span>
-              <input id="detectionBgWidth" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>背景图高</span>
-              <input id="detectionBgHeight" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>大图阈值</span>
-              <input id="detectionLargeThreshold" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>大图倍数</span>
-              <input id="detectionLargeMultiple" type="number" min="1" step="1" />
-            </label>
-            <label>
-              <span>图集倍数</span>
-              <input id="detectionAtlasMultiple" type="number" min="1" step="1" />
-            </label>
+            <section class="detection-config-section" data-detection-modes="all">
+              <div class="detection-config-heading">
+                <h3>项目与通用规则</h3>
+                <p>每个项目组独立保存。格式检测固定为严格 PNG，其他规则可按项目调整。</p>
+              </div>
+              <label>
+                <span>检测项目组</span>
+                <select id="detectionSettingsProfileSelect"></select>
+              </label>
+              <label>
+                <span>项目组名称</span>
+                <input id="detectionProfileName" type="text" maxlength="40" placeholder="例如：NGR检测规范" />
+              </label>
+              <label>
+                <span>检测模式</span>
+                <select id="detectionProfileMode">
+                  <option value="ngr">NGR切图规范</option>
+                  <option value="planner">策划配置切图规范</option>
+                  <option value="icon">图标尺寸检测规范</option>
+                </select>
+              </label>
+              <label>
+                <span>重复检测灵敏度</span>
+                <select id="duplicateSensitivityProfile">
+                  <option value="off">关闭（默认）</option>
+                  <option value="low">低（误报少）</option>
+                  <option value="medium">中</option>
+                  <option value="high">高（更敏感）</option>
+                </select>
+              </label>
+              <label>
+                <span>最小宽度（px）</span>
+                <input id="detectionMinWidth" type="number" min="1" max="16384" step="1" />
+              </label>
+              <label>
+                <span>最小高度（px）</span>
+                <input id="detectionMinHeight" type="number" min="1" max="16384" step="1" />
+              </label>
+              <label>
+                <span>文件大小上限（MB）</span>
+                <input id="detectionMaxFileSizeMb" type="number" min="0" max="10240" step="0.1" />
+                <small>填 0 表示不限制</small>
+              </label>
+              <label>
+                <span>允许格式</span>
+                <input type="text" value="PNG（扩展名与文件内容双重校验）" disabled />
+              </label>
+            </section>
+
+            <section class="detection-config-section" data-detection-modes="ngr">
+              <div class="detection-config-heading">
+                <h3>NGR 普通切图与大图</h3>
+                <p>可独立设置普通切图上限、风险尺寸以及图集和大图的尺寸倍数。</p>
+              </div>
+              <label>
+                <span>普通切图单边上限</span>
+                <input id="detectionMaxSide" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>超出上限时</span>
+                <select id="detectionOversizeSeverity">
+                  <option value="error">报错</option>
+                  <option value="warning">仅警告</option>
+                  <option value="off">不检测</option>
+                </select>
+              </label>
+              <label>
+                <span>特殊风险单边</span>
+                <input id="detectionRiskSide" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>命中风险单边时</span>
+                <select id="detectionRiskSideSeverity">
+                  <option value="warning">仅警告</option>
+                  <option value="error">报错</option>
+                  <option value="off">不检测</option>
+                </select>
+              </label>
+              <label>
+                <span>大图阈值</span>
+                <input id="detectionLargeThreshold" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>大图宽高倍数</span>
+                <input id="detectionLargeMultiple" type="number" min="1" max="1024" step="1" />
+              </label>
+              <label>
+                <span>图集宽高倍数</span>
+                <input id="detectionAtlasMultiple" type="number" min="1" max="1024" step="1" />
+                <small>填 1 可关闭双数限制</small>
+              </label>
+            </section>
+
+            <section class="detection-config-section" data-detection-modes="ngr">
+              <div class="detection-config-heading">
+                <h3>NGR 特殊尺寸白名单</h3>
+                <p>命中这些精确尺寸时按背景图或效果图处理，不套用普通切图单边上限。</p>
+              </div>
+              <label>
+                <span>背景图宽</span>
+                <input id="detectionBgWidth" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>背景图高</span>
+                <input id="detectionBgHeight" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>PC 效果图宽</span>
+                <input id="detectionPcEffectWidth" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>PC 效果图高</span>
+                <input id="detectionPcEffectHeight" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>移动端效果图宽</span>
+                <input id="detectionMobileEffectWidth" type="number" min="1" max="32768" step="1" />
+              </label>
+              <label>
+                <span>移动端效果图高</span>
+                <input id="detectionMobileEffectHeight" type="number" min="1" max="32768" step="1" />
+              </label>
+            </section>
+
+            <section class="detection-config-section" data-detection-modes="planner">
+              <div class="detection-config-heading">
+                <h3>策划配置规则</h3>
+                <p>可分别控制双数检查与 2 的幂次检查。</p>
+              </div>
+              <label>
+                <span>要求宽高为双数</span>
+                <select id="detectionPlannerRequireEven">
+                  <option value="true">开启</option>
+                  <option value="false">关闭</option>
+                </select>
+              </label>
+              <label>
+                <span>要求宽高为 2 的幂次</span>
+                <select id="detectionPlannerRequirePowerOfTwo">
+                  <option value="true">开启</option>
+                  <option value="false">关闭</option>
+                </select>
+              </label>
+            </section>
+
+            <section class="detection-config-section" data-detection-modes="icon">
+              <div class="detection-config-heading">
+                <h3>Icon 规则</h3>
+                <p>允许尺寸用英文逗号分隔，例如 32,64,128,256。</p>
+              </div>
+              <label>
+                <span>要求正方形</span>
+                <select id="detectionIconRequireSquare">
+                  <option value="true">开启</option>
+                  <option value="false">关闭</option>
+                </select>
+              </label>
+              <label class="detection-config-wide">
+                <span>允许的宽高尺寸（px）</span>
+                <input id="detectionIconAllowedSizes" type="text" maxlength="160" placeholder="32,64,128,256,512,1024" />
+              </label>
+            </section>
           </div>
 
           <div class="signature page-signature">
@@ -1206,27 +1324,27 @@
       <div id="toast" class="toast hidden" role="status"></div>
     </div>
 
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.10"></script>
-    <script src="historical-knowledge.js?v=V3.0.10"></script>
-    <script src="js/config.js?v=V3.0.10"></script>
-    <script src="js/prefix-library.js?v=V3.0.10"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.10"></script>
-    <script src="js/external-app-launcher.js?v=V3.0.10"></script>
-    <script src="js/updates.js?v=V3.0.10"></script>
-    <script src="js/workspace-backup.js?v=V3.0.10"></script>
-    <script src="js/state-dom.js?v=V3.0.10"></script>
-    <script src="js/local-image-browser.js?v=V3.0.10"></script>
-    <script src="js/local-image-search.js?v=V3.0.10"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.10"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.10"></script>
-    <script src="js/ai-workflow.js?v=V3.0.10"></script>
-    <script src="js/assets-detection.js?v=V3.0.10"></script>
-    <script src="js/rendering.js?v=V3.0.10"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.10"></script>
-    <script src="js/export-template-storage.js?v=V3.0.10"></script>
-    <script src="js/toast.js?v=V3.0.10"></script>
-    <script src="js/workspace-storage.js?v=V3.0.10"></script>
-    <script src="js/workspace-migration.js?v=V3.0.10"></script>
-    <script src="js/main.js?v=V3.0.10"></script>
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.11"></script>
+    <script src="historical-knowledge.js?v=V3.0.11"></script>
+    <script src="js/config.js?v=V3.0.11"></script>
+    <script src="js/prefix-library.js?v=V3.0.11"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.11"></script>
+    <script src="js/external-app-launcher.js?v=V3.0.11"></script>
+    <script src="js/updates.js?v=V3.0.11"></script>
+    <script src="js/workspace-backup.js?v=V3.0.11"></script>
+    <script src="js/state-dom.js?v=V3.0.11"></script>
+    <script src="js/local-image-browser.js?v=V3.0.11"></script>
+    <script src="js/local-image-search.js?v=V3.0.11"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.11"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.11"></script>
+    <script src="js/ai-workflow.js?v=V3.0.11"></script>
+    <script src="js/assets-detection.js?v=V3.0.11"></script>
+    <script src="js/rendering.js?v=V3.0.11"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.11"></script>
+    <script src="js/export-template-storage.js?v=V3.0.11"></script>
+    <script src="js/toast.js?v=V3.0.11"></script>
+    <script src="js/workspace-storage.js?v=V3.0.11"></script>
+    <script src="js/workspace-migration.js?v=V3.0.11"></script>
+    <script src="js/main.js?v=V3.0.11"></script>
   </body>
 </html>

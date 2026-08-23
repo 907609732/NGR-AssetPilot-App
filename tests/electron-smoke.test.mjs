@@ -132,6 +132,23 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.match(await disguisedDetectionRow.innerText(), /检测到 JPEG/);
     await window.locator("#detectionModeSelect").selectOption("planner");
     assert.match(await wrongDetectionRow.innerText(), /NGR只允许png格式，不允许其他格式/);
+    await window.locator("#detectionSettingsEntry").click();
+    await window.waitForFunction(() => document.querySelector("#detectionSettingsView")?.classList.contains("active"));
+    assert.equal(await window.locator('[data-detection-modes="planner"]').isVisible(), true);
+    assert.equal(await window.locator('[data-detection-modes="ngr"]').first().isHidden(), true);
+    await window.locator("#detectionProfileMode").selectOption("ngr");
+    assert.equal(await window.locator('[data-detection-modes="ngr"]').first().isVisible(), true);
+    assert.equal(await window.locator('[data-detection-modes="planner"]').isHidden(), true);
+    await window.locator("#detectionMinWidth").fill("64");
+    await window.locator("#detectionMaxFileSizeMb").fill("2.5");
+    await window.locator("#detectionPcEffectWidth").fill("3000");
+    await window.locator("#saveDetectionProfile").click();
+    await window.locator("#backToDetection").click();
+    await window.waitForFunction(() => document.querySelector("#detectView")?.classList.contains("active"));
+    assert.match(await validDetectionRow.getAttribute("class"), /\bhas-issue\b/);
+    await window.locator("#detectionRulesToggle").click();
+    assert.match(await window.locator("#detectionActiveRuleSummary").innerText(), /图集宽高为 2 的倍数/);
+    assert.match(await window.locator("#detectionGeneralRuleSummary").innerText(), /最小尺寸 64x1 px/);
     await window.locator("#backButton").click();
     await window.waitForFunction(() => document.querySelector("#homeView")?.classList.contains("active"));
 
@@ -140,8 +157,40 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.equal(await window.locator("#feedbackFormLink").isHidden(), true);
     assert.equal(await window.locator("#workProjectName").inputValue(), "");
     assert.match(await window.locator(".toolbar-download-action").innerText(), /下载命名完成的图片/);
+    assert.deepEqual(await window.locator("#namingModeSelect option").evaluateAll((options) => (
+      options.map((option) => option.value)
+    )), ["translate:local", "translate:cfc", "translate:baidu", "translate:model", "local", "ai"]);
+    assert.equal(await window.locator("#namingModeSelect").inputValue(), "translate:local");
+    assert.equal(await window.locator("#translatorProvider").inputValue(), "local");
+    await window.locator("#namingModeSelect").selectOption("translate:cfc");
+    await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "cfc");
+    assert.match(await window.locator("#runSelectedNaming").innerText(), /NGR 云翻译/);
+    await window.locator("#namingModeSelect").selectOption("translate:baidu");
+    await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "baidu");
+    assert.match(await window.locator("#runSelectedNaming").innerText(), /自有百度翻译/);
+    await window.locator("#namingModeSelect").selectOption("local");
+    assert.equal(await window.locator("#translatorProvider").inputValue(), "baidu");
+    assert.match(await window.locator("#runSelectedNaming").innerText(), /本地知识库/);
+    await window.locator("#namingModeSelect").selectOption("translate:local");
+    await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "local");
     await window.locator("#externalAppMenu").waitFor({ state: "visible" });
-    assert.match(await window.locator("#externalAppPrimaryLabel").innerText(), /ArtHub/);
+    assert.equal(await window.locator("#workView #externalAppMenu").count(), 0);
+    assert.equal(await window.locator(".topbar #externalAppMenu").count(), 1);
+    await window.locator('#externalAppQuickList [data-app-id="arthub"]').waitFor({ state: "visible" });
+    await window.locator('#externalAppQuickList [data-app-id="figma"]').waitFor({ state: "visible" });
+    assert.match(await window.locator('#externalAppQuickList [data-app-id="arthub"]').getAttribute("data-tooltip"), /ArtHub/);
+    assert.match(await window.locator('#externalAppQuickList [data-app-id="figma"]').getAttribute("data-tooltip"), /Figma/);
+    assert.equal(await window.locator("#externalAppPrimary").getAttribute("data-tooltip"), "配置快捷应用");
+    await window.locator('#externalAppQuickList [data-app-id="figma"]').hover();
+    assert.match(await window.locator('#externalAppQuickList [data-app-id="figma"]').evaluate((node) => (
+      getComputedStyle(node, "::after").content
+    )), /Figma/);
+    await window.locator("#externalAppPrimary").click();
+    await window.locator("#externalAppList").waitFor({ state: "visible" });
+    assert.match(await window.locator("#externalAppList").innerText(), /ArtHub/);
+    assert.match(await window.locator("#externalAppList").innerText(), /Figma/);
+    assert.equal(await window.locator("#externalAppAdd").isVisible(), true);
+    await window.locator("#externalAppPrimary").click();
     await window.evaluate(() => {
       const image = new File(
         ['<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#0f766e"/></svg>'],
@@ -269,6 +318,11 @@ test("Electron development app boots with the Dev identity and an isolated rende
       translatorGearExists: false,
       activeTab: "page",
     });
+    await window.locator("#translatorProvider").selectOption("model");
+    await window.waitForFunction(() => document.querySelector("#namingModeSelect")?.value === "translate:model");
+    assert.match(await window.locator("#runSelectedNaming").innerText(), /OpenAI 兼容模型/);
+    await window.locator("#translatorProvider").selectOption("local");
+    await window.waitForFunction(() => document.querySelector("#namingModeSelect")?.value === "translate:local");
   } finally {
     await electronApp.close();
     fs.rmSync(runRoot, { recursive: true, force: true });

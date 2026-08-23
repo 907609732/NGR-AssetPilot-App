@@ -131,14 +131,40 @@ function bindDetection() {
   els.detectionSettingsProfileSelect.addEventListener("change", () => {
     switchDetectionProfile(els.detectionSettingsProfileSelect.value);
   });
-  [els.detectionProfileName, els.detectionProfileMode, els.duplicateSensitivityProfile, els.detectionMaxSide, els.detectionBgWidth, els.detectionBgHeight, els.detectionLargeThreshold, els.detectionLargeMultiple, els.detectionAtlasMultiple].forEach((input) => {
+  [
+    els.detectionProfileName,
+    els.detectionProfileMode,
+    els.duplicateSensitivityProfile,
+    els.detectionMinWidth,
+    els.detectionMinHeight,
+    els.detectionMaxFileSizeMb,
+    els.detectionMaxSide,
+    els.detectionOversizeSeverity,
+    els.detectionRiskSide,
+    els.detectionRiskSideSeverity,
+    els.detectionBgWidth,
+    els.detectionBgHeight,
+    els.detectionPcEffectWidth,
+    els.detectionPcEffectHeight,
+    els.detectionMobileEffectWidth,
+    els.detectionMobileEffectHeight,
+    els.detectionLargeThreshold,
+    els.detectionLargeMultiple,
+    els.detectionAtlasMultiple,
+    els.detectionPlannerRequireEven,
+    els.detectionPlannerRequirePowerOfTwo,
+    els.detectionIconRequireSquare,
+    els.detectionIconAllowedSizes,
+  ].forEach((input) => {
     input.addEventListener("input", () => {
       updateActiveDetectionProfile(collectDetectionProfileForm(), false);
+      if (input === els.detectionProfileMode) updateDetectionSettingsVisibility(els.detectionProfileMode.value);
       revalidateDetectionAssets();
     });
   });
   els.saveDetectionProfile.addEventListener("click", () => {
     updateActiveDetectionProfile(collectDetectionProfileForm(), true);
+    fillDetectionProfileForm();
     showToast("检测参数已保存");
   });
   els.newDetectionProfile.addEventListener("click", createDetectionProfile);
@@ -161,12 +187,16 @@ function bindTranslator() {
   bindTranslatorDragging();
   els.translatorToggle.addEventListener("click", openTranslatorPanel);
   els.translatorClose.addEventListener("click", closeTranslatorPanel);
-  els.translatorProvider.addEventListener("change", syncTranslatorProviderFields);
+  els.translatorProvider.addEventListener("change", () => {
+    const provider = els.translatorProvider.value || "local";
+    void selectTranslationProvider(provider, { forceNamingMode: true });
+  });
   els.baiduCredentialType?.addEventListener("change", syncBaiduCredentialFields);
   els.saveTranslatorSettings.addEventListener("click", async () => {
     translationSettings = collectTranslationSettings();
     try {
       await saveTranslationSettings(translationSettings);
+      syncNamingModeWithTranslationSettings({ force: true });
       showToast("翻译 API 设置已保存");
     } catch (error) {
       showToast(`翻译 API 设置保存失败：${error?.message || "未知错误"}`);
@@ -607,7 +637,7 @@ function readEntryFiles(entry) {
 }
 
 function bindEditor() {
-  els.namingModeSelect.addEventListener("change", updateNamingRunButton);
+  els.namingModeSelect.addEventListener("change", handleNamingModeChange);
   els.runSelectedNaming.addEventListener("click", runSelectedNaming);
   els.stopNaming.addEventListener("click", stopNaming);
   els.newNamingSession.addEventListener("click", createNamingSession);

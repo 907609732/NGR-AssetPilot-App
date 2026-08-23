@@ -1,4 +1,83 @@
 /* NGR AssetPilot V2.25 module: ai-workflow.js */
+const TRANSLATION_NAMING_MODES = Object.freeze({
+  "translate:local": { provider: "local", label: "内置离线 AI 翻译" },
+  "translate:cfc": { provider: "cfc", label: "NGR 云翻译" },
+  "translate:baidu": { provider: "baidu", label: "自有百度翻译" },
+  "translate:model": { provider: "model", label: "OpenAI 兼容模型" },
+});
+let namingModeProviderSync = Promise.resolve(true);
+
+function getTranslationProviderFromNamingMode(mode) {
+  const normalizedMode = String(mode || "");
+  if (normalizedMode === "translate") return translationSettings?.provider || "local";
+  return TRANSLATION_NAMING_MODES[normalizedMode]?.provider || "";
+}
+
+function getNamingModeForTranslationProvider(provider) {
+  const match = Object.entries(TRANSLATION_NAMING_MODES)
+    .find(([, config]) => config.provider === provider);
+  return match?.[0] || "translate:local";
+}
+
+function getTranslationProviderLabel(provider) {
+  return Object.values(TRANSLATION_NAMING_MODES)
+    .find((config) => config.provider === provider)?.label || "翻译服务";
+}
+
+function syncNamingModeWithTranslationSettings(options = {}) {
+  if (!els.namingModeSelect) return;
+  const currentMode = els.namingModeSelect.value || "";
+  const isTranslationMode = currentMode === "translate" || currentMode.startsWith("translate:");
+  if (options.force || isTranslationMode) {
+    els.namingModeSelect.value = getNamingModeForTranslationProvider(translationSettings?.provider || "local");
+  }
+  updateNamingRunButton();
+}
+
+async function selectTranslationProvider(provider, options = {}) {
+  if (!["local", "cfc", "baidu", "model"].includes(provider)) return false;
+  const providerId = provider === "baidu" ? "baidu"
+    : provider === "cfc" ? "baidu-cfc"
+      : provider === "model" ? "user-translation-model" : "";
+  const previousProviderId = translationSettings?.providerId || "";
+
+  if (els.translatorProvider) {
+    els.translatorProvider.value = provider;
+    syncTranslatorProviderFields();
+  }
+  translationSettings = normalizeTranslationSettings({
+    ...translationSettings,
+    provider,
+    providerId,
+    managed: provider === "cfc" && Boolean(translationSettings?.managedCfcAvailable),
+    hasSecret: providerId !== "" && providerId === previousProviderId && Boolean(translationSettings?.hasSecret),
+  });
+  await saveTranslationSettings(translationSettings, { skipDesktopSync: true });
+
+  if (window.NgrDesktopBridge?.isDesktopRuntime() && typeof hydrateDesktopCredentials === "function") {
+    await hydrateDesktopCredentials();
+  }
+  fillTranslationSettings();
+  syncNamingModeWithTranslationSettings({ force: options.forceNamingMode !== false });
+  return true;
+}
+
+function handleNamingModeChange() {
+  const provider = getTranslationProviderFromNamingMode(els.namingModeSelect.value);
+  if (!provider) {
+    updateNamingRunButton();
+    return;
+  }
+  namingModeProviderSync = namingModeProviderSync
+    .catch(() => false)
+    .then(() => selectTranslationProvider(provider, { forceNamingMode: true }))
+    .catch((error) => {
+      showToast(`翻译服务切换失败：${error?.message || "未知错误"}`);
+      syncNamingModeWithTranslationSettings({ force: true });
+      return false;
+    });
+}
+
 async function runNaming() {
   return runNamingWorkflow({ useAi: true });
 }
@@ -12,6 +91,7 @@ async function runTranslateNaming() {
 }
 
 async function runSelectedNaming() {
+  await namingModeProviderSync.catch(() => false);
   const mode = els.namingModeSelect.value || "translate";
   try {
     if (mode === "ai") return await runNaming();
@@ -25,12 +105,13 @@ async function runSelectedNaming() {
 }
 
 function updateNamingRunButton() {
-  const labels = {
-    translate: "运行翻译服务命名",
-    local: "运行本地知识库命名",
-    ai: "运行AI视觉命名",
-  };
-  els.runSelectedNaming.textContent = labels[els.namingModeSelect.value] || labels.translate;
+  const mode = els.namingModeSelect.value || "translate";
+  const provider = getTranslationProviderFromNamingMode(mode);
+  if (provider) {
+    els.runSelectedNaming.textContent = `运行 ${getTranslationProviderLabel(provider)}命名`;
+    return;
+  }
+  els.runSelectedNaming.textContent = mode === "ai" ? "运行 AI 视觉命名" : "运行本地知识库命名";
 }
 
 async function runNamingWorkflow({ useAi, useTranslationProvider = false }) {

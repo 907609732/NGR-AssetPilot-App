@@ -10,12 +10,20 @@ const translator = fs.readFileSync(path.join(projectRoot, "app/js/uploads-editor
 const knowledge = fs.readFileSync(path.join(projectRoot, "app/js/naming-knowledge.js"), "utf8");
 const index = fs.readFileSync(path.join(projectRoot, "app/index.html"), "utf8");
 
-test("翻译服务命名使用当前已选择的离线、百度或自定义模型且不强制切换服务", () => {
+test("开始命名区直接选择各种翻译服务并与设置页双向同步", () => {
   assert.match(workflow, /ensureTranslationProviderReady\(\{ revealSettings: true \}\)/);
   assert.match(workflow, /shouldUseTranslationProvider = !shouldUseAi && useTranslationProvider/);
   assert.match(workflow, /runTranslationNamingQueue/);
   assert.doesNotMatch(workflow, /activateBaiduTranslation/);
-  assert.doesNotMatch(translator, /translatorProvider\.value = "baidu"/);
+  assert.match(workflow, /"translate:local": \{ provider: "local"/);
+  assert.match(workflow, /"translate:cfc": \{ provider: "cfc"/);
+  assert.match(workflow, /"translate:baidu": \{ provider: "baidu"/);
+  assert.match(workflow, /"translate:model": \{ provider: "model"/);
+  assert.match(workflow, /async function selectTranslationProvider/);
+  assert.match(workflow, /await hydrateDesktopCredentials\(\)/);
+  assert.match(workflow, /syncNamingModeWithTranslationSettings\(\{ force:/);
+  assert.match(translator, /selectTranslationProvider\(provider, \{ forceNamingMode: true \}\)/);
+  assert.match(translator, /syncNamingModeWithTranslationSettings\(\{ force: true \}\)/);
   assert.match(workflow, /forceExternal: true/);
   assert.match(workflow, /requireExternal: true/);
   assert.match(workflow, /翻译服务有.*调用失败/);
@@ -23,8 +31,12 @@ test("翻译服务命名使用当前已选择的离线、百度或自定义模�
   assert.match(translator, /offlineTranslation\.getStatus\(\)/);
   assert.match(translator, /provider === "model"/);
   assert.match(knowledge, /if \(options\.requireExternal\) throw error/);
-  assert.match(index, /<option value="translate" selected>翻译服务命名<\/option>/);
-  assert.match(index, />运行翻译服务命名<\/button>/);
+  assert.match(index, /<optgroup label="翻译服务命名">/);
+  assert.match(index, /<option value="translate:local">内置离线 AI 翻译<\/option>/);
+  assert.match(index, /<option value="translate:cfc" selected>NGR 云翻译（开箱即用）<\/option>/);
+  assert.match(index, /<option value="translate:baidu">自有百度翻译 API<\/option>/);
+  assert.match(index, /<option value="translate:model">OpenAI 兼容文本模型<\/option>/);
+  assert.match(index, />运行 NGR 云翻译命名<\/button>/);
 });
 
 test("命名单词翻译支持回车并将 API 错误展示给用户", () => {

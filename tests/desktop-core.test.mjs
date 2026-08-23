@@ -42,17 +42,20 @@ async function withTempDirectory(run) {
   }
 }
 
-test("external app registry detects ArtHub, hides paths, and only launches registered ids", async () => {
+test("external app registry detects ArtHub and Figma, hides paths, and only launches registered ids", async () => {
   await withTempDirectory(async (userDataPath) => {
     const artHubPath = path.join(userDataPath, "ArtHub.exe");
+    const figmaPath = path.join(userDataPath, "Figma.exe");
     const customPath = path.join(userDataPath, "Uploader.exe");
     await writeFile(artHubPath, "test executable");
+    await writeFile(figmaPath, "test executable");
     await writeFile(customPath, "test executable");
     const opened = [];
     let selectedPath = customPath;
     const registry = new ExternalAppRegistry({
       userDataPath,
       artHubCandidates: [artHubPath],
+      figmaCandidates: [figmaPath],
       getWindow: () => null,
       dialog: {
         async showOpenDialog() { return { canceled: false, filePaths: [selectedPath] }; },
@@ -62,12 +65,15 @@ test("external app registry detects ArtHub, hides paths, and only launches regis
       },
     });
     const initialized = await registry.initialize();
-    assert.deepEqual(initialized.apps, [{
-      id: "arthub", name: "ArtHub", builtin: true, configured: true, available: true,
-    }]);
+    assert.deepEqual(initialized.apps, [
+      { id: "arthub", name: "ArtHub", builtin: true, configured: true, available: true },
+      { id: "figma", name: "Figma", builtin: true, configured: true, available: true },
+    ]);
     assert.doesNotMatch(JSON.stringify(initialized), /ArtHub\.exe/);
+    assert.doesNotMatch(JSON.stringify(initialized), /Figma\.exe/);
     assert.deepEqual(await registry.launch({ appId: "arthub" }), { opened: true, appId: "arthub", name: "ArtHub" });
-    assert.deepEqual(opened, [artHubPath]);
+    assert.deepEqual(await registry.launch({ appId: "figma" }), { opened: true, appId: "figma", name: "Figma" });
+    assert.deepEqual(opened, [artHubPath, figmaPath]);
     await assert.rejects(() => registry.launch({ appId: "missing" }), { code: "APP_NOT_FOUND" });
 
     const added = await registry.choose();
@@ -76,10 +82,11 @@ test("external app registry detects ArtHub, hides paths, and only launches regis
     assert.equal(custom.available, true);
     assert.doesNotMatch(JSON.stringify(added), /Uploader\.exe/);
     await registry.launch({ appId: custom.id });
-    assert.deepEqual(opened, [artHubPath, customPath]);
+    assert.deepEqual(opened, [artHubPath, figmaPath, customPath]);
     const removed = await registry.remove({ appId: custom.id });
-    assert.equal(removed.apps.length, 1);
+    assert.equal(removed.apps.length, 2);
     await assert.rejects(() => registry.remove({ appId: "arthub" }), { code: "BUILTIN_APP_REQUIRED" });
+    await assert.rejects(() => registry.remove({ appId: "figma" }), { code: "BUILTIN_APP_REQUIRED" });
 
     selectedPath = path.join(userDataPath, "not-an-app.txt");
     await writeFile(selectedPath, "no");
