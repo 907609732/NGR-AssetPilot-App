@@ -318,9 +318,11 @@ async function translateTextOffline(text, from = "zh", to = "en") {
 
 async function translateTextByApi(text, from, to) {
   if (translationSettings.provider !== "baidu" && translationSettings.provider !== "cfc") return "";
-  const desktopCredential = window.NgrDesktopBridge?.isDesktopRuntime() && translationSettings.hasSecret;
+  const desktopCredential = hasDesktopTranslationAuthorization();
   if (!desktopCredential && (!translationSettings.baiduAppId || !translationSettings.baiduSecret)) {
-    throw new Error("请先填写百度翻译 App ID 和密钥");
+    throw new Error(translationSettings.provider === "cfc"
+      ? "当前构建未启用 NGR 云翻译，请安装正式版或改用内置离线翻译"
+      : "请先填写百度翻译 App ID 和密钥");
   }
   const query = String(text || "").trim();
   if (!query) return "";
@@ -513,7 +515,7 @@ function getMeaningKey(name) {
 
 function scheduleBaiduMeaningTranslation(name, key = getMeaningKey(name)) {
   if (!key || meaningCache[key] || pendingMeaningNames.has(key)) return;
-  const desktopCredential = window.NgrDesktopBridge?.isDesktopRuntime() && translationSettings.hasSecret;
+  const desktopCredential = hasDesktopTranslationAuthorization();
   if ((translationSettings.provider !== "baidu" && translationSettings.provider !== "cfc")
     || (!desktopCredential && (!translationSettings.baiduAppId || !translationSettings.baiduSecret))) return;
   pendingMeaningNames.add(key);

@@ -8,6 +8,7 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const workflow = fs.readFileSync(path.join(projectRoot, "app/js/ai-workflow.js"), "utf8");
 const translator = fs.readFileSync(path.join(projectRoot, "app/js/uploads-editor-translator.js"), "utf8");
 const knowledge = fs.readFileSync(path.join(projectRoot, "app/js/naming-knowledge.js"), "utf8");
+const workspaceMigration = fs.readFileSync(path.join(projectRoot, "app/js/workspace-migration.js"), "utf8");
 const index = fs.readFileSync(path.join(projectRoot, "app/index.html"), "utf8");
 
 test("开始命名区直接选择各种翻译服务并与设置页双向同步", () => {
@@ -52,8 +53,21 @@ test("百度翻译设置支持新版 API Key 和传统密钥两种鉴权", () =>
   assert.match(index, /value="apiKey">新版 API Key/);
   assert.match(index, /value="legacy">App ID \+ 传统密钥/);
   assert.match(index, /value="cfc">NGR 云翻译（百度 CFC，开箱即用）/);
-  assert.match(index, /正式版无需填写 APP ID 或密钥/);
+  assert.match(index, /API 已随正式版启用，打开即可使用，无需填写 APP ID 或密钥/);
   assert.match(translator, /if \(provider === "cfc"\) els\.baiduCredentialType\.value = "legacy"/);
   assert.match(translator, /translationSettings\.managedCfcAvailable/);
   assert.match(translator, /aiTextTranslate/);
+});
+
+test("NGR 云翻译使用受管授权，不要求用户填写百度 API", () => {
+  assert.match(translator, /function isManagedCfcTranslationReady\(\)/);
+  assert.match(translator, /translationSettings\.managed \|\| translationSettings\.managedCfcAvailable/);
+  assert.match(translator, /function hasDesktopTranslationAuthorization\(\)/);
+  assert.match(translator, /translationSettings\.hasSecret \|\| isManagedCfcTranslationReady\(\)/);
+  assert.match(knowledge, /const desktopCredential = hasDesktopTranslationAuthorization\(\)/);
+  assert.match(translator, /当前构建未内置 NGR 云翻译配置/);
+  assert.match(translator, /function syncManagedCfcAvailabilityUi\(\)/);
+  assert.match(translator, /option\.disabled = !available/);
+  assert.match(workspaceMigration, /missingManagedCfc \? "local" : translationSettings\.provider/);
+  assert.match(workspaceMigration, /providerId: missingManagedCfc \? ""/);
 });

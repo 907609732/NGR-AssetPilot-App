@@ -140,9 +140,12 @@
     const byId = new Map(providers.map((provider) => [provider.id, provider]));
     const ai = byId.get(aiProviderId(aiSettings));
     const managedCfc = byId.get("baidu-cfc")?.managed ? byId.get("baidu-cfc") : null;
+    const missingManagedCfc = translationSettings.provider === "cfc" && !managedCfc;
     const translation = !hasSavedTranslationChoice && managedCfc
       ? managedCfc
-      : byId.get(translationProviderId(translationSettings));
+      : missingManagedCfc
+        ? null
+        : byId.get(translationProviderId(translationSettings));
     aiSettings = normalizeAiSettings({
       ...aiSettings,
       providerId: ai?.id || aiProviderId(aiSettings),
@@ -155,8 +158,10 @@
     });
     translationSettings = normalizeTranslationSettings({
       ...translationSettings,
-      provider: !hasSavedTranslationChoice && managedCfc ? "cfc" : translationSettings.provider,
-      providerId: translation?.id || translationProviderId(translationSettings),
+      provider: !hasSavedTranslationChoice && managedCfc
+        ? "cfc"
+        : missingManagedCfc ? "local" : translationSettings.provider,
+      providerId: missingManagedCfc ? "" : translation?.id || translationProviderId(translationSettings),
       baiduCredentialType: translation?.apiFormat === "baidu-ai" ? "apiKey" : translationSettings.baiduCredentialType,
       baiduAppId: "",
       baiduSecret: "",

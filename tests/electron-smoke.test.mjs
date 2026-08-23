@@ -162,9 +162,8 @@ test("Electron development app boots with the Dev identity and an isolated rende
     )), ["translate:local", "translate:cfc", "translate:baidu", "translate:model", "local", "ai"]);
     assert.equal(await window.locator("#namingModeSelect").inputValue(), "translate:local");
     assert.equal(await window.locator("#translatorProvider").inputValue(), "local");
-    await window.locator("#namingModeSelect").selectOption("translate:cfc");
-    await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "cfc");
-    assert.match(await window.locator("#runSelectedNaming").innerText(), /NGR 云翻译/);
+    assert.equal(await window.locator('#namingModeSelect option[value="translate:cfc"]').evaluate((option) => option.disabled), true);
+    assert.equal(await window.locator('#translatorProvider option[value="cfc"]').evaluate((option) => option.disabled), true);
     await window.locator("#namingModeSelect").selectOption("translate:baidu");
     await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "baidu");
     assert.match(await window.locator("#runSelectedNaming").innerText(), /自有百度翻译/);

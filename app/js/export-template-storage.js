@@ -957,6 +957,7 @@ function fillTranslationSettings() {
   els.textTranslateApiKey.placeholder = translationSettings.provider === "model" && translationSettings.hasSecret
     ? "已安全保存；留空表示保持不变" : "请输入文本翻译模型 API Key";
   els.textTranslateModel.value = translationSettings.textModel;
+  if (typeof syncManagedCfcAvailabilityUi === "function") syncManagedCfcAvailabilityUi();
   if (typeof syncTranslatorProviderFields === "function") syncTranslatorProviderFields();
   if (typeof syncNamingModeWithTranslationSettings === "function") syncNamingModeWithTranslationSettings();
 }

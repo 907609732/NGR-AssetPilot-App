@@ -264,6 +264,35 @@ function isBaiduTranslationProvider() {
   return (translationSettings.provider || "local") === "baidu" || translationSettings.provider === "cfc";
 }
 
+function isManagedCfcTranslationReady() {
+  return Boolean(
+    window.NgrDesktopBridge?.isDesktopRuntime()
+    && translationSettings.provider === "cfc"
+    && (translationSettings.managed || translationSettings.managedCfcAvailable),
+  );
+}
+
+function hasDesktopTranslationAuthorization() {
+  return Boolean(
+    window.NgrDesktopBridge?.isDesktopRuntime()
+    && (translationSettings.hasSecret || isManagedCfcTranslationReady()),
+  );
+}
+
+function syncManagedCfcAvailabilityUi() {
+  const available = Boolean(translationSettings.managedCfcAvailable || translationSettings.managed);
+  const labels = new Map([
+    ["translate:cfc", "NGR 云翻译（开箱即用）"],
+    ["cfc", "NGR 云翻译（百度 CFC，开箱即用）"],
+  ]);
+  labels.forEach((label, value) => {
+    document.querySelectorAll(`option[value="${value}"]`).forEach((option) => {
+      option.disabled = !available;
+      option.textContent = available ? label : `${label}（当前构建未启用）`;
+    });
+  });
+}
+
 async function ensureTranslationProviderReady(options = {}) {
   const isDesktop = Boolean(window.NgrDesktopBridge?.isDesktopRuntime());
   const provider = translationSettings.provider || "local";
@@ -283,12 +312,15 @@ async function ensureTranslationProviderReady(options = {}) {
     }
   }
   if (provider === "baidu" || provider === "cfc") {
-    const desktopReady = Boolean(isDesktop && translationSettings.hasSecret);
+    const desktopReady = Boolean(isDesktop && hasDesktopTranslationAuthorization());
     const browserReady = Boolean(translationSettings.baiduAppId && translationSettings.baiduSecret);
     if (desktopReady || browserReady) return true;
     if (options.revealSettings) revealTranslatorSettings();
-    els.translatorOutput.textContent = "请填写百度翻译凭据，保存并测试成功后再开始命名。";
-    showToast("请先配置百度翻译凭据");
+    const managedUnavailable = provider === "cfc";
+    els.translatorOutput.textContent = managedUnavailable
+      ? "当前构建未内置 NGR 云翻译配置，请安装正式版或改用内置离线翻译。"
+      : "请填写百度翻译凭据，保存并测试成功后再开始命名。";
+    showToast(managedUnavailable ? "当前构建未启用 NGR 云翻译" : "请先配置百度翻译凭据");
     return false;
   }
   if (provider === "model") {

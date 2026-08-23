@@ -50,6 +50,7 @@ jobs:
       - name: Test and build unsigned production release
         run: |
           npm test
+          npm run verify:managed-provider
           npm run build
           npm run verify:packaged:prod
       - name: Upload production build artifacts

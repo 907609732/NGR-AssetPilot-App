@@ -35,6 +35,7 @@ test("桌面依赖版本全部精确锁定", () => {
   assert.equal(packageJson.scripts["build:dev"], "node scripts/run-build.mjs dev");
   assert.equal(packageJson.scripts["build:test"], "node scripts/run-build.mjs test");
   assert.equal(packageJson.scripts["prepare:offline-translation"], "node scripts/prepare-offline-translation-model.mjs");
+  assert.equal(packageJson.scripts["verify:managed-provider"], "node scripts/verify-managed-provider.mjs");
   const builderConfig = fs.readFileSync(path.join(projectRoot, "build", "electron-builder.config.cjs"), "utf8");
   assert.match(builderConfig, /"app\/\*\*\/\*"/);
   assert.equal(fs.existsSync(path.join(projectRoot, "app", "js", "workspace-backup-stream-worker.js")), true);
@@ -152,6 +153,7 @@ test("正式版发布工作流同时上传自动更新元数据", () => {
   assert.match(workflow, /artifacts\/prod\/\*\.blockmap/);
   assert.match(workflow, /GITHUB_REF_NAME/);
   assert.match(workflow, /npm run verify:packaged:prod/);
+  assert.match(workflow, /npm run verify:managed-provider/);
   assert.match(workflow, /draft:\s*false/);
   assert.doesNotMatch(workflow, /draft:\s*true/);
   assert.match(workflow, /body_path:\s*docs\/releases\/\$\{\{ github\.ref_name \}\}\.md/);

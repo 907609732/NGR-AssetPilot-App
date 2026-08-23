@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { parseManagedProviderConfig } from "../desktop/services/managed-provider-config.mjs";
 import { ProviderRegistry } from "../desktop/services/provider-registry.mjs";
+import { verifyManagedProvider } from "../scripts/verify-managed-provider.mjs";
 
 class EmptyCredentialStore {
   constructor(filePath) {
@@ -85,4 +86,26 @@ test("托管 CFC Provider 无需用户密钥并且不向渲染层返回 Token", 
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
   }
+});
+
+test("正式发布前真实验证受管 CFC 健康状态和翻译结果", async () => {
+  const token = "C".repeat(48);
+  const requests = [];
+  const result = await verifyManagedProvider({
+    env: {
+      NGR_BAIDU_CFC_ENDPOINT: "https://abc123.cfc-execute.bj.baidubce.com/ngr-assetpilot/translate",
+      NGR_BAIDU_CFC_BEARER_TOKEN: token,
+    },
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      const data = options.method === "GET"
+        ? { ok: true, service: "ngr-baidu-translation", configured: true }
+        : { trans_result: [{ src: "测试", dst: "test" }] };
+      return { ok: true, status: 200, async json() { return data; } };
+    },
+  });
+  assert.deepEqual(result, { ok: true, service: "ngr-baidu-translation" });
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].options.headers.authorization, `Bearer ${token}`);
+  assert.deepEqual(JSON.parse(requests[1].options.body), { q: "测试", from: "zh", to: "en" });
 });
