@@ -1321,7 +1321,10 @@
         </section>
       </div>
 
-      <div id="toast" class="toast hidden" role="status"></div>
+      <div id="toast" class="toast hidden" role="status" aria-live="polite">
+        <span id="toastMessage"></span>
+        <button id="toastAction" class="toast-action hidden" type="button"></button>
+      </div>
     </div>
 
     <script src="vendor/fflate-0.8.3.min.js?v=V3.0.11"></script>

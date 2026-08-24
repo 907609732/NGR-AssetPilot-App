@@ -122,7 +122,7 @@
 
   async function hydrateDesktopCredentials() {
     if (!isDesktop()) return false;
-    const hasSavedTranslationChoice = Boolean(localStorage.getItem(TRANSLATION_SETTINGS_KEY));
+    const hasSavedTranslationChoice = localStorage.getItem(TRANSLATION_PROVIDER_CHOICE_KEY) === "1";
     const legacy = collectCurrentCredentials();
     try {
       if (legacy.ai.apiKey || legacy.translation.baiduSecret || legacy.translation.textApiKey) {

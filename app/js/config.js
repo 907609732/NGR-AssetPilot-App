@@ -7,6 +7,7 @@ const PROJECTS_KEY = "ngr-ai-autoname-projects";
 const ACTIVE_PROJECT_KEY = "ngr-ai-autoname-active-project";
 const AI_SETTINGS_KEY = "ngr-ai-autoname-ai-settings";
 const TRANSLATION_SETTINGS_KEY = "ngr-ai-autoname-translation-settings";
+const TRANSLATION_PROVIDER_CHOICE_KEY = "ngr-ai-autoname-translation-provider-user-selected";
 const DETECTION_PROFILES_KEY = "ngr-ai-autoname-detection-profiles";
 const ACTIVE_DETECTION_PROFILE_KEY = "ngr-ai-autoname-active-detection-profile";
 const LIST_DISPLAY_MODE_KEY = "ngr-ai-autoname-list-display-mode";
@@ -25,6 +26,7 @@ const APP_STORAGE_KEYS = [
   ACTIVE_PROJECT_KEY,
   AI_SETTINGS_KEY,
   TRANSLATION_SETTINGS_KEY,
+  TRANSLATION_PROVIDER_CHOICE_KEY,
   DETECTION_PROFILES_KEY,
   ACTIVE_DETECTION_PROFILE_KEY,
   LIST_DISPLAY_MODE_KEY,

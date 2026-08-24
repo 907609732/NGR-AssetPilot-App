@@ -1149,6 +1149,26 @@ button:disabled {
   color: #fff;
   box-shadow: 0 16px 42px rgba(27, 36, 40, 0.22);
   z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.toast-action {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 7px;
+  padding: 7px 11px;
+  background: #fff;
+  color: #0f766e;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toast-action:hover,
+.toast-action:focus-visible {
+  background: #ecfeff;
+  border-color: #67e8f9;
 }
 
 @media (max-width: 860px) {

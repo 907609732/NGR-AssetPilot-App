@@ -309,4 +309,6 @@ const els = {
   updatePrimaryAction: document.querySelector("#updatePrimaryAction"),
   updateWebsiteAction: document.querySelector("#updateWebsiteAction"),
   toast: document.querySelector("#toast"),
+  toastMessage: document.querySelector("#toastMessage"),
+  toastAction: document.querySelector("#toastAction"),
 };

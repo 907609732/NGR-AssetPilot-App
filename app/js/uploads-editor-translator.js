@@ -189,7 +189,7 @@ function bindTranslator() {
   els.translatorClose.addEventListener("click", closeTranslatorPanel);
   els.translatorProvider.addEventListener("change", () => {
     const provider = els.translatorProvider.value || "local";
-    void selectTranslationProvider(provider, { forceNamingMode: true });
+    void selectTranslationProvider(provider, { forceNamingMode: true, userInitiated: true });
   });
   els.baiduCredentialType?.addEventListener("change", syncBaiduCredentialFields);
   els.saveTranslatorSettings.addEventListener("click", async () => {
@@ -232,6 +232,8 @@ async function runTranslatorNaming() {
     els.translatorOutput.textContent = "请输入中文文件名、英文命名或单词";
     return;
   }
+  const translationReady = await ensureTranslationProviderReady({ offerConfiguration: true });
+  if (!translationReady) return;
   els.translatorToName.disabled = true;
   els.translatorOutput.textContent = "翻译中...";
   try {
@@ -293,6 +295,14 @@ function syncManagedCfcAvailabilityUi() {
   });
 }
 
+function offerTranslationConfiguration(message) {
+  if (typeof showToastAction === "function") {
+    showToastAction(message, "前往配置", revealTranslatorSettings);
+    return;
+  }
+  showToast(message);
+}
+
 async function ensureTranslationProviderReady(options = {}) {
   const isDesktop = Boolean(window.NgrDesktopBridge?.isDesktopRuntime());
   const provider = translationSettings.provider || "local";
@@ -315,21 +325,29 @@ async function ensureTranslationProviderReady(options = {}) {
     const desktopReady = Boolean(isDesktop && hasDesktopTranslationAuthorization());
     const browserReady = Boolean(translationSettings.baiduAppId && translationSettings.baiduSecret);
     if (desktopReady || browserReady) return true;
-    if (options.revealSettings) revealTranslatorSettings();
     const managedUnavailable = provider === "cfc";
-    els.translatorOutput.textContent = managedUnavailable
+    const message = managedUnavailable
       ? "当前构建未内置 NGR 云翻译配置，请安装正式版或改用内置离线翻译。"
       : "请填写百度翻译凭据，保存并测试成功后再开始命名。";
-    showToast(managedUnavailable ? "当前构建未启用 NGR 云翻译" : "请先配置百度翻译凭据");
+    els.translatorOutput.textContent = message;
+    if (options.offerConfiguration) offerTranslationConfiguration(message);
+    else {
+      if (options.revealSettings) revealTranslatorSettings();
+      showToast(managedUnavailable ? "当前构建未启用 NGR 云翻译" : "请先配置百度翻译凭据");
+    }
     return false;
   }
   if (provider === "model") {
     const desktopReady = Boolean(isDesktop && translationSettings.hasSecret);
     const browserReady = Boolean(translationSettings.textBaseUrl && translationSettings.textApiKey && translationSettings.textModel);
     if (desktopReady || browserReady) return true;
-    if (options.revealSettings) revealTranslatorSettings();
-    els.translatorOutput.textContent = "请填写文本翻译模型地址、模型名和 API Key，保存并测试成功后再开始命名。";
-    showToast("请先配置文本翻译模型");
+    const message = "请填写文本翻译模型地址、模型名和 API Key，保存并测试成功后再开始命名。";
+    els.translatorOutput.textContent = message;
+    if (options.offerConfiguration) offerTranslationConfiguration(message);
+    else {
+      if (options.revealSettings) revealTranslatorSettings();
+      showToast("请先配置文本翻译模型");
+    }
     return false;
   }
   if (options.revealSettings) revealTranslatorSettings();

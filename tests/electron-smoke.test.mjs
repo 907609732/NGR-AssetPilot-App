@@ -167,6 +167,17 @@ test("Electron development app boots with the Dev identity and an isolated rende
     await window.locator("#namingModeSelect").selectOption("translate:baidu");
     await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "baidu");
     assert.match(await window.locator("#runSelectedNaming").innerText(), /自有百度翻译/);
+    assert.equal(await window.evaluate(() => localStorage.getItem("ngr-ai-autoname-translation-provider-user-selected")), "1");
+    await window.locator("#translatorToggle").click();
+    await window.locator("#translatorInput").fill("登录按钮");
+    await window.locator("#translatorToName").click();
+    await window.locator("#toastAction").waitFor({ state: "visible" });
+    assert.match(await window.locator("#toastMessage").innerText(), /请填写百度翻译凭据/);
+    assert.equal(await window.locator("#toastAction").innerText(), "前往配置");
+    await window.locator("#toastAction").click();
+    await window.waitForFunction(() => document.querySelector("#apiSettingsView")?.classList.contains("active"));
+    await window.locator("#backButton").click();
+    await window.waitForFunction(() => document.querySelector("#workView")?.classList.contains("active"));
     await window.locator("#namingModeSelect").selectOption("local");
     assert.equal(await window.locator("#translatorProvider").inputValue(), "baidu");
     assert.match(await window.locator("#runSelectedNaming").innerText(), /本地知识库/);

@@ -52,6 +52,9 @@ async function selectTranslationProvider(provider, options = {}) {
     managed: provider === "cfc" && Boolean(translationSettings?.managedCfcAvailable),
     hasSecret: providerId !== "" && providerId === previousProviderId && Boolean(translationSettings?.hasSecret),
   });
+  if (options.userInitiated === true) {
+    localStorage.setItem(TRANSLATION_PROVIDER_CHOICE_KEY, "1");
+  }
   await saveTranslationSettings(translationSettings, { skipDesktopSync: true });
 
   if (window.NgrDesktopBridge?.isDesktopRuntime() && typeof hydrateDesktopCredentials === "function") {
@@ -70,7 +73,7 @@ function handleNamingModeChange() {
   }
   namingModeProviderSync = namingModeProviderSync
     .catch(() => false)
-    .then(() => selectTranslationProvider(provider, { forceNamingMode: true }))
+    .then(() => selectTranslationProvider(provider, { forceNamingMode: true, userInitiated: true }))
     .catch((error) => {
       showToast(`翻译服务切换失败：${error?.message || "未知错误"}`);
       syncNamingModeWithTranslationSettings({ force: true });
@@ -120,7 +123,7 @@ async function runNamingWorkflow({ useAi, useTranslationProvider = false }) {
     return;
   }
   if (useTranslationProvider) {
-    const translationReady = await ensureTranslationProviderReady({ revealSettings: true });
+    const translationReady = await ensureTranslationProviderReady({ offerConfiguration: true });
     if (!translationReady) return;
   }
   const apiKey = aiSettings.apiKey.trim();

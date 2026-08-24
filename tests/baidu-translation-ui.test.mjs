@@ -9,10 +9,11 @@ const workflow = fs.readFileSync(path.join(projectRoot, "app/js/ai-workflow.js")
 const translator = fs.readFileSync(path.join(projectRoot, "app/js/uploads-editor-translator.js"), "utf8");
 const knowledge = fs.readFileSync(path.join(projectRoot, "app/js/naming-knowledge.js"), "utf8");
 const workspaceMigration = fs.readFileSync(path.join(projectRoot, "app/js/workspace-migration.js"), "utf8");
+const toast = fs.readFileSync(path.join(projectRoot, "app/js/toast.js"), "utf8");
 const index = fs.readFileSync(path.join(projectRoot, "app/index.html"), "utf8");
 
 test("开始命名区直接选择各种翻译服务并与设置页双向同步", () => {
-  assert.match(workflow, /ensureTranslationProviderReady\(\{ revealSettings: true \}\)/);
+  assert.match(workflow, /ensureTranslationProviderReady\(\{ offerConfiguration: true \}\)/);
   assert.match(workflow, /shouldUseTranslationProvider = !shouldUseAi && useTranslationProvider/);
   assert.match(workflow, /runTranslationNamingQueue/);
   assert.doesNotMatch(workflow, /activateBaiduTranslation/);
@@ -23,7 +24,7 @@ test("开始命名区直接选择各种翻译服务并与设置页双向同步",
   assert.match(workflow, /async function selectTranslationProvider/);
   assert.match(workflow, /await hydrateDesktopCredentials\(\)/);
   assert.match(workflow, /syncNamingModeWithTranslationSettings\(\{ force:/);
-  assert.match(translator, /selectTranslationProvider\(provider, \{ forceNamingMode: true \}\)/);
+  assert.match(translator, /selectTranslationProvider\(provider, \{ forceNamingMode: true, userInitiated: true \}\)/);
   assert.match(translator, /syncNamingModeWithTranslationSettings\(\{ force: true \}\)/);
   assert.match(workflow, /forceExternal: true/);
   assert.match(workflow, /requireExternal: true/);
@@ -70,4 +71,15 @@ test("NGR 云翻译使用受管授权，不要求用户填写百度 API", () => 
   assert.match(translator, /option\.disabled = !available/);
   assert.match(workspaceMigration, /missingManagedCfc \? "local" : translationSettings\.provider/);
   assert.match(workspaceMigration, /providerId: missingManagedCfc \? ""/);
+});
+
+test("正式版默认 NGR 云翻译，未配置服务提供前往配置按钮", () => {
+  assert.match(workspaceMigration, /TRANSLATION_PROVIDER_CHOICE_KEY\) === "1"/);
+  assert.match(workflow, /TRANSLATION_PROVIDER_CHOICE_KEY, "1"/);
+  assert.match(workflow, /offerConfiguration: true/);
+  assert.match(translator, /showToastAction\(message, "前往配置", revealTranslatorSettings\)/);
+  assert.match(translator, /ensureTranslationProviderReady\(\{ offerConfiguration: true \}\)/);
+  assert.match(index, /id="toastAction"/);
+  assert.match(toast, /function showToastAction\(/);
+  assert.match(toast, /hasAction \? 8000 : 2600/);
 });
