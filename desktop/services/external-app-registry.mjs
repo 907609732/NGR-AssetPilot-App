@@ -8,6 +8,8 @@ import { DesktopError, isPlainRecord } from "../shared/core.mjs";
 const STORE_VERSION = 1;
 const BUILTIN_ARTHUB_ID = "arthub";
 const BUILTIN_FIGMA_ID = "figma";
+const BUILTIN_NGR_IMAGE_SEARCH_ID = "ngr-online-ai-search";
+const BUILTIN_NGR_IMAGE_SEARCH_URL = "https://bag.ecology.smoba.qq.com/imagebag";
 const BUILTIN_APPS = Object.freeze([
   Object.freeze({ id: BUILTIN_ARTHUB_ID, name: "ArtHub" }),
   Object.freeze({ id: BUILTIN_FIGMA_ID, name: "Figma" }),
@@ -22,6 +24,17 @@ function publicEntry(entry, available) {
     builtin: entry.builtin === true,
     configured: Boolean(entry.executablePath),
     available,
+  });
+}
+
+function publicWebsiteEntry() {
+  return Object.freeze({
+    id: BUILTIN_NGR_IMAGE_SEARCH_ID,
+    name: "NGR在线AI搜图",
+    builtin: true,
+    configured: true,
+    available: true,
+    kind: "website",
   });
 }
 
@@ -144,14 +157,25 @@ export class ExternalAppRegistry {
   }
 
   async list() {
+    const applications = await Promise.all(
+      this.entries.map(async (entry) => publicEntry(entry, await isLaunchableExecutable(entry.executablePath))),
+    );
+    const builtinApplicationCount = applications.filter((entry) => entry.builtin).length;
     return {
-      apps: await Promise.all(this.entries.map(async (entry) => publicEntry(entry, await isLaunchableExecutable(entry.executablePath)))),
+      apps: [
+        ...applications.slice(0, builtinApplicationCount),
+        publicWebsiteEntry(),
+        ...applications.slice(builtinApplicationCount),
+      ],
       defaultAppId: BUILTIN_ARTHUB_ID,
     };
   }
 
   async choose(payload = {}) {
     const existingId = payload?.appId ? validateId(payload) : null;
+    if (existingId === BUILTIN_NGR_IMAGE_SEARCH_ID) {
+      throw new DesktopError("APP_CONFIGURATION_NOT_REQUIRED", "NGR在线AI搜图使用内置网址，无需配置");
+    }
     const existing = existingId ? this.entries.find((entry) => entry.id === existingId) : null;
     if (existingId && !existing) throw new DesktopError("APP_NOT_FOUND", "快捷应用不存在");
     if (!existing && this.entries.length >= MAX_APPS) throw new DesktopError("APP_LIMIT_REACHED", "最多添加 20 个快捷应用");
@@ -185,6 +209,9 @@ export class ExternalAppRegistry {
 
   async remove(payload) {
     const id = validateId(payload);
+    if (id === BUILTIN_NGR_IMAGE_SEARCH_ID) {
+      throw new DesktopError("BUILTIN_APP_REQUIRED", "默认 NGR在线AI搜图 快捷入口不能删除");
+    }
     const entry = this.entries.find((item) => item.id === id);
     if (!entry) throw new DesktopError("APP_NOT_FOUND", "快捷应用不存在");
     if (entry.builtin) throw new DesktopError("BUILTIN_APP_REQUIRED", `默认 ${entry.name} 快捷入口不能删除，可以重新选择路径`);
@@ -195,6 +222,10 @@ export class ExternalAppRegistry {
 
   async launch(payload) {
     const id = validateId(payload);
+    if (id === BUILTIN_NGR_IMAGE_SEARCH_ID) {
+      await this.shell.openExternal(BUILTIN_NGR_IMAGE_SEARCH_URL, { activate: true });
+      return { opened: true, appId: id, name: "NGR在线AI搜图" };
+    }
     const entry = this.entries.find((item) => item.id === id);
     if (!entry) throw new DesktopError("APP_NOT_FOUND", "快捷应用不存在");
     if (!(await isLaunchableExecutable(entry.executablePath))) {

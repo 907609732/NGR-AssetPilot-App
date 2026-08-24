@@ -24,6 +24,8 @@
     } else if (appId === "figma") {
       icon.classList.add("figma-mark");
       icon.innerHTML = '<circle cx="9" cy="5" r="3"/><circle cx="15" cy="5" r="3"/><circle cx="9" cy="11" r="3"/><circle cx="15" cy="11" r="3"/><circle cx="9" cy="17" r="3"/>';
+    } else if (appId === "ngr-online-ai-search") {
+      icon.innerHTML = '<circle cx="11" cy="11" r="6"/><path d="m16 16 4 4M8.5 11h5M11 8.5v5" />';
     } else {
       icon.innerHTML = '<path d="M5 6h14v12H5zM8 10h8m-8 4h5" />';
     }
@@ -64,6 +66,7 @@
     for (const app of state.apps) {
       const row = document.createElement("div");
       row.className = "external-app-row";
+      row.classList.toggle("is-website", app.kind === "website");
       row.setAttribute("role", "listitem");
       const launch = document.createElement("button");
       launch.type = "button";
@@ -72,15 +75,20 @@
       const name = document.createElement("span");
       name.textContent = app.name;
       const availability = document.createElement("small");
-      availability.textContent = app.available ? "已就绪 · 点击打开" : "路径未配置或已失效";
+      availability.textContent = app.kind === "website"
+        ? "网站快捷入口 · 使用默认浏览器打开"
+        : app.available ? "已就绪 · 点击打开" : "路径未配置或已失效";
       launch.append(name, availability);
-      const configure = document.createElement("button");
-      configure.type = "button";
-      configure.className = "external-app-configure";
-      configure.dataset.configureAppId = app.id;
-      configure.textContent = app.available ? "重选" : "配置";
-      configure.setAttribute("aria-label", `重新选择 ${app.name}`);
-      row.append(launch, configure);
+      row.append(launch);
+      if (app.kind !== "website") {
+        const configure = document.createElement("button");
+        configure.type = "button";
+        configure.className = "external-app-configure";
+        configure.dataset.configureAppId = app.id;
+        configure.textContent = app.available ? "重选" : "配置";
+        configure.setAttribute("aria-label", `重新选择 ${app.name}`);
+        row.append(configure);
+      }
       if (!app.builtin) {
         const remove = document.createElement("button");
         remove.type = "button";

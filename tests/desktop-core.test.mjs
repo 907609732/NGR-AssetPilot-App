@@ -42,7 +42,7 @@ async function withTempDirectory(run) {
   }
 }
 
-test("external app registry detects ArtHub and Figma, hides paths, and only launches registered ids", async () => {
+test("external app registry detects desktop apps and opens the fixed NGR image-search website", async () => {
   await withTempDirectory(async (userDataPath) => {
     const artHubPath = path.join(userDataPath, "ArtHub.exe");
     const figmaPath = path.join(userDataPath, "Figma.exe");
@@ -51,6 +51,7 @@ test("external app registry detects ArtHub and Figma, hides paths, and only laun
     await writeFile(figmaPath, "test executable");
     await writeFile(customPath, "test executable");
     const opened = [];
+    const openedUrls = [];
     let selectedPath = customPath;
     const registry = new ExternalAppRegistry({
       userDataPath,
@@ -62,18 +63,29 @@ test("external app registry detects ArtHub and Figma, hides paths, and only laun
       },
       shell: {
         async openPath(executablePath) { opened.push(executablePath); return ""; },
+        async openExternal(url, options) { openedUrls.push({ url, options }); },
       },
     });
     const initialized = await registry.initialize();
     assert.deepEqual(initialized.apps, [
       { id: "arthub", name: "ArtHub", builtin: true, configured: true, available: true },
       { id: "figma", name: "Figma", builtin: true, configured: true, available: true },
+      { id: "ngr-online-ai-search", name: "NGR在线AI搜图", builtin: true, configured: true, available: true, kind: "website" },
     ]);
     assert.doesNotMatch(JSON.stringify(initialized), /ArtHub\.exe/);
     assert.doesNotMatch(JSON.stringify(initialized), /Figma\.exe/);
     assert.deepEqual(await registry.launch({ appId: "arthub" }), { opened: true, appId: "arthub", name: "ArtHub" });
     assert.deepEqual(await registry.launch({ appId: "figma" }), { opened: true, appId: "figma", name: "Figma" });
+    assert.deepEqual(await registry.launch({ appId: "ngr-online-ai-search" }), {
+      opened: true,
+      appId: "ngr-online-ai-search",
+      name: "NGR在线AI搜图",
+    });
     assert.deepEqual(opened, [artHubPath, figmaPath]);
+    assert.deepEqual(openedUrls, [{
+      url: "https://bag.ecology.smoba.qq.com/imagebag",
+      options: { activate: true },
+    }]);
     await assert.rejects(() => registry.launch({ appId: "missing" }), { code: "APP_NOT_FOUND" });
 
     const added = await registry.choose();
@@ -84,9 +96,11 @@ test("external app registry detects ArtHub and Figma, hides paths, and only laun
     await registry.launch({ appId: custom.id });
     assert.deepEqual(opened, [artHubPath, figmaPath, customPath]);
     const removed = await registry.remove({ appId: custom.id });
-    assert.equal(removed.apps.length, 2);
+    assert.equal(removed.apps.length, 3);
     await assert.rejects(() => registry.remove({ appId: "arthub" }), { code: "BUILTIN_APP_REQUIRED" });
     await assert.rejects(() => registry.remove({ appId: "figma" }), { code: "BUILTIN_APP_REQUIRED" });
+    await assert.rejects(() => registry.remove({ appId: "ngr-online-ai-search" }), { code: "BUILTIN_APP_REQUIRED" });
+    await assert.rejects(() => registry.choose({ appId: "ngr-online-ai-search" }), { code: "APP_CONFIGURATION_NOT_REQUIRED" });
 
     selectedPath = path.join(userDataPath, "not-an-app.txt");
     await writeFile(selectedPath, "no");
