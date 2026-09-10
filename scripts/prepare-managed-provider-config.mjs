@@ -9,14 +9,12 @@ const outputPath = path.join(projectPaths.generated, "managed-provider-config.js
 
 function configFromEnvironment(env) {
   const endpoint = String(env.NGR_BAIDU_CFC_ENDPOINT || "").trim();
-  const bearerToken = String(env.NGR_BAIDU_CFC_BEARER_TOKEN || "").trim();
-  if (!endpoint && !bearerToken) return null;
+  if (!endpoint) return null;
   return parseManagedProviderConfig({
-    version: 1,
+    version: 2,
     baiduCfc: {
       enabled: true,
       endpoint,
-      bearerToken,
     },
   });
 }
@@ -46,12 +44,9 @@ export function prepareManagedProviderConfig({ env = process.env, required = fal
   const config = fromEnvironment || readExistingConfig();
   if (!config) {
     if (required) {
-      throw new Error("正式版构建缺少 NGR_BAIDU_CFC_ENDPOINT 与 NGR_BAIDU_CFC_BEARER_TOKEN");
+      throw new Error("正式版构建缺少 NGR_BAIDU_CFC_ENDPOINT");
     }
     return { enabled: false, outputPath };
-  }
-  if (required && !config.baiduCfc.bearerToken) {
-    throw new Error("正式版托管翻译必须配置 CFC Bearer Token");
   }
   writeConfig(config);
   return { enabled: true, outputPath };

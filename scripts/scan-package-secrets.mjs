@@ -121,6 +121,17 @@ export function scanArtifacts({ edition, env = process.env } = {}) {
   const findings = [];
   for (const filePath of files) {
     const relativeFile = path.relative(artifactDirectory, filePath);
+    if (path.basename(filePath).toLowerCase() === "managed-provider-config.json") {
+      try {
+        const managedConfig = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        const keys = Object.keys(managedConfig?.baiduCfc || {}).sort();
+        if (managedConfig?.version !== 2 || keys.join(",") !== "enabled,endpoint") {
+          findings.push({ label: "托管配置包含非公开字段", file: relativeFile });
+        }
+      } catch {
+        findings.push({ label: "托管配置无法解析", file: relativeFile });
+      }
+    }
     const isBuilderMetadata = relativeFile === "builder-debug.yml"
       || relativeFile === "builder-effective-config.yaml";
     if (forbiddenFileNames.has(path.basename(filePath).toLowerCase())) {

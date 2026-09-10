@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.11" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.12" />
   </head>
   <body>
     <div id="app">
@@ -15,7 +15,7 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.11</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.12</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
@@ -75,13 +75,29 @@
             </div>
           </div>
           <div class="general-settings-grid">
+            <section class="knowledge-panel keep-awake-panel" aria-labelledby="keepAwakeTitle">
+              <div class="section-head compact-head">
+                <div><h2 id="keepAwakeTitle">防止息屏</h2><p>默认关闭。手动开启后长期保存，重启软件自动恢复。</p></div>
+                <label class="keep-awake-switch"><input id="keepAwakeEnabled" type="checkbox" role="switch" disabled /> 开启</label>
+              </div>
+              <label class="keep-awake-mode" for="keepAwakeMode">保活模式
+                <select id="keepAwakeMode" disabled>
+                  <option value="system">系统保活（推荐）</option>
+                  <option value="mouse">鼠标微动</option>
+                  <option value="combined">双重保活（系统 + 鼠标）</option>
+                </select>
+              </label>
+              <p id="keepAwakeDescription">保持屏幕和系统唤醒，不移动鼠标。</p>
+              <p id="keepAwakeStatus" role="status" aria-live="polite">正在读取设置…</p>
+              <p class="keep-awake-note">软件运行及最小化时有效，退出后停止。锁屏或休眠时暂停，返回后恢复；不会阻止手动锁屏、关机或强制休眠。</p>
+            </section>
             <section class="knowledge-panel about-download-panel">
               <div class="section-head compact-head">
                 <div>
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.11</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.12</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
@@ -103,6 +119,129 @@
           <div class="api-settings-stack">
             <div id="apiSettingsAiSlot"></div>
             <div id="apiSettingsTranslationSlot"></div>
+            <section class="knowledge-panel network-diagnostics-panel" id="networkDiagnosticsPanel" aria-labelledby="networkDiagnosticsTitle">
+              <div class="section-head compact-head network-diagnostics-head">
+                <div>
+                  <h2 id="networkDiagnosticsTitle">网络与 API 诊断</h2>
+                  <p>只检测 DNS、代理、TLS 和 HTTP 连通性；不读取密钥、不执行翻译、模型或云资源操作。</p>
+                </div>
+                <div class="network-diagnostics-summary">
+                  <span class="diagnostics-badge" id="diagnosticsOnlineBadge">等待检测</span>
+                  <span class="diagnostics-badge muted" id="diagnosticsProxyBadge">代理：等待检测</span>
+                  <span class="diagnostics-badge muted" id="diagnosticsProgressBadge">尚未运行</span>
+                </div>
+              </div>
+
+              <div class="network-diagnostics-toolbar">
+                <label>
+                  <span>测试路线</span>
+                  <select id="diagnosticsRouteMode">
+                    <option value="system">软件路线（系统代理）</option>
+                    <option value="compare">软件路线 + 直连对比</option>
+                    <option value="direct">仅直连</option>
+                  </select>
+                </label>
+                <label>
+                  <span>服务分类</span>
+                  <select id="diagnosticsCategoryFilter">
+                    <option value="all">全部服务</option>
+                  </select>
+                </label>
+                <div class="action-row compact-actions">
+                  <button class="ghost-action" id="diagnosticsSelectVisible" type="button">选择当前分类</button>
+                  <button class="primary-action" id="diagnosticsRunSelected" type="button">一键网络体检</button>
+                  <button class="danger-action hidden" id="diagnosticsCancelRun" type="button">取消测试</button>
+                </div>
+              </div>
+
+              <div class="network-diagnostics-targets" id="diagnosticsTargetList" aria-label="诊断服务列表"></div>
+              <div class="network-diagnostics-empty hidden" id="diagnosticsTargetsEmpty">当前分类没有可用的诊断服务。</div>
+
+              <div class="network-diagnostics-results-wrap">
+                <table class="network-diagnostics-results">
+                  <thead>
+                    <tr>
+                      <th>服务</th>
+                      <th>路线</th>
+                      <th>结论</th>
+                      <th>HTTP</th>
+                      <th>DNS</th>
+                      <th>首包 / 总耗时</th>
+                      <th>代理</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="diagnosticsResultsBody">
+                    <tr><td colspan="8" class="network-diagnostics-empty">选择服务后运行测试，结果会实时显示在这里。</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <details class="network-diagnostics-details" id="diagnosticsCustomDetails">
+                <summary>自定义 API / URL / CDN 资源</summary>
+                <form id="diagnosticsCustomForm" novalidate>
+                  <input id="diagnosticsCustomId" type="hidden" />
+                  <div class="network-diagnostics-form-grid">
+                    <label>
+                      <span>名称</span>
+                      <input id="diagnosticsCustomName" type="text" maxlength="80" required placeholder="例如：项目 CDN" />
+                    </label>
+                    <label>
+                      <span>分类</span>
+                      <input id="diagnosticsCustomCategory" type="text" maxlength="40" value="自定义" />
+                    </label>
+                    <label class="diagnostics-url-field">
+                      <span>HTTPS API / 资源 URL</span>
+                      <input id="diagnosticsCustomUrl" type="url" maxlength="4096" required placeholder="https://api.example.com/health" />
+                    </label>
+                    <label>
+                      <span>HTTP 方法</span>
+                      <select id="diagnosticsCustomMethod">
+                        <option value="HEAD">HEAD（推荐）</option>
+                        <option value="GET">GET</option>
+                        <option value="POST">POST（高级）</option>
+                        <option value="PUT">PUT（高级）</option>
+                        <option value="PATCH">PATCH（高级）</option>
+                        <option value="DELETE">DELETE（高级）</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>超时（秒）</span>
+                      <input id="diagnosticsCustomTimeout" type="number" min="1" max="30" step="1" value="10" />
+                    </label>
+                    <label>
+                      <span>期望状态码</span>
+                      <input id="diagnosticsCustomExpected" type="text" maxlength="80" placeholder="例如：200, 401, 403" />
+                    </label>
+                    <label class="diagnostics-lan-toggle">
+                      <input id="diagnosticsCustomAllowLan" type="checkbox" />
+                      <span>允许明确登记的局域网 HTTPS 目标</span>
+                    </label>
+                    <label class="diagnostics-body-field hidden" id="diagnosticsBodyField">
+                      <span>高级方法请求体（禁止填写密钥）</span>
+                      <textarea id="diagnosticsCustomBody" maxlength="16384" rows="4" placeholder='例如：{"ping":true}'></textarea>
+                    </label>
+                  </div>
+                  <p class="network-diagnostics-warning hidden" id="diagnosticsUnsafeWarning">POST、PUT、PATCH、DELETE 可能改变远程数据，每次执行前都会再次确认。</p>
+                  <p class="network-diagnostics-note">不支持 Authorization、Cookie 或密钥类查询参数；远程服务必须使用 HTTPS，localhost 可使用带端口的 HTTP。</p>
+                  <div class="action-row compact-actions">
+                    <button class="primary-action" id="diagnosticsSaveCustom" type="submit">保存自定义目标</button>
+                    <button class="ghost-action" id="diagnosticsResetCustom" type="button">取消编辑</button>
+                  </div>
+                </form>
+                <div class="network-diagnostics-custom-list" id="diagnosticsCustomList"></div>
+              </details>
+
+              <details class="network-diagnostics-details" id="diagnosticsHistoryDetails">
+                <summary>最近 30 次本地诊断历史</summary>
+                <div class="action-row compact-actions diagnostics-history-actions">
+                  <button class="ghost-action" id="diagnosticsExportMarkdown" type="button">导出 Markdown</button>
+                  <button class="ghost-action" id="diagnosticsExportJson" type="button">导出 JSON</button>
+                  <button class="danger-action" id="diagnosticsClearHistory" type="button">清空历史</button>
+                </div>
+                <div class="network-diagnostics-history" id="diagnosticsHistoryList"></div>
+              </details>
+            </section>
           </div>
         </section>
 
@@ -309,7 +448,7 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.11</span><time class="version-date" datetime="2026-08-23">更新于 2026-08-23</time></h2>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.12</span><time class="version-date" datetime="2026-09-10">更新于 2026-09-10</time></h2>
             <p>配置命名规则、方案模板和项目知识库；在线服务统一在“API”页签管理。</p>
           </div>
 
@@ -1327,27 +1466,29 @@
       </div>
     </div>
 
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.11"></script>
-    <script src="historical-knowledge.js?v=V3.0.11"></script>
-    <script src="js/config.js?v=V3.0.11"></script>
-    <script src="js/prefix-library.js?v=V3.0.11"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.11"></script>
-    <script src="js/external-app-launcher.js?v=V3.0.11"></script>
-    <script src="js/updates.js?v=V3.0.11"></script>
-    <script src="js/workspace-backup.js?v=V3.0.11"></script>
-    <script src="js/state-dom.js?v=V3.0.11"></script>
-    <script src="js/local-image-browser.js?v=V3.0.11"></script>
-    <script src="js/local-image-search.js?v=V3.0.11"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.11"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.11"></script>
-    <script src="js/ai-workflow.js?v=V3.0.11"></script>
-    <script src="js/assets-detection.js?v=V3.0.11"></script>
-    <script src="js/rendering.js?v=V3.0.11"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.11"></script>
-    <script src="js/export-template-storage.js?v=V3.0.11"></script>
-    <script src="js/toast.js?v=V3.0.11"></script>
-    <script src="js/workspace-storage.js?v=V3.0.11"></script>
-    <script src="js/workspace-migration.js?v=V3.0.11"></script>
-    <script src="js/main.js?v=V3.0.11"></script>
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.12"></script>
+    <script src="historical-knowledge.js?v=V3.0.12"></script>
+    <script src="js/config.js?v=V3.0.12"></script>
+    <script src="js/prefix-library.js?v=V3.0.12"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.12"></script>
+    <script src="js/keep-awake.js?v=V3.0.12"></script>
+    <script src="js/network-diagnostics.js?v=V3.0.12"></script>
+    <script src="js/external-app-launcher.js?v=V3.0.12"></script>
+    <script src="js/updates.js?v=V3.0.12"></script>
+    <script src="js/workspace-backup.js?v=V3.0.12"></script>
+    <script src="js/state-dom.js?v=V3.0.12"></script>
+    <script src="js/local-image-browser.js?v=V3.0.12"></script>
+    <script src="js/local-image-search.js?v=V3.0.12"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.12"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.12"></script>
+    <script src="js/ai-workflow.js?v=V3.0.12"></script>
+    <script src="js/assets-detection.js?v=V3.0.12"></script>
+    <script src="js/rendering.js?v=V3.0.12"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.12"></script>
+    <script src="js/export-template-storage.js?v=V3.0.12"></script>
+    <script src="js/toast.js?v=V3.0.12"></script>
+    <script src="js/workspace-storage.js?v=V3.0.12"></script>
+    <script src="js/workspace-migration.js?v=V3.0.12"></script>
+    <script src="js/main.js?v=V3.0.12"></script>
   </body>
 </html>

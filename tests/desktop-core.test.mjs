@@ -186,10 +186,12 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
     module.exports,
   );
   assert.deepEqual(Object.keys(exposed), [
+    "keepAwake",
     "environment",
     "credentials",
     "providers",
     "network",
+    "diagnostics",
     "files",
     "backup",
     "offlineTranslation",
@@ -205,6 +207,10 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.credentials.set, "undefined");
   assert.equal(typeof exposed.providers.upsert, "function");
   assert.equal(typeof exposed.network.cancel, "function");
+  assert.equal(typeof exposed.diagnostics.listCatalog, "function");
+  assert.equal(typeof exposed.diagnostics.run, "function");
+  assert.equal(typeof exposed.diagnostics.cancel, "function");
+  assert.equal(typeof exposed.diagnostics.onProgress, "function");
   assert.equal(typeof exposed.offlineTranslation.getStatus, "function");
   assert.equal(typeof exposed.offlineTranslation.translate, "function");
   assert.equal(typeof exposed.files.writeFile, "function");
@@ -233,6 +239,8 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.deepEqual(calls.at(-1), [ipcChannels.shellOpenExternal, { url: "https://example.com" }]);
   await exposed.offlineTranslation.translate({ text: "首页", from: "zh", to: "en" });
   assert.deepEqual(calls.at(-1), [ipcChannels.offlineTranslationTranslate, { text: "首页", from: "zh", to: "en" }]);
+  await exposed.diagnostics.run({ requestId: "diagnostics_01", targetIds: ["figma-rest"] });
+  assert.deepEqual(calls.at(-1), [ipcChannels.diagnosticsRun, { requestId: "diagnostics_01", targetIds: ["figma-rest"] }]);
   await exposed.localImageSearch.setActiveModel({ modelId: "custom-model" });
   assert.deepEqual(calls.at(-1), [ipcChannels.localImageSearchSetActiveModel, { modelId: "custom-model" }]);
   await exposed.localImageSearch.getModelStatus({ modelId: "builtin-q4" });

@@ -260,7 +260,6 @@ function managedBaiduCfcRequest(config, input) {
     accept: "application/json",
     "content-type": "application/json",
   };
-  if (config.bearerToken) headers.authorization = `Bearer ${config.bearerToken}`;
   if (/^[A-Za-z0-9_-]{8,128}$/.test(String(input.requestId || ""))) {
     headers["x-request-id"] = String(input.requestId);
   }

@@ -8,6 +8,12 @@ const AUDITED_CHANNELS = new Map([
   [channels.providersImportLegacy, "provider-import-legacy"],
   [channels.networkRequest, "network-request"],
   [channels.networkCancel, "network-cancel"],
+  [channels.diagnosticsUpsertCustomTarget, "diagnostics-target-upsert"],
+  [channels.diagnosticsRemoveCustomTarget, "diagnostics-target-remove"],
+  [channels.diagnosticsRun, "diagnostics-run"],
+  [channels.diagnosticsCancel, "diagnostics-cancel"],
+  [channels.diagnosticsExportHistory, "diagnostics-export"],
+  [channels.diagnosticsClearHistory, "diagnostics-history-clear"],
   [channels.backupBeginExport, "backup-export-begin"],
   [channels.backupFinishExport, "backup-export-finish"],
   [channels.backupCancelExport, "backup-export-cancel"],
@@ -51,6 +57,7 @@ export function registerDesktopIpc({
   credentialStore,
   providerRegistry,
   networkClient,
+  networkDiagnostics,
   offlineTranslation,
   directoryTokens,
   backupService,
@@ -59,6 +66,7 @@ export function registerDesktopIpc({
   environmentInfo,
   localImageSearch,
   externalApps,
+  keepAwake,
   runtimeLogger = null,
 }) {
   const registered = [];
@@ -101,6 +109,8 @@ export function registerDesktopIpc({
   }
 
   handle(channels.environmentGetInfo, async () => environmentInfo());
+  handle(channels.keepAwakeGet, async () => keepAwake.getState());
+  handle(channels.keepAwakeSet, async (_event, request) => keepAwake.setSettings(request));
   handle(channels.credentialsGetStatus, async () => credentialStore.getStatus());
   handle(channels.providersList, async () => providerRegistry.list());
   handle(channels.providersUpsert, async (_event, payload) => providerRegistry.upsert(payload));
@@ -108,6 +118,15 @@ export function registerDesktopIpc({
   handle(channels.providersImportLegacy, async (_event, payload) => providerRegistry.importLegacy(payload));
   handle(channels.networkRequest, async (event, payload) => networkClient.request(payload, event.sender.id));
   handle(channels.networkCancel, async (event, payload) => networkClient.cancel(payload, event.sender.id));
+  handle(channels.diagnosticsListCatalog, async () => networkDiagnostics.listCatalog());
+  handle(channels.diagnosticsListCustomTargets, async () => networkDiagnostics.listCustomTargets());
+  handle(channels.diagnosticsUpsertCustomTarget, async (_event, payload) => networkDiagnostics.upsertCustomTarget(payload));
+  handle(channels.diagnosticsRemoveCustomTarget, async (_event, payload) => networkDiagnostics.removeCustomTarget(payload));
+  handle(channels.diagnosticsRun, async (event, payload) => networkDiagnostics.run(payload, event.sender.id));
+  handle(channels.diagnosticsCancel, async (event, payload) => networkDiagnostics.cancel(payload, event.sender.id));
+  handle(channels.diagnosticsListHistory, async (_event, payload) => networkDiagnostics.listHistory(payload));
+  handle(channels.diagnosticsExportHistory, async (_event, payload) => networkDiagnostics.exportHistory(payload));
+  handle(channels.diagnosticsClearHistory, async () => networkDiagnostics.clearHistory());
   handle(channels.offlineTranslationGetStatus, async () => offlineTranslation.getStatus());
   handle(channels.offlineTranslationTranslate, async (_event, payload) => offlineTranslation.translate(payload));
 

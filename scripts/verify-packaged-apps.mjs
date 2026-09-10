@@ -78,6 +78,19 @@ async function verifyTarget(target) {
     }
     assert.match(state.title, new RegExp(target.product));
     assert.equal(state.nodeRequireType, "undefined");
+    const awakeInitial = await window.evaluate(() => window.ngrDesktop.keepAwake.getState());
+    assert.equal(awakeInitial.enabled, false);
+    try {
+      await window.evaluate(() => window.ngrDesktop.keepAwake.setSettings({ enabled: true, mode: "combined" }));
+      await window.waitForFunction(async () => {
+        const awake = await window.ngrDesktop.keepAwake.getState();
+        return awake.systemActive && awake.mouseState === "running";
+      }, undefined, { timeout: 20_000 });
+    } finally {
+      const stopped = await window.evaluate(() => window.ngrDesktop.keepAwake.setSettings({ enabled: false, mode: "system" }));
+      assert.equal(stopped.systemActive, false);
+      assert.equal(stopped.mouseState, "stopped");
+    }
     assert.equal(state.credentials.available, true);
     assert.equal(state.credentials.configured, false);
     assert.equal(typeof state.model.ready, "boolean");

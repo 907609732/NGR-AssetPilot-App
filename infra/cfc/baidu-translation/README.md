@@ -15,7 +15,7 @@
   - `UPSTREAM_TIMEOUT_MS=15000`
 - HTTP 触发器：`GET,POST`
 - 路径：`/ngr-assetpilot/translate`
-- 认证：Bearer / Opaque Token
+- 认证：公开受限端点；不在桌面客户端嵌入共享密钥
 - 协议：只使用控制台生成的 HTTPS 地址
 
 执行 `npm run package:cfc` 会生成 `artifacts/cfc/NGR-AssetPilot-Baidu-CFC.zip`，上传该 ZIP 后无需安装依赖。
@@ -24,7 +24,6 @@
 
 ```text
 GET https://<id>.cfc-execute.<region>.baidubce.com/ngr-assetpilot/translate
-Authorization: Bearer <token>
 ```
 
 返回 `ok: true` 且 `configured: true` 才能进入软件打包阶段。
@@ -32,5 +31,6 @@ Authorization: Bearer <token>
 ## 安全边界
 
 - 百度 APPID/密钥不得写入源码、GitHub、安装包或日志。
-- Bearer Token 会随安装包分发，只能作为轻量级防滥用手段；应配合 CFC 并发上限、费用告警和定期轮换。
+- 桌面安装包只包含公开 HTTPS Endpoint；百度 APPID/密钥只存在于 CFC 环境变量。
+- 公开端点必须配合 CFC 并发上限、费用预算/告警和按来源限流；客户端内置共享 Token 不具备保密性，因此禁止使用。
 - 函数只接受 1–200 字符翻译，不接受文件、图片、提示词或任意上游地址。

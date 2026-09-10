@@ -59,6 +59,9 @@ test("CFC 健康检查不泄露密钥，且拒绝超长翻译文本", async () =
     const healthPayload = JSON.parse(health.body);
     assert.deepEqual(healthPayload, { ok: true, service: "ngr-baidu-translation", configured: true });
     assert.equal(health.body.includes("health-secret"), false);
+    assert.equal(health.headers["x-content-type-options"], "nosniff");
+    assert.equal(health.headers["referrer-policy"], "no-referrer");
+    assert.match(health.headers["content-security-policy"], /default-src 'none'/);
 
     const invalid = await handle({
       httpMethod: "POST",

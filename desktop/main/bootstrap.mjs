@@ -10,6 +10,7 @@ import { CredentialStore } from "../services/credential-store.mjs";
 import { DirectoryTokenStore } from "../services/directory-tokens.mjs";
 import { ExternalAppRegistry } from "../services/external-app-registry.mjs";
 import { NetworkClient } from "../services/network-client.mjs";
+import { NetworkDiagnosticsService } from "../services/network-diagnostics-service.mjs";
 import { OfflineTranslationService } from "../services/offline-translation/service.mjs";
 import { ProviderRegistry } from "../services/provider-registry.mjs";
 import { RuntimeLogger } from "../services/runtime-logger.mjs";
@@ -17,6 +18,7 @@ import { UpdaterController } from "../services/updater-controller.mjs";
 import { LocalImageSearchController } from "../services/local-image-search/controller.mjs";
 import { loadManagedProviderConfig } from "../services/managed-provider-config.mjs";
 import { registerDesktopIpc } from "./ipc.mjs";
+import { KeepAwakeService } from "../services/keep-awake.mjs";
 import { QuitCoordinator } from "./lifecycle.mjs";
 import { installAppProtocol, registerAppScheme } from "./protocol.mjs";
 import { createSecureWindowOptions, hardenSession, hardenWindow } from "./security.mjs";
@@ -193,12 +195,38 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     fetchImpl: net.fetch.bind(net),
     providerRegistry,
   });
+  const diagnosticsDirectSession = session.fromPartition("ngr-network-diagnostics-direct", { cache: false });
+  const networkDiagnostics = new NetworkDiagnosticsService({
+    userDataPath: app.getPath("userData"),
+    netModule: net,
+    defaultSession: session.defaultSession,
+    directSession: diagnosticsDirectSession,
+    dialog,
+    getWindow: () => mainWindow,
+    managedProviderConfig,
+    onProgress: (payload) => {
+      if (payload?.type === "result" && payload.result) {
+        runtimeLogger.info("network-diagnostics:result", {
+          operationId: payload.requestId,
+          targetId: payload.result.targetId,
+          resultCode: payload.result.resultCode,
+          latencyMs: payload.result.latencyMs,
+          route: payload.result.route,
+        });
+      }
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send(channels.diagnosticsProgress, payload);
+    },
+  });
+  await networkDiagnostics.initialize();
   const offlineTranslation = new OfflineTranslationService({
     modelLibraryRoot: app.isPackaged
       ? path.join(process.resourcesPath, "offline-translation")
       : path.resolve(moduleDirectory, "../../build/generated/offline-translation"),
   });
   const lifecycle = new QuitCoordinator({ app, channel: channels.appBeforeQuit });
+  const keepAwake = new KeepAwakeService({ userDataPath, powerSaveBlocker: electron.powerSaveBlocker, powerMonitor: electron.powerMonitor });
+  keepAwake.initialize();
   const backupService = new BackupFileService({
     dialog,
     getWindow: () => mainWindow,
@@ -233,9 +261,11 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     const results = await Promise.allSettled([
       Promise.resolve().then(() => localImageSearch.dispose()),
       Promise.resolve().then(() => networkClient.dispose()),
+      Promise.resolve().then(() => networkDiagnostics.dispose()),
       Promise.resolve().then(() => offlineTranslation.dispose()),
       Promise.resolve().then(() => backupService.dispose?.()),
       Promise.resolve().then(() => updater.dispose()),
+      Promise.resolve().then(() => keepAwake.dispose()),
     ]);
     const failed = results.find((result) => result.status === "rejected");
     if (failed) {
@@ -272,6 +302,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     credentialStore,
     providerRegistry,
     networkClient,
+    networkDiagnostics,
     offlineTranslation,
     directoryTokens,
     backupService,
@@ -280,6 +311,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     environmentInfo,
     localImageSearch,
     externalApps,
+    keepAwake,
     runtimeLogger,
   });
 
@@ -293,6 +325,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     if (rendererRecoveryTimer) clearTimeout(rendererRecoveryTimer);
     rendererRecoveryTimer = null;
     networkClient.cancelOwner(rendererOwnerId);
+    networkDiagnostics.cancelOwner(rendererOwnerId);
     void backupService.disposeOwner(rendererOwnerId);
     directoryTokens.revokeOwner(rendererOwnerId);
     mainWindow = null;
@@ -301,6 +334,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   let rendererRecoveryTimer = null;
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     networkClient.cancelOwner(rendererOwnerId);
+    networkDiagnostics.cancelOwner(rendererOwnerId);
     void backupService.disposeOwner(rendererOwnerId);
     if (rendererRecoveryTimer) clearTimeout(rendererRecoveryTimer);
     rendererRecoveryTimer = null;
@@ -355,6 +389,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     if (process.platform !== "darwin") app.quit();
   });
   app.once("will-quit", () => {
+    keepAwake.dispose();
     disposeIpc();
     lifecycle.dispose();
   });

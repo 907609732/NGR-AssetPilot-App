@@ -7,6 +7,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 // renderer does not depend on an unsupported relative CommonJS import.
 const channels = Object.freeze({
   environmentGetInfo: "ngr:environment:get-info",
+  keepAwakeGet: "ngr:keep-awake:get",
+  keepAwakeSet: "ngr:keep-awake:set",
   credentialsGetStatus: "ngr:credentials:get-status",
   providersList: "ngr:providers:list",
   providersUpsert: "ngr:providers:upsert",
@@ -14,6 +16,16 @@ const channels = Object.freeze({
   providersImportLegacy: "ngr:providers:import-legacy",
   networkRequest: "ngr:network:request",
   networkCancel: "ngr:network:cancel",
+  diagnosticsListCatalog: "ngr:diagnostics:list-catalog",
+  diagnosticsListCustomTargets: "ngr:diagnostics:list-custom-targets",
+  diagnosticsUpsertCustomTarget: "ngr:diagnostics:upsert-custom-target",
+  diagnosticsRemoveCustomTarget: "ngr:diagnostics:remove-custom-target",
+  diagnosticsRun: "ngr:diagnostics:run",
+  diagnosticsCancel: "ngr:diagnostics:cancel",
+  diagnosticsProgress: "ngr:diagnostics:progress",
+  diagnosticsListHistory: "ngr:diagnostics:list-history",
+  diagnosticsExportHistory: "ngr:diagnostics:export-history",
+  diagnosticsClearHistory: "ngr:diagnostics:clear-history",
   offlineTranslationGetStatus: "ngr:offline-translation:get-status",
   offlineTranslationTranslate: "ngr:offline-translation:translate",
   filesSelectExportDirectory: "ngr:files:select-export-directory",
@@ -80,6 +92,10 @@ function deepFreeze(value) {
 }
 
 const api = deepFreeze({
+  keepAwake: {
+    getState: () => invoke(channels.keepAwakeGet),
+    setSettings: (request) => invoke(channels.keepAwakeSet, request),
+  },
   environment: {
     getInfo: () => invoke(channels.environmentGetInfo),
   },
@@ -95,6 +111,23 @@ const api = deepFreeze({
   network: {
     request: (request) => invoke(channels.networkRequest, request),
     cancel: (request) => invoke(channels.networkCancel, request),
+  },
+  diagnostics: {
+    listCatalog: () => invoke(channels.diagnosticsListCatalog),
+    listCustomTargets: () => invoke(channels.diagnosticsListCustomTargets),
+    upsertCustomTarget: (request) => invoke(channels.diagnosticsUpsertCustomTarget, request),
+    removeCustomTarget: (request) => invoke(channels.diagnosticsRemoveCustomTarget, request),
+    run: (request) => invoke(channels.diagnosticsRun, request),
+    cancel: (request) => invoke(channels.diagnosticsCancel, request),
+    listHistory: (request) => invoke(channels.diagnosticsListHistory, request),
+    exportHistory: (request) => invoke(channels.diagnosticsExportHistory, request),
+    clearHistory: () => invoke(channels.diagnosticsClearHistory),
+    onProgress(callback) {
+      if (typeof callback !== "function") throw new TypeError("callback must be a function");
+      const listener = (_event, state) => callback(state);
+      ipcRenderer.on(channels.diagnosticsProgress, listener);
+      return () => ipcRenderer.removeListener(channels.diagnosticsProgress, listener);
+    },
   },
   files: {
     selectExportDirectory: () => invoke(channels.filesSelectExportDirectory),

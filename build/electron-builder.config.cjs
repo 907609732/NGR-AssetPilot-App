@@ -3,6 +3,8 @@ const path = require("node:path");
 
 const projectRoot = path.resolve(__dirname, "..");
 const packageJson = require(path.join(projectRoot, "package.json"));
+const releasePolicy = require("./release-policy.cjs")(packageJson.version);
+const installedElectronDist = path.join(projectRoot, "node_modules", "electron", "dist");
 const edition = process.env.NGR_BUILD_EDITION;
 const editionConfig = {
   prod: {
@@ -56,7 +58,7 @@ const extraResources = [
   },
 ];
 const managedProviderConfigPath = path.join(projectRoot, "build", "generated", "managed-provider-config.json");
-if (fs.existsSync(managedProviderConfigPath)) {
+if (!releasePolicy.offlineTranslationOnly && fs.existsSync(managedProviderConfigPath)) {
   extraResources.push({
     from: managedProviderConfigPath,
     to: "managed-provider-config.json",
@@ -68,6 +70,7 @@ module.exports = {
   productName,
   executableName: productName,
   electronVersion: "43.4.1",
+  electronDist: fs.existsSync(installedElectronDist) ? installedElectronDist : undefined,
   asar: true,
   asarUnpack: [
     "node_modules/onnxruntime-node/bin/**/*",
@@ -108,7 +111,7 @@ module.exports = {
   win: {
     icon: path.join(projectRoot, "build", "icon.ico"),
     target: windowsTargets,
-    verifyUpdateCodeSignature: false,
+    verifyUpdateCodeSignature: edition === "prod" && !releasePolicy.unsigned,
     legalTrademarks: productName,
   },
   nsis: {

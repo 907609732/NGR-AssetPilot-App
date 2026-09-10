@@ -25,7 +25,8 @@ jobs:
       TMP: ${{ github.workspace }}\.tmp
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       NGR_BAIDU_CFC_ENDPOINT: ${{ vars.NGR_BAIDU_CFC_ENDPOINT }}
-      NGR_BAIDU_CFC_BEARER_TOKEN: ${{ secrets.NGR_BAIDU_CFC_BEARER_TOKEN }}
+      WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+      WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -47,7 +48,7 @@ jobs:
         run: New-Item -ItemType Directory -Force .cache/npm,.cache/electron,.cache/electron-builder,.cache/ms-playwright,.tmp,logs | Out-Null
       - name: Install exact dependencies
         run: npm ci
-      - name: Test and build unsigned production release
+      - name: Test, build and verify production release policy
         run: |
           npm test
           npm run verify:managed-provider

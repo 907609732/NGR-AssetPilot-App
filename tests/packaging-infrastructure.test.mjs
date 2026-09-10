@@ -2,10 +2,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import os from "node:os";
 import { test } from "node:test";
 import { createProjectEnvironment, projectPaths, projectRoot } from "../scripts/project-env.mjs";
+import { verifyWindowsSignatures } from "../scripts/verify-windows-signature.mjs";
 
 const require = createRequire(import.meta.url);
+const releasePolicyFor = require("../build/release-policy.cjs");
+test("未签名和离线发布决定仅适用于 3.0.12", () => {
+  assert.deepEqual(releasePolicyFor("3.0.12"), { unsigned: true, offlineTranslationOnly: true });
+  assert.deepEqual(releasePolicyFor("3.0.13"), { unsigned: false, offlineTranslationOnly: false });
+});
 const builderConfigPath = path.join(projectRoot, "build", "electron-builder.config.cjs");
 
 function loadBuilderConfig(edition) {
@@ -36,12 +43,31 @@ test("桌面依赖版本全部精确锁定", () => {
   assert.equal(packageJson.scripts["build:test"], "node scripts/run-build.mjs test");
   assert.equal(packageJson.scripts["prepare:offline-translation"], "node scripts/prepare-offline-translation-model.mjs");
   assert.equal(packageJson.scripts["verify:managed-provider"], "node scripts/verify-managed-provider.mjs");
+  assert.equal(packageJson.scripts["verify:signature:prod"], "node scripts/verify-windows-signature.mjs prod");
   const builderConfig = fs.readFileSync(path.join(projectRoot, "build", "electron-builder.config.cjs"), "utf8");
   assert.match(builderConfig, /"app\/\*\*\/\*"/);
   assert.equal(fs.existsSync(path.join(projectRoot, "app", "js", "workspace-backup-stream-worker.js")), true);
   const secretScanner = fs.readFileSync(path.join(projectRoot, "scripts", "scan-package-secrets.mjs"), "utf8");
   assert.match(secretScanner, /relativeFile === "builder-effective-config\.yaml"/);
   assert.match(secretScanner, /containsBuffer\(filePath, needle\)/);
+});
+
+test("正式包 Authenticode 门禁拒绝未签名可执行文件", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "ngr-signature-gate-"));
+  try {
+    fs.writeFileSync(path.join(directory, "NGR AssetPilot.exe"), "test");
+    const valid = verifyWindowsSignatures({
+      artifactDirectory: directory,
+      spawnSync: () => ({ status: 0, stdout: JSON.stringify({ file: "NGR AssetPilot.exe", status: "Valid" }) }),
+    });
+    assert.equal(valid.executableCount, 1);
+    assert.throws(() => verifyWindowsSignatures({
+      artifactDirectory: directory,
+      spawnSync: () => ({ status: 0, stdout: JSON.stringify({ file: "NGR AssetPilot.exe", status: "NotSigned" }) }),
+    }), /NotSigned/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("应用版本、界面标识和静态资源缓存版本保持一致", () => {
@@ -60,7 +86,7 @@ test("应用版本、界面标识和静态资源缓存版本保持一致", () =>
   assert.deepEqual([...new Set(visibleVersions)], [packageJson.version]);
 
   const cacheVersions = [...appIndex.matchAll(/[?&]v=V(\d+\.\d+\.\d+)/g)].map((match) => match[1]);
-  assert.equal(cacheVersions.length, 23);
+  assert.equal(cacheVersions.length, 25);
   assert.deepEqual([...new Set(cacheVersions)], [packageJson.version]);
 });
 
@@ -75,6 +101,7 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
   assert.equal(prod.productName, "NGR AssetPilot");
   assert.equal(dev.productName, "NGR AssetPilot Dev");
   assert.equal(testConfig.productName, "NGR AssetPilot Test");
+  assert.match(prod.electronDist, /node_modules[\\/]electron[\\/]dist$/);
   assert.equal(prod.nsis.guid, "3b6eb1bd-e46d-5424-a667-f8c65639ec5e");
   assert.equal(dev.nsis.guid, "272695ec-f969-5e42-a779-b51db392d233");
   assert.equal(testConfig.nsis.guid, "d6e22a5c-0be8-54e8-9315-5a7bb7c4dc98");
@@ -82,6 +109,8 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
   assert.equal(prod.nsis.oneClick, false);
   assert.equal(prod.nsis.allowToChangeInstallationDirectory, true);
   assert.equal(prod.nsis.perMachine, false);
+  assert.equal(prod.win.verifyUpdateCodeSignature, false);
+  assert.equal(dev.win.verifyUpdateCodeSignature, false);
   assert.deepEqual(prod.win.target, [{ target: "nsis", arch: ["x64"] }]);
   assert.deepEqual(dev.win.target.map(({ target }) => target), ["nsis", "portable"]);
   assert.deepEqual(testConfig.win.target.map(({ target }) => target), ["nsis", "portable"]);
@@ -154,6 +183,9 @@ test("正式版发布工作流同时上传自动更新元数据", () => {
   assert.match(workflow, /GITHUB_REF_NAME/);
   assert.match(workflow, /npm run verify:packaged:prod/);
   assert.match(workflow, /npm run verify:managed-provider/);
+  assert.doesNotMatch(workflow, /NGR_BAIDU_CFC_BEARER_TOKEN/);
+  assert.match(workflow, /WIN_CSC_LINK: \$\{\{ secrets\.WIN_CSC_LINK \}\}/);
+  assert.match(workflow, /WIN_CSC_KEY_PASSWORD: \$\{\{ secrets\.WIN_CSC_KEY_PASSWORD \}\}/);
   assert.match(workflow, /draft:\s*false/);
   assert.doesNotMatch(workflow, /draft:\s*true/);
   assert.match(workflow, /body_path:\s*docs\/releases\/\$\{\{ github\.ref_name \}\}\.md/);

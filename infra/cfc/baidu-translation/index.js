@@ -20,6 +20,9 @@ function response(statusCode, payload, requestId = "") {
   const headers = {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+    "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
   };
   if (requestId) headers["x-request-id"] = String(requestId).slice(0, 128);
   return {

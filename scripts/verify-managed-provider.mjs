@@ -1,4 +1,6 @@
 import path from "node:path";
+import fs from "node:fs";
+import releasePolicyFor from "../build/release-policy.cjs";
 import { fileURLToPath } from "node:url";
 
 import { parseManagedProviderConfig } from "../desktop/services/managed-provider-config.mjs";
@@ -33,17 +35,14 @@ async function requestJson(fetchImpl, url, options) {
 export async function verifyManagedProvider({ env = process.env, fetchImpl = globalThis.fetch } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetch implementation is required");
   const config = parseManagedProviderConfig({
-    version: 1,
+    version: 2,
     baiduCfc: {
       enabled: true,
       endpoint: String(env.NGR_BAIDU_CFC_ENDPOINT || "").trim(),
-      bearerToken: String(env.NGR_BAIDU_CFC_BEARER_TOKEN || "").trim(),
     },
   });
-  if (!config.baiduCfc.bearerToken) throw new Error("NGR 云翻译发布令牌未配置");
   const headers = {
     accept: "application/json",
-    authorization: `Bearer ${config.baiduCfc.bearerToken}`,
   };
   const health = await requestJson(fetchImpl, config.baiduCfc.endpoint, {
     method: "GET",
@@ -67,6 +66,11 @@ export async function verifyManagedProvider({ env = process.env, fetchImpl = glo
 const isCli = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isCli) {
   try {
+    const version = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+    if (releasePolicyFor(version).offlineTranslationOnly) {
+      console.log("本版本使用离线翻译；正式安装包不包含不可用的云翻译配置。");
+      process.exit(0);
+    }
     await verifyManagedProvider();
     console.log("NGR 云翻译在线验证通过；正式包将使用受管配置，用户无需填写 API。");
   } catch (error) {

@@ -20,7 +20,7 @@ class EmptyCredentialStore {
   async updateProviderSecret() { return true; }
 }
 
-test("托管 CFC 配置只接受百度 HTTPS 地址和合规 Bearer Token", () => {
+test("托管 CFC 配置只接受百度 HTTPS 地址并丢弃旧版共享 Token", () => {
   const config = parseManagedProviderConfig({
     version: 1,
     baiduCfc: {
@@ -29,7 +29,9 @@ test("托管 CFC 配置只接受百度 HTTPS 地址和合规 Bearer Token", () =
       bearerToken: "A".repeat(48),
     },
   });
+  assert.equal(config.version, 2);
   assert.equal(config.baiduCfc.endpoint, "https://abc123.cfc-execute.bj.baidubce.com/ngr-assetpilot/translate");
+  assert.equal("bearerToken" in config.baiduCfc, false);
   assert.throws(() => parseManagedProviderConfig({
     version: 1,
     baiduCfc: {
@@ -38,26 +40,16 @@ test("托管 CFC 配置只接受百度 HTTPS 地址和合规 Bearer Token", () =
       bearerToken: "A".repeat(48),
     },
   }), { code: "MANAGED_PROVIDER_URL_INVALID" });
-  assert.throws(() => parseManagedProviderConfig({
-    version: 1,
-    baiduCfc: {
-      enabled: true,
-      endpoint: "https://abc123.cfc-execute.bj.baidubce.com/ngr-assetpilot/translate",
-      bearerToken: "short",
-    },
-  }), { code: "MANAGED_PROVIDER_TOKEN_INVALID" });
 });
 
 test("托管 CFC Provider 无需用户密钥并且不向渲染层返回 Token", async () => {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "ngr-managed-provider-"));
   try {
-    const token = "B".repeat(48);
     const managedProviderConfig = parseManagedProviderConfig({
-      version: 1,
+      version: 2,
       baiduCfc: {
         enabled: true,
         endpoint: "https://abc123.cfc-execute.bj.baidubce.com/ngr-assetpilot/translate",
-        bearerToken: token,
       },
     });
     const registry = new ProviderRegistry({
@@ -70,7 +62,6 @@ test("托管 CFC Provider 无需用户密钥并且不向渲染层返回 Token", 
     const cfc = providers.find((provider) => provider.id === "baidu-cfc");
     assert.equal(cfc.managed, true);
     assert.equal(cfc.hasSecret, true);
-    assert.equal(JSON.stringify(providers).includes(token), false);
 
     const request = await registry.resolveRequest({
       requestId: "managed-cfc-test-1",
@@ -80,7 +71,7 @@ test("托管 CFC Provider 无需用户密钥并且不向渲染层返回 Token", 
     });
     assert.equal(request.method, "POST");
     assert.equal(request.url.href, managedProviderConfig.baiduCfc.endpoint);
-    assert.equal(request.headers.authorization, `Bearer ${token}`);
+    assert.equal(request.headers.authorization, undefined);
     assert.equal(request.headers["content-type"], "application/json");
     assert.deepEqual(request.body, { q: "测试", from: "zh", to: "en" });
   } finally {
@@ -89,12 +80,10 @@ test("托管 CFC Provider 无需用户密钥并且不向渲染层返回 Token", 
 });
 
 test("正式发布前真实验证受管 CFC 健康状态和翻译结果", async () => {
-  const token = "C".repeat(48);
   const requests = [];
   const result = await verifyManagedProvider({
     env: {
       NGR_BAIDU_CFC_ENDPOINT: "https://abc123.cfc-execute.bj.baidubce.com/ngr-assetpilot/translate",
-      NGR_BAIDU_CFC_BEARER_TOKEN: token,
     },
     fetchImpl: async (url, options) => {
       requests.push({ url, options });
@@ -106,6 +95,6 @@ test("正式发布前真实验证受管 CFC 健康状态和翻译结果", async 
   });
   assert.deepEqual(result, { ok: true, service: "ngr-baidu-translation" });
   assert.equal(requests.length, 2);
-  assert.equal(requests[0].options.headers.authorization, `Bearer ${token}`);
+  assert.equal(requests[0].options.headers.authorization, undefined);
   assert.deepEqual(JSON.parse(requests[1].options.body), { q: "测试", from: "zh", to: "en" });
 });

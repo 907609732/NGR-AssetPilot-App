@@ -27,6 +27,7 @@ flowchart TB
     subgraph Desktop["NGR AssetPilot Windows Electron 桌面端"]
         subgraph Frontend["Frontend / Renderer"]
             UI["HTML + CSS + JavaScript UI<br/>命名 / 检测 / 设置 / 本地搜图"]
+            NetworkDiagnosticsUI["网络与 API 诊断<br/>服务集合 / 自定义目标 / 历史"]
             AssetBrowser["素材库浏览器<br/>文件夹树 / 100 张分页 / 懒加载"]
             BackupWorker["fflate Web Worker<br/>流式备份导出 / 导入校验"]
             State["页面状态与业务流程"]
@@ -42,6 +43,7 @@ flowchart TB
             Credentials["CredentialStore<br/>Windows DPAPI"]
             Providers["ProviderRegistry<br/>服务元数据与密钥策略"]
             Network["NetworkClient<br/>受限网络代理与取消"]
+            NetworkDiagnostics["NetworkDiagnosticsService<br/>无凭据连通性与双路线对比"]
             Directory["DirectoryTokenStore<br/>受控目录导出"]
             Backup["BackupFileService<br/>.ngrap 迁移备份"]
             Updater["UpdaterController"]
@@ -69,6 +71,8 @@ flowchart TB
     Source["用户源图片 / 图库<br/>只读"]
     ExportTarget["用户选择的导出目录<br/>受控写入"]
     AIProviders["OpenAI / Moonshot / 百度翻译<br/>已登记 HTTPS 与 loopback 本地服务"]
+    DiagnosticTargets["Figma / 百度云 / 阿里云 / 腾讯云<br/>OSS / COS / CDN / GitHub / Hugging Face"]
+    DiagnosticHistory[("最近 30 次脱敏诊断历史")]
     GitHub["GitHub Releases<br/>安装包与更新元数据"]
 
     subgraph OfficialSite["独立官网"]
@@ -80,6 +84,7 @@ flowchart TB
     Diagnostics["本地诊断日志<br/>不含密钥、查询和完整路径"]
 
     User --> UI
+    UI --> NetworkDiagnosticsUI
     UI --> AssetBrowser
     UI --> BackupWorker
     UI --> State
@@ -90,6 +95,10 @@ flowchart TB
     IPC --> Providers --> Credentials
     IPC --> Network --> Providers
     Network --> AIProviders
+    NetworkDiagnosticsUI --> Preload
+    IPC --> NetworkDiagnostics
+    NetworkDiagnostics --> DiagnosticTargets
+    NetworkDiagnostics --> DiagnosticHistory
     IPC --> Directory --> ExportTarget
     IPC --> Backup
     IPC --> Updater --> GitHub
@@ -137,6 +146,7 @@ flowchart TB
 | Electron 启动层 | `desktop/main/bootstrap.mjs` | 版本身份、数据目录、单实例、窗口、协议、服务实例和退出流程 |
 | 安全与 IPC | `desktop/main/security.mjs`、`protocol.mjs`、`ipc.mjs`、`desktop/preload/` | 沙箱、CSP、导航限制、可信 IPC 和最小能力桥 |
 | 通用桌面服务 | `desktop/services/` | Provider 注册、DPAPI 凭据、受限网络、目录 token、流式迁移备份、本地日志和应用更新 |
+| 网络与 API 诊断 | `desktop/services/network-diagnostics-service.mjs`、`app/js/network-diagnostics.js` | 无凭据服务目录、系统代理/直连探测、自定义目标安全校验、脱敏历史与导出 |
 | 本地搜图控制层 | `desktop/services/local-image-search/controller.mjs` | 对外接口、请求校验、图库/模型/任务状态、缩略图和打开定位 |
 | 本地搜图存储层 | `desktop/services/local-image-search/storage.mjs` | SQLite schema、图库、图片元数据、模型注册和向量状态 |
 | 模型管理 | `desktop/services/local-image-search/model-manager.mjs` | 内置模型下载、哈希校验、离线包和自定义模型生命周期 |
@@ -260,7 +270,37 @@ sequenceDiagram
 - 执行 profile 是覆盖模型、预处理、ONNX Runtime、provider、batch、设备、驱动与架构的 SHA-256；profile 变化会要求完整重建，禁止混合写入。
 - 查询进程只保留当前活动图库、当前模型的连续向量和 imageId；超过 300 MiB 时改用 SQLite 分块精确 Top-K。
 
-### 4. 应用更新
+### 4. 网络与 API 连通性诊断
+
+```mermaid
+sequenceDiagram
+    actor U as 用户
+    participant R as Renderer
+    participant B as 冻结 Preload / IPC
+    participant D as NetworkDiagnosticsService
+    participant T as Target Registry
+    participant S as Electron System Session
+    participant X as Direct In-memory Session
+    participant H as 脱敏历史
+
+    U->>R: 选择内置服务或保存自定义目标
+    R->>B: targetId 列表 + routeMode
+    B->>D: 校验主窗口、请求 ID 与高风险方法确认
+    D->>T: 仅解析已登记目标
+    D->>S: DNS、系统代理、TLS、HTTP 响应头
+    opt 直连或对比模式
+        D->>X: 独立 DIRECT Session 发起相同探测
+    end
+    S-->>D: 状态码、Content-Type、耗时和脱敏跳转来源
+    X-->>D: 直连结果
+    D->>H: 保存最近 30 次脱敏结果，不保存正文和凭据
+    D-->>B: 实时进度与结构化结论
+    B-->>R: 区分可达、需鉴权、限流和真实网络失败
+```
+
+诊断服务与需要凭据的 `NetworkClient` 完全隔离。401、403、405、429 和 5xx 代表已经收到远端 HTTP 响应，不会误判为 DNS 或 TLS 不可达。Renderer 只能提交已保存的 `targetId`；远程目标必须使用 HTTPS，localhost 可使用带端口 HTTP，局域网目标需显式确认，云元数据、链路本地、保留地址和 DNS Rebinding 始终被阻止。请求不读取 Provider 密钥，不保存响应正文，也不执行翻译、列桶、列函数或模型调用。
+
+### 5. 应用更新
 
 正式安装版通过 `electron-updater` 读取 GitHub Release 的 `latest.yml`。软件会在启动后延迟检查，并每 6 小时周期检查；发现更新后，由用户主动下载并确认安装。开发版、测试版和 portable 版不走正式自动更新渠道。
 
@@ -276,6 +316,7 @@ sequenceDiagram
 | 搜索缩略图 | `%APPDATA%/.../local-image-search/thumbnails/` | 否 | 可重建缓存 |
 | 源图片 | 用户选择的原目录 | 否 | 应始终只读 |
 | 本地诊断日志 | 应用 `userData` 目录 | 否 | 轮转保存版本、操作 ID、错误码、阶段和进程退出；禁止密钥、查询、正文与完整路径 |
+| 网络诊断目标与历史 | `%APPDATA%/.../network-diagnostics/` | 否 | 原子 JSON；最多 100 个自定义目标和最近 30 次脱敏运行，不保存响应正文、代理地址或密钥 |
 
 ## 安全边界
 
@@ -284,9 +325,11 @@ sequenceDiagram
 3. IPC 要求请求来自当前主窗口的主 Frame 和受信任的 `ngr-assetpilot://app` 来源。
 4. 文件、图库和模型路径优先由主进程系统对话框产生，Renderer 使用 ID 或 capability token。
 5. 已保存密钥只在主进程 ProviderRegistry 与 CredentialStore 中解密；网络请求以 `providerId + operation + body` 提交，并限制协议、精确 origin/basePath、方法、大小、同源重定向、超时和取消。
-6. 自定义模型先在隔离子进程验证；运行阶段关闭远程模型访问，禁止脚本、自定义算子 DLL 和越界外部数据。
-7. 索引、查询和状态进程彼此隔离；异常退出、无响应和超时会拒绝 pending 请求并按需重建。
-8. 打包流程排除本地 API 配置和测试密钥，并生成 SBOM、哈希与构建清单；GitHub Actions 第三方步骤固定到完整 commit SHA。
+6. 连通性诊断使用独立服务；Renderer 只能运行已登记 targetId。危险 HTTP 方法逐次确认，远程明文、元数据地址、未确认内网和 DNS Rebinding 被拒绝。
+7. 自定义模型先在隔离子进程验证；运行阶段关闭远程模型访问，禁止脚本、自定义算子 DLL 和越界外部数据。
+8. 索引、查询和状态进程彼此隔离；异常退出、无响应和超时会拒绝 pending 请求并按需重建。
+9. 打包流程排除本地 API 配置和测试密钥，并生成 SBOM、哈希与构建清单；GitHub Actions 第三方步骤固定到完整 commit SHA。
+10. NGR 云翻译安装包只保存公开的百度 CFC HTTPS Endpoint；百度 APPID/密钥仅存在于 CFC 环境变量。旧 v1 托管配置可读取 Endpoint，但共享 Bearer Token 会被丢弃且不再发送。公开端点必须在云端设置并发上限、费用预算/告警与来源限流。
 
 ## 当前架构优势
 
@@ -305,7 +348,7 @@ sequenceDiagram
 1. **Renderer 模块化**：当前仍依赖多个按顺序加载的全局脚本和共享可变状态。新增功能会同时触及 HTML、CSS、状态、事件、持久化和测试，应逐步迁移到明确的 ES Module 和功能边界。
 2. **版本化数据迁移**：localStorage、IndexedDB、DPAPI、SQLite、模型文件和缩略图均有独立生命周期，需要统一的数据版本、迁移、容量和崩溃恢复策略。
 3. **迁移包兼容与容量**：桌面导出使用 fflate 分块流式 ZIP；导入必须持续保留路径、条目、哈希、总大小和事务回滚门禁，并对旧 v1/加密包做回归测试。
-4. **发布信任（明确未解决）**：当前 Windows 安装包和自动更新仍未做 Authenticode 签名，`verifyUpdateCodeSignature` 也因缺少发布证书而未启用。受保护 Release environment、最小权限和完整 SHA 固定只能降低 CI 风险，不能代替代码签名。
+4. **发布信任（证书待配置）**：v3.0.12 按发布决定提供未签名正式版，保留 HTTPS 下载、更新哈希和凭据扫描；仅本版本关闭 Authenticode 更新验证。`build/release-policy.cjs` 限定该版本使用离线翻译，不内置当前返回 401 的云翻译配置。后续版本恢复证书和受管服务要求。
 5. **诊断导出与崩溃恢复**：已有本地脱敏轮转日志和进程恢复，后续可增加由用户主动确认的诊断包；不得默认上传本地图片、查询或提示词。
 6. **官网边界清理**：官网应自动同步正式 Release 信息，并移除或隔离当前未使用的 D1、Auth 和示例脚手架，减少版本和依赖漂移。
 

@@ -2,10 +2,9 @@ import { readFile } from "node:fs/promises";
 
 import { DesktopError, isPlainRecord } from "../shared/core.mjs";
 
-const MANAGED_PROVIDER_CONFIG_VERSION = 1;
+const MANAGED_PROVIDER_CONFIG_VERSION = 2;
 const MAX_CONFIG_BYTES = 64 * 1024;
 const CFC_HOST_PATTERN = /^[a-z0-9-]+\.cfc-execute\.[a-z0-9-]+\.baidubce\.com$/i;
-const BEARER_TOKEN_PATTERN = /^[A-Za-z0-9+/=\-~.]{32,128}$/;
 
 function normalizeCfcEndpoint(value) {
   if (typeof value !== "string" || !value.trim() || value.length > 4096) {
@@ -47,7 +46,7 @@ function normalizeCfcEndpoint(value) {
 }
 
 export function parseManagedProviderConfig(input) {
-  if (!isPlainRecord(input) || input.version !== MANAGED_PROVIDER_CONFIG_VERSION) {
+  if (!isPlainRecord(input) || ![1, MANAGED_PROVIDER_CONFIG_VERSION].includes(input.version)) {
     throw new DesktopError("MANAGED_PROVIDER_CONFIG_INVALID", "托管服务配置版本无效");
   }
   const cfc = input.baiduCfc;
@@ -55,16 +54,14 @@ export function parseManagedProviderConfig(input) {
     throw new DesktopError("MANAGED_PROVIDER_CONFIG_INVALID", "托管翻译配置无效");
   }
   const endpoint = normalizeCfcEndpoint(cfc.endpoint);
-  const bearerToken = String(cfc.bearerToken || "").trim();
-  if (bearerToken && !BEARER_TOKEN_PATTERN.test(bearerToken)) {
-    throw new DesktopError("MANAGED_PROVIDER_TOKEN_INVALID", "托管翻译访问令牌无效");
-  }
+  // Version 1 packages embedded a shared bearer token. A desktop package
+  // cannot keep a shared secret, so v1 is read only for endpoint migration
+  // and the token is deliberately discarded.
   return Object.freeze({
     version: MANAGED_PROVIDER_CONFIG_VERSION,
     baiduCfc: Object.freeze({
       enabled: true,
       endpoint,
-      bearerToken,
     }),
   });
 }
@@ -89,7 +86,6 @@ export async function loadManagedProviderConfig(filePath) {
 }
 
 export {
-  BEARER_TOKEN_PATTERN,
   CFC_HOST_PATTERN,
   MANAGED_PROVIDER_CONFIG_VERSION,
 };

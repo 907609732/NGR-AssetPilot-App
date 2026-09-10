@@ -30,6 +30,7 @@ function init() {
   renderAssetList();
   initializeWorkspaceMigration();
   void initLocalImageSearch();
+  void window.NgrNetworkDiagnostics?.init();
   void window.NgrExternalAppLauncher?.init();
   void window.initializeUpdates();
 }

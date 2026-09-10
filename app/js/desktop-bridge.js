@@ -313,6 +313,24 @@
     translate: (request) => invoke("offlineTranslation.translate", request),
   });
 
+  const diagnostics = Object.freeze({
+    isAvailable: () => hasCapability("diagnostics.listCatalog"),
+    listCatalog: () => invoke("diagnostics.listCatalog"),
+    listCustomTargets: () => invoke("diagnostics.listCustomTargets"),
+    upsertCustomTarget: (request) => invoke("diagnostics.upsertCustomTarget", request),
+    removeCustomTarget: (request) => invoke("diagnostics.removeCustomTarget", request),
+    run: (request) => invoke("diagnostics.run", request),
+    cancel: (request) => invoke("diagnostics.cancel", request),
+    listHistory: (request) => invoke("diagnostics.listHistory", request),
+    exportHistory: (request) => invoke("diagnostics.exportHistory", request),
+    clearHistory: () => invoke("diagnostics.clearHistory"),
+    onProgress(callback) {
+      if (typeof callback !== "function") throw new TypeError("诊断进度回调必须是函数");
+      if (!hasCapability("diagnostics.onProgress")) return () => {};
+      return getCapability("diagnostics.onProgress")(callback);
+    },
+  });
+
   globalScope.NgrDesktopBridge = Object.freeze({
     isDesktopRuntime,
     hasCapability,
@@ -349,6 +367,7 @@
     openExternal,
     externalApps,
     offlineTranslation,
+    diagnostics,
     localImageSearch,
   });
   globalScope.ngrFetch = request;

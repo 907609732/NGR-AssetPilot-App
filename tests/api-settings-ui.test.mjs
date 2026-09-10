@@ -8,14 +8,33 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const index = fs.readFileSync(path.join(projectRoot, "app/index.html"), "utf8");
 const lifecycle = fs.readFileSync(path.join(projectRoot, "app/js/lifecycle-rules.js"), "utf8");
 const translator = fs.readFileSync(path.join(projectRoot, "app/js/uploads-editor-translator.js"), "utf8");
+const diagnostics = fs.readFileSync(path.join(projectRoot, "app/js/network-diagnostics.js"), "utf8");
 
 test("设置包含统一 API 页签并接管视觉命名与翻译配置", () => {
   assert.match(index, /id="apiSettingsView"/);
   assert.match(index, /id="apiSettingsAiSlot"/);
   assert.match(index, /id="apiSettingsTranslationSlot"/);
+  assert.match(index, /id="networkDiagnosticsPanel"/);
+  assert.match(index, /id="diagnosticsRunSelected"/);
+  assert.match(index, /id="diagnosticsCustomForm"/);
+  assert.match(index, /id="diagnosticsHistoryList"/);
+  assert.match(index, /id="diagnosticsProxyBadge"/);
+  assert.match(index, /js\/network-diagnostics\.js/);
   assert.match(lifecycle, /apiSettingsAiSlot\.appendChild\(els\.aiSettingsPanel\)/);
   assert.match(lifecycle, /apiSettingsTranslationSlot\.appendChild\(els\.translatorSettings\)/);
   assert.match(lifecycle, /\["apiSettings", "API"\]/);
+});
+
+test("网络诊断支持批量、双路线、自定义目标和本地历史且不读取凭据", () => {
+  assert.match(index, /value="compare">软件路线 \+ 直连对比/);
+  assert.match(index, /id="diagnosticsCustomAllowLan"/);
+  assert.match(index, /id="diagnosticsExportMarkdown"/);
+  assert.match(diagnostics, /confirmedUnsafeTargetIds/);
+  assert.match(diagnostics, /firstByteMs/);
+  assert.match(diagnostics, /failureStage/);
+  assert.match(diagnostics, /api\(\)\.listHistory/);
+  assert.match(diagnostics, /api\(\)\.onProgress/);
+  assert.doesNotMatch(diagnostics, /credentials|getCredentialStatus|authorization/i);
 });
 
 test("浮动翻译框不再提供 API 配置入口，缺少百度配置时跳转统一 API 页", () => {
