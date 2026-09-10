@@ -86,6 +86,10 @@ async function verifyTarget(target) {
         const awake = await window.ngrDesktop.keepAwake.getState();
         return awake.systemActive && awake.mouseState === "running";
       }, undefined, { timeout: 20_000 });
+      await window.waitForFunction(() => document.querySelector("#generalSettingsView .settings-tabs"));
+      await window.locator("#rulesEntry").click();
+      await window.waitForFunction(() => document.getElementById("keepAwakeStatus").textContent.includes("待命"));
+      await window.screenshot({ path: path.join(projectRoot, "artifacts", target.edition, "keep-awake-verification.png") });
     } finally {
       const stopped = await window.evaluate(() => window.ngrDesktop.keepAwake.setSettings({ enabled: false, mode: "system" }));
       assert.equal(stopped.systemActive, false);
