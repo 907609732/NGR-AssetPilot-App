@@ -5,9 +5,11 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { _electron as electron } from "playwright";
+import { loadManagedProviderConfig } from "../desktop/services/managed-provider-config.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const appEntry = path.join(projectRoot, "desktop", "main", "index.mjs");
+const cloudConfigured = Boolean(await loadManagedProviderConfig(path.join(projectRoot, "build/generated/managed-provider-config.json")));
 
 async function waitForMaximizedWindow(electronApp, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs;
@@ -162,10 +164,10 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.deepEqual(await window.locator("#namingModeSelect option").evaluateAll((options) => (
       options.map((option) => option.value)
     )), ["translate:local", "translate:cfc", "translate:baidu", "translate:model", "local", "ai"]);
-    assert.equal(await window.locator("#namingModeSelect").inputValue(), "translate:local");
-    assert.equal(await window.locator("#translatorProvider").inputValue(), "local");
-    assert.equal(await window.locator('#namingModeSelect option[value="translate:cfc"]').evaluate((option) => option.disabled), true);
-    assert.equal(await window.locator('#translatorProvider option[value="cfc"]').evaluate((option) => option.disabled), true);
+    assert.equal(await window.locator("#namingModeSelect").inputValue(), cloudConfigured ? "translate:cfc" : "translate:local");
+    assert.equal(await window.locator("#translatorProvider").inputValue(), cloudConfigured ? "cfc" : "local");
+    assert.equal(await window.locator('#namingModeSelect option[value="translate:cfc"]').evaluate((option) => option.disabled), !cloudConfigured);
+    assert.equal(await window.locator('#translatorProvider option[value="cfc"]').evaluate((option) => option.disabled), !cloudConfigured);
     await window.locator("#namingModeSelect").selectOption("translate:baidu");
     await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "baidu");
     assert.match(await window.locator("#runSelectedNaming").innerText(), /自有百度翻译/);

@@ -17,7 +17,9 @@ const zip = new AdmZip();
 for (const fileName of allowedFiles) {
   const filePath = path.join(sourceDirectory, fileName);
   if (!fs.existsSync(filePath)) throw new Error(`CFC 打包缺少 ${fileName}`);
-  zip.addLocalFile(filePath, "", fileName);
+  // Windows source permissions are not suitable for the Linux CFC runtime.
+  zip.addFile(fileName, fs.readFileSync(filePath), "", 0o644);
+  zip.getEntry(fileName).header.made = (3 << 8) | 20;
 }
 zip.writeZip(outputPath);
 

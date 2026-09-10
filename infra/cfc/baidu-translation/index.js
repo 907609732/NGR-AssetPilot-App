@@ -6,7 +6,8 @@ const BAIDU_ENDPOINT = "https://fanyi-api.baidu.com/api/trans/vip/translate";
 const MAX_QUERY_CHARACTERS = 200;
 const MAX_BODY_BYTES = 16 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
-const DEFAULT_RATE_LIMIT = 30;
+const DEFAULT_RATE_LIMIT = 1000;
+const RATE_WINDOW_MS = 30 * 60 * 1000;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 const CACHE_LIMIT = 512;
 const ALLOWED_LANGUAGES = new Set([
@@ -64,17 +65,17 @@ function parseBody(event) {
 function enforceRateLimit(event, now = Date.now()) {
   const sourceIp = String(event?.requestContext?.sourceIp || "unknown");
   const key = createHash("sha256").update(sourceIp).digest("hex");
-  const minute = Math.floor(now / 60_000);
-  const limit = Math.max(1, Math.min(300, Number.parseInt(process.env.RATE_LIMIT_PER_MINUTE || "", 10) || DEFAULT_RATE_LIMIT));
-  const current = rateBuckets.get(key);
-  const next = !current || current.minute !== minute ? { minute, count: 1 } : { minute, count: current.count + 1 };
+  const next = (rateBuckets.get(key) || []).filter((time) => time > now - RATE_WINDOW_MS);
+  if (next.length >= DEFAULT_RATE_LIMIT) {
+    throw Object.assign(new Error("半小时内最多翻译 1000 次，请稍后再试"), { statusCode: 429 });
+  }
+  next.push(now);
   rateBuckets.set(key, next);
   if (rateBuckets.size > 2048) {
     for (const [bucketKey, bucket] of rateBuckets) {
-      if (bucket.minute < minute - 1) rateBuckets.delete(bucketKey);
+      if (bucket[bucket.length - 1] <= now - RATE_WINDOW_MS) rateBuckets.delete(bucketKey);
     }
   }
-  if (next.count > limit) throw Object.assign(new Error("请求过于频繁，请稍后再试"), { statusCode: 429 });
 }
 
 function getCached(key, now = Date.now()) {

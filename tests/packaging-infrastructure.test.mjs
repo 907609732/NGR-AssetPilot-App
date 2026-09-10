@@ -9,9 +9,10 @@ import { verifyWindowsSignatures } from "../scripts/verify-windows-signature.mjs
 
 const require = createRequire(import.meta.url);
 const releasePolicyFor = require("../build/release-policy.cjs");
-test("未签名和离线发布决定仅适用于 3.0.12", () => {
+test("云翻译恢复版本保留已授权的未签名发布，恢复云配置", () => {
   assert.deepEqual(releasePolicyFor("3.0.12"), { unsigned: true, offlineTranslationOnly: true });
-  assert.deepEqual(releasePolicyFor("3.0.13"), { unsigned: false, offlineTranslationOnly: false });
+  assert.deepEqual(releasePolicyFor("3.0.13"), { unsigned: true, offlineTranslationOnly: false });
+  assert.deepEqual(releasePolicyFor("3.0.14"), { unsigned: false, offlineTranslationOnly: false });
 });
 const builderConfigPath = path.join(projectRoot, "build", "electron-builder.config.cjs");
 
@@ -124,7 +125,10 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
   assert.ok(dev.nsis.artifactName.includes(`NGR-AssetPilot-Dev-${packageJson.version}`));
   assert.ok(testConfig.nsis.artifactName.includes(`NGR-AssetPilot-Test-${packageJson.version}`));
   for (const config of [prod, dev, testConfig]) {
-    assert.equal(config.extraResources.length, 1);
+    const cloudResource = config.extraResources.find(({ to }) => to === "managed-provider-config.json");
+    const cloudExpected = fs.existsSync(path.join(projectRoot, "build/generated/managed-provider-config.json"));
+    assert.equal(Boolean(cloudResource), cloudExpected);
+    assert.equal(config.extraResources.length, cloudExpected ? 2 : 1);
     const offlineTranslation = config.extraResources.find(({ to }) => to === "offline-translation");
     assert.match(offlineTranslation.from, /build[\\/]generated[\\/]offline-translation$/);
     assert.ok(config.files.includes("!build/generated/**/*"));

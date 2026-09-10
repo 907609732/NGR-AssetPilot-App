@@ -6,6 +6,20 @@ const require = createRequire(import.meta.url);
 const cfcModule = require("../infra/cfc/baidu-translation/index.js");
 const { handle } = cfcModule.__test;
 
+test("CFC 每来源滚动半小时允许 1000 次且不能跨时间边界突发绕过", () => {
+  const { enforceRateLimit, parseBody } = cfcModule.__test;
+  const event = { requestContext: { sourceIp: "192.0.2.100" } };
+  const start = 1_799_000;
+  for (let i = 0; i < 1000; i++) enforceRateLimit(event, start + i);
+  assert.throws(() => enforceRateLimit(event, start + 1000), { statusCode: 429 });
+  assert.doesNotThrow(() => enforceRateLimit({ requestContext: { sourceIp: "192.0.2.101" } }, start + 1000));
+  assert.throws(() => enforceRateLimit(event, start + 1_799_999), { statusCode: 429 });
+  assert.doesNotThrow(() => enforceRateLimit(event, start + 1_800_000));
+  assert.throws(() => enforceRateLimit(event, start + 1_800_000), { statusCode: 429 });
+  assert.equal(parseBody({ body: { q: "中".repeat(200) } }).q.length, 200);
+  assert.throws(() => parseBody({ body: { q: "中".repeat(201) } }), { statusCode: 400 });
+});
+
 test("CFC 使用环境变量签名调用百度翻译并返回兼容结果", async () => {
   const previousFetch = globalThis.fetch;
   const previousAppId = process.env.BAIDU_TRANSLATE_APP_ID;

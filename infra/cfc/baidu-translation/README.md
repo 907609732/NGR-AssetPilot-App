@@ -4,18 +4,19 @@
 
 ## CFC 配置
 
-- 运行时：Node.js 20
+- 运行时：Node.js 22
 - 处理程序：`index.handler`
 - 内存：128 MiB
 - 超时：30 秒
 - 环境变量：
   - `BAIDU_TRANSLATE_APP_ID`
   - `BAIDU_TRANSLATE_SECRET`
-  - `RATE_LIMIT_PER_MINUTE=30`
   - `UPSTREAM_TIMEOUT_MS=15000`
 - HTTP 触发器：`GET,POST`
 - 路径：`/ngr-assetpilot/translate`
-- 认证：公开受限端点；不在桌面客户端嵌入共享密钥
+- 认证：不验证；不在桌面客户端嵌入共享密钥
+- 限流：每来源 IP 在滚动半小时内最多 1000 次 POST，单次最多 200 字符。旧 `RATE_LIMIT_PER_MINUTE` 环境变量不再生效。
+- 计数保存在函数实例内存中，实例重启会清空，多实例之间不共享；不是跨实例的全局配额。
 - 协议：只使用控制台生成的 HTTPS 地址
 
 执行 `npm run package:cfc` 会生成 `artifacts/cfc/NGR-AssetPilot-Baidu-CFC.zip`，上传该 ZIP 后无需安装依赖。

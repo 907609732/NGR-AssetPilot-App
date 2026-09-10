@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron } from "playwright";
+import releasePolicyFor from "../build/release-policy.cjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const runRoot = path.join(projectRoot, ".tmp", `packaged-smoke-${Date.now()}`);
@@ -78,6 +79,18 @@ async function verifyTarget(target) {
     }
     assert.match(state.title, new RegExp(target.product));
     assert.equal(state.nodeRequireType, "undefined");
+    if (target.edition === "prod" && !releasePolicyFor(packageJson.version).offlineTranslationOnly) {
+      const cloud = await window.evaluate(async () => {
+        const response = await window.NgrDesktopBridge.requestProvider("baidu-cfc", "translate", {
+          q: "云翻译已恢复", from: "zh", to: "en",
+        }, { timeoutMs: 30000 });
+        const data = await response.json();
+        return { status: response.status, translated: data.trans_result?.map((item) => item.dst).join(" ") };
+      });
+      assert.equal(cloud.status, 200);
+      assert.match(cloud.translated, /cloud translation/i);
+      process.stdout.write(`${JSON.stringify({ packagedCloudTranslation: cloud })}\n`);
+    }
     const awakeInitial = await window.evaluate(() => window.ngrDesktop.keepAwake.getState());
     assert.equal(awakeInitial.enabled, false);
     try {
