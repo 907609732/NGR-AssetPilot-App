@@ -39,7 +39,7 @@ function renderAssetList() {
   renderedAssets.forEach((asset) => {
     const row = document.createElement("div");
     const duplicateStatus = getDuplicateStatus(asset, duplicateContext);
-    row.className = "asset-item" + (asset.dimensionIssue ? " has-issue" : duplicateStatus.hasIssue ? " has-duplicate" : asset.dimensionWarning ? " has-warning" : "") + (asset.id === selectedId ? " active" : "");
+    row.className = "asset-item" + (asset.dimensionIssue || asset.namingStatus === "failed" ? " has-issue" : duplicateStatus.hasIssue ? " has-duplicate" : asset.dimensionWarning ? " has-warning" : "") + (asset.id === selectedId ? " active" : "");
     row.dataset.assetId = asset.id;
     row.addEventListener("click", (event) => {
       if (event.target.closest(".asset-meta") && window.getSelection?.().toString().trim()) return;
@@ -206,69 +206,10 @@ function renderAssetList() {
     finalField.append(finalInput, finalMeaning);
     finalLabel.append(finalText, finalField);
 
-    const lexiconWrap = document.createElement("details");
-    lexiconWrap.className = "inline-lexicon";
-    lexiconWrap.open = Boolean(asset.lexiconOpen);
-    lexiconWrap.addEventListener("toggle", () => {
-      asset.lexiconOpen = lexiconWrap.open;
-      saveCurrentNamingSession();
-    });
-    const lexiconSummary = document.createElement("summary");
-    lexiconSummary.textContent = "词库";
-    const lexiconContent = document.createElement("div");
-    lexiconContent.className = "lexicon-content";
-    const categories = buildLexiconCategories();
-    if (!categories.some((category) => category.title === activeLexiconCategory)) activeLexiconCategory = categories[0]?.title || "";
-    const tabs = document.createElement("div");
-    tabs.className = "lexicon-tabs";
-    const chips = document.createElement("div");
-    chips.className = "lexicon-chips";
-    const renderLexiconTerms = () => {
-      chips.innerHTML = "";
-      const currentParts = new Set(cleanNamingName(asset.finalBaseName).split(/_+/).map((part) => part.toLowerCase()).filter(Boolean));
-      const category = categories.find((item) => item.title === activeLexiconCategory) || categories[0];
-      (category?.terms || []).forEach((term) => {
-        const selected = currentParts.has(term.toLowerCase());
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "lexicon-chip" + (selected ? " selected" : "");
-        chip.textContent = term;
-        chip.title = selected ? "再次点击移除：" + explainEnglishName(term) : explainEnglishName(term);
-        chip.addEventListener("click", () => {
-          asset.finalBaseName = toggleLexiconTerm(asset.finalBaseName, term);
-          finalInput.value = asset.finalBaseName;
-          afterName.querySelector("strong").textContent = asset.finalBaseName ? buildExportName(asset) : "待命名";
-          finalMeaning.dataset.meaningKey = getMeaningKey(asset.finalBaseName);
-          finalMeaning.textContent = "中文含义：" + getDisplayMeaning(asset.finalBaseName);
-          const nextDuplicateStatus = getDuplicateStatus(asset);
-          duplicateCheck.querySelector("strong").textContent = nextDuplicateStatus.message;
-          duplicateCheck.classList.toggle("warning-line", nextDuplicateStatus.hasIssue);
-          saveCurrentNamingSession();
-          syncDuplicateNameIndicators();
-          renderLexiconTerms();
-        });
-        chips.appendChild(chip);
-      });
-    };
-    categories.forEach((category) => {
-      const tab = document.createElement("button");
-      tab.type = "button";
-      tab.className = "lexicon-tab" + (category.title === activeLexiconCategory ? " active" : "");
-      tab.textContent = category.title;
-      tab.addEventListener("click", () => {
-        activeLexiconCategory = category.title;
-        tabs.querySelectorAll(".lexicon-tab").forEach((node) => node.classList.toggle("active", node === tab));
-        renderLexiconTerms();
-      });
-      tabs.appendChild(tab);
-    });
-    renderLexiconTerms();
-    lexiconContent.append(tabs, chips);
-    lexiconWrap.append(lexiconSummary, lexiconContent);
 
     nameRow.append(prefix, project, view, finalLabel);
     editor.append(nameRow);
-    if (listDisplayMode !== "compact") editor.append(recommendationWrap, lexiconWrap);
+    if (listDisplayMode !== "compact") editor.append(recommendationWrap);
     row.append(checkbox, img, text, editor);
     els.assetList.appendChild(row);
   });
@@ -310,7 +251,7 @@ function renderAlbumAssetList(visibleAssets, duplicateContext = buildDuplicateSt
 function createAlbumAssetCard(asset, duplicateContext = buildDuplicateStatusContext()) {
   const card = document.createElement("article");
   const duplicateStatus = getDuplicateStatus(asset, duplicateContext);
-  card.className = "album-card" + (asset.id === selectedId ? " active" : "") + (asset.dimensionIssue ? " has-issue" : duplicateStatus.hasIssue ? " has-duplicate" : asset.dimensionWarning ? " has-warning" : "");
+  card.className = "album-card" + (asset.id === selectedId ? " active" : "") + (asset.dimensionIssue || asset.namingStatus === "failed" ? " has-issue" : duplicateStatus.hasIssue ? " has-duplicate" : asset.dimensionWarning ? " has-warning" : "");
   card.dataset.assetId = asset.id;
   card.tabIndex = 0;
   const select = document.createElement("input");
@@ -524,58 +465,7 @@ function createAlbumNamingEditor(asset, outputNode) {
   });
   recommendations.append(recommendationTitle, recommendationButtons);
 
-  const lexicon = document.createElement("details");
-  lexicon.className = "inline-lexicon album-editor-lexicon";
-  lexicon.open = Boolean(asset.lexiconOpen);
-  const summary = document.createElement("summary");
-  summary.textContent = "词库";
-  const content = document.createElement("div");
-  content.className = "lexicon-content";
-  const tabs = document.createElement("div");
-  tabs.className = "lexicon-tabs";
-  const chips = document.createElement("div");
-  chips.className = "lexicon-chips";
-  const categories = buildLexiconCategories();
-  if (!categories.some((category) => category.title === activeLexiconCategory)) activeLexiconCategory = categories[0]?.title || "";
-  const renderTerms = () => {
-    chips.innerHTML = "";
-    const current = new Set(cleanNamingName(asset.finalBaseName).split(/_+/).map((part) => part.toLowerCase()).filter(Boolean));
-    const category = categories.find((item) => item.title === activeLexiconCategory) || categories[0];
-    (category?.terms || []).forEach((term) => {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "lexicon-chip" + (current.has(term.toLowerCase()) ? " selected" : "");
-      chip.textContent = term;
-      chip.addEventListener("click", () => {
-        asset.finalBaseName = toggleLexiconTerm(asset.finalBaseName, term);
-        finalInput.value = asset.finalBaseName;
-        meaning.textContent = "中文含义：" + getDisplayMeaning(asset.finalBaseName);
-        updateOutput();
-        renderTerms();
-      });
-      chips.appendChild(chip);
-    });
-  };
-  categories.forEach((category) => {
-    const tab = document.createElement("button");
-    tab.type = "button";
-    tab.className = "lexicon-tab" + (category.title === activeLexiconCategory ? " active" : "");
-    tab.textContent = category.title;
-    tab.addEventListener("click", () => {
-      activeLexiconCategory = category.title;
-      tabs.querySelectorAll(".lexicon-tab").forEach((node) => node.classList.toggle("active", node === tab));
-      renderTerms();
-    });
-    tabs.appendChild(tab);
-  });
-  lexicon.addEventListener("toggle", () => {
-    asset.lexiconOpen = lexicon.open;
-    saveCurrentNamingSession();
-  });
-  renderTerms();
-  content.append(tabs, chips);
-  lexicon.append(summary, content);
-  editor.append(fields, recommendations, lexicon);
+  editor.append(fields, recommendations);
   return editor;
 }
 
@@ -663,6 +553,7 @@ function renderNamingSessionList() {
     button.append(name, meta, deleteButton);
     button.addEventListener("click", () => switchNamingSession(session.id));
     button.addEventListener("keydown", (event) => {
+      if (event.target !== button) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       switchNamingSession(session.id);
@@ -739,7 +630,7 @@ function getVisibleAssets(duplicateContext = buildDuplicateStatusContext()) {
 }
 
 function isNamingAssetProblem(asset, duplicateContext = buildDuplicateStatusContext()) {
-  return Boolean(asset.dimensionIssue || getDuplicateStatus(asset, duplicateContext).hasIssue);
+  return Boolean(asset.dimensionIssue || asset.namingStatus === "failed" || getDuplicateStatus(asset, duplicateContext).hasIssue);
 }
 
 function applyNamingStatusBadge(badge, asset, duplicateStatus = getDuplicateStatus(asset)) {
@@ -819,6 +710,11 @@ function renderDetectionList() {
   renderedAssets.forEach((asset) => {
     const row = document.createElement("div");
     row.className = "asset-item detection-item" + (asset.hasIssue ? " has-issue" : asset.hasWarning ? " has-warning" : " passed");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = Boolean(asset.checked);
+    checkbox.setAttribute("aria-label", "选择图片：" + asset.name);
+    checkbox.addEventListener("change", () => { asset.checked = checkbox.checked; window.NgrSelectionActions?.refresh(); });
 
     const img = document.createElement("img");
     img.src = getAssetPreviewUrl(asset);
@@ -839,7 +735,7 @@ function renderDetectionList() {
       status
     );
 
-    row.append(img, meta);
+    row.append(checkbox, img, meta);
     els.detectionList.appendChild(row);
   });
   renderListPager(els.detectionList, renderLimit, visibleAssets.length, () => {

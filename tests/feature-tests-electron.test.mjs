@@ -1,0 +1,103 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { _electron as electron } from "playwright";
+
+test("设置页可隔离测试开始命名和切图检测并显示运行状态", { timeout: 90_000 }, async () => {
+  const root = path.resolve(import.meta.dirname, "..");
+  fs.mkdirSync(path.join(root, ".tmp"), { recursive: true });
+  const runRoot = fs.mkdtempSync(path.join(root, ".tmp", "feature-tests-"));
+  const evidence = path.join(root, "artifacts", "feature-tests");
+  fs.mkdirSync(evidence, { recursive: true });
+  const app = await electron.launch({
+    args: [path.join(root, "desktop/main/index.mjs")],
+    cwd: root,
+    env: { ...process.env, NGR_E2E_USER_DATA: path.join(runRoot, "UserData"), ELECTRON_ENABLE_LOGGING: "0" },
+  });
+  try {
+    const page = await app.firstWindow();
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.waitForFunction(() => document.querySelector("#generalSettingsView .settings-tabs"));
+    await page.locator("#rulesEntry").click();
+    await page.locator('#generalSettingsView [data-settings-view="featureTest"]').click();
+    await page.waitForFunction(() => document.getElementById("featureTestView").classList.contains("active"));
+    assert.match(await page.locator("#featureRuntimeEnvironment").innerText(), /Electron 桌面版运行中/);
+    assert.match(await page.locator("#featureRuntimeNaming").innerText(), /NGR 云翻译/);
+    const before = await page.evaluate(() => ({ naming: assets.length, detection: detectionAssets.length }));
+    await page.locator("#runAllFeatureTests").click();
+    await page.waitForFunction(() => document.getElementById("featureTestSummary").textContent.includes("全部通过"));
+    assert.ok(await page.locator("#featureTestView").evaluate((node) => node.classList.contains("active")));
+    assert.match(await page.locator("#featureTestSummary").innerText(), /请返回首页进入对应功能查看/);
+    assert.deepEqual(await page.evaluate(() => ({ naming: assets.length, detection: detectionAssets.length })), { naming: 53, detection: 33 });
+    await page.screenshot({ path: path.join(evidence, "feature-test-data-generated.png"), fullPage: true });
+    await page.locator("#backButton").click();
+    await page.waitForFunction(() => document.getElementById("homeView").classList.contains("active"));
+    await page.locator("#detectEntry").click();
+    await page.waitForFunction(() => document.getElementById("detectView").classList.contains("active"));
+    assert.match(await page.locator("#detectView .feature-preview-banner").innerText(), /完整测试环境/);
+    assert.ok(await page.locator("#detectionList .detection-item").count() >= 20);
+    assert.match(await page.locator("#detectionList").innerText(), /17_格式_PNG内容但扩展名错误\.jpg/);
+    assert.match(await page.locator("#detectionList").innerText(), /扩展名必须是 \.png/);
+    assert.match(await page.locator("#detectionList").innerText(), /20_文件_损坏PNG_报错\.png/);
+    assert.match(await page.locator("#detectionList").innerText(), /不是有效的 PNG|损坏的 PNG/);
+    assert.match(await page.locator("#detectionList").innerText(), /Icon_非正方形_报错/);
+    assert.match(await page.locator("#detectionList").innerText(), /策划配置_非2次幂_报错/);
+    assert.match(await page.locator("#detectionList").innerText(), /疑似重复资源/);
+    assert.match(await page.locator("#detectionList").innerText(), /5120x1440超宽背景/);
+    assert.match(await page.locator("#detectionList").innerText(), /1920x1080效果图草稿/);
+    assert.match(await page.locator("#detectionList").innerText(), /格式_WebP_报错/);
+    assert.match(await page.locator("#detectionList").innerText(), /格式_AVIF_报错/);
+    await page.locator("#detectionProblemFilter").click();
+    assert.ok(await page.locator("#detectionList .detection-item").count() > 0);
+    assert.equal(await page.locator("#detectionList .detection-item.passed").count(), 0);
+    await page.locator("#detectionProblemFilter").click();
+    await page.locator("#detectionList .detection-item input[type=checkbox]").first().check();
+    await page.locator("#detectView .feature-preview-banner button", { hasText: "查看命名样本" }).click();
+    await page.waitForFunction(() => document.getElementById("workView").classList.contains("active"));
+    assert.equal(await page.locator("#assetList .asset-item").count(), 53);
+    assert.match(await page.locator("#assetList").innerText(), /问题样本_图集单数尺寸/);
+    assert.match(await page.locator("#assetList").innerText(), /图集宽高需要是2的倍数/);
+    assert.match(await page.locator("#assetList").innerText(), /问题样本_命名服务失败/);
+    assert.match(await page.locator("#assetList").innerText(), /命名服务返回失败/);
+    assert.match(await page.locator("#assetList").innerText(), /模拟重名|当前批次重名/);
+    assert.match(await page.locator("#assetList").innerText(), /背景图样本_5120x1440超宽/);
+    assert.match(await page.locator("#assetList").innerText(), /效果图样本_PC_2560x1440/);
+    assert.match(await page.locator("#assetList").innerText(), /格式样本_WebP\.webp/);
+    assert.match(await page.locator("#assetList").innerText(), /格式样本_GIF\.gif/);
+    const firstFinalName = page.locator("#assetList .inline-final-name input").first();
+    await firstFinalName.fill("Test_Button_Edited");
+    assert.equal(await firstFinalName.inputValue(), "Test_Button_Edited");
+    await page.locator("#workView .feature-preview-banner button", { hasText: "查看检测样本" }).click();
+    await page.waitForFunction(() => document.getElementById("detectView").classList.contains("active"));
+    await page.screenshot({ path: path.join(evidence, "detection-test-preview.png"), fullPage: true });
+    await page.locator("#detectView .feature-preview-banner button", { hasText: "退出测试" }).click();
+    await page.waitForFunction(() => document.getElementById("featureTestView").classList.contains("active"));
+    assert.equal(await page.locator("#namingFeatureTestCard").getAttribute("data-state"), "pass");
+    assert.equal(await page.locator("#detectionFeatureTestCard").getAttribute("data-state"), "pass");
+    assert.match(await page.locator("#featureNamingResult").innerText(), /按钮_默认\.png.*输出：/);
+    assert.match(await page.locator("#featureDetectionResult").innerText(), /完整样本：\d+ 张.*问题 \d+ 张.*警告 \d+ 张/);
+    assert.match(await page.locator("#featureTestLog").innerText(), /开始命名测试通过/);
+    assert.match(await page.locator("#featureTestLog").innerText(), /切图检测测试通过/);
+    assert.deepEqual(await page.evaluate(() => ({ naming: assets.length, detection: detectionAssets.length })), before);
+    await page.locator("#runNamingFeatureTest").click();
+    await page.waitForFunction(() => document.getElementById("featureTestSummary").textContent.includes("全部通过"));
+    assert.ok(await page.locator("#featureTestView").evaluate((node) => node.classList.contains("active")));
+    await page.locator("#backButton").click();
+    await page.waitForFunction(() => document.getElementById("homeView").classList.contains("active"));
+    await page.locator("#workEntry").click();
+    await page.waitForFunction(() => document.getElementById("workView").classList.contains("active"));
+    assert.equal(await page.locator("#assetList .asset-item").count(), 53);
+    assert.match(await page.locator("#workView .feature-preview-banner").innerText(), /开始命名/);
+    assert.match(await page.locator("#assetList").innerText(), /功能测试命名完成/);
+    await page.screenshot({ path: path.join(evidence, "naming-test-preview.png"), fullPage: true });
+    await page.locator("#workView .feature-preview-banner button", { hasText: "退出测试" }).click();
+    await page.waitForFunction(() => document.getElementById("featureTestView").classList.contains("active"));
+    assert.deepEqual(await page.evaluate(() => ({ naming: assets.length, detection: detectionAssets.length })), before);
+    await page.screenshot({ path: path.join(evidence, "feature-test-page.png"), fullPage: true });
+    assert.deepEqual(errors, []);
+  } finally {
+    await app.close();
+  }
+});

@@ -81,6 +81,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.match(renderer.editionBadge, /DEV 开发版/);
     assert.deepEqual(renderer.bridgeNamespaces, [
       "app",
+      "autoStart",
       "backup",
       "credentials",
       "diagnostics",
@@ -168,6 +169,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.equal(await window.locator("#translatorProvider").inputValue(), cloudConfigured ? "cfc" : "local");
     assert.equal(await window.locator('#namingModeSelect option[value="translate:cfc"]').evaluate((option) => option.disabled), !cloudConfigured);
     assert.equal(await window.locator('#translatorProvider option[value="cfc"]').evaluate((option) => option.disabled), !cloudConfigured);
+    await window.locator(".naming-service-settings-action").click();
     await window.locator("#namingModeSelect").selectOption("translate:baidu");
     await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "baidu");
     assert.match(await window.locator("#runSelectedNaming").innerText(), /自有百度翻译/);
@@ -182,11 +184,15 @@ test("Electron development app boots with the Dev identity and an isolated rende
     await window.waitForFunction(() => document.querySelector("#apiSettingsView")?.classList.contains("active"));
     await window.locator("#backButton").click();
     await window.waitForFunction(() => document.querySelector("#workView")?.classList.contains("active"));
+    await window.locator(".naming-service-settings-action").click();
     await window.locator("#namingModeSelect").selectOption("local");
     assert.equal(await window.locator("#translatorProvider").inputValue(), "baidu");
     assert.match(await window.locator("#runSelectedNaming").innerText(), /本地知识库/);
+    await window.locator(".naming-service-settings-action").click();
     await window.locator("#namingModeSelect").selectOption("translate:local");
     await window.waitForFunction(() => document.querySelector("#translatorProvider")?.value === "local");
+    await window.locator("#translatorClose").click();
+    assert.match(await window.locator("#translatorPanel").getAttribute("class"), /collapsed/);
     await window.locator("#externalAppMenu").waitFor({ state: "visible" });
     assert.equal(await window.locator("#workView #externalAppMenu").count(), 0);
     assert.equal(await window.locator(".topbar #externalAppMenu").count(), 1);

@@ -22,7 +22,6 @@ let showProblemOnly;
 let showDetectionProblemOnly;
 let showDetectionWarningOnly;
 let toastTimer;
-let activeLexiconCategory;
 let listDisplayMode;
 let listSortMode;
 let albumSettings;
@@ -63,7 +62,6 @@ function bootstrapState() {
   showDetectionProblemOnly = false;
   showDetectionWarningOnly = false;
   toastTimer = null;
-  activeLexiconCategory = "状态";
   listDisplayMode = loadListDisplayMode();
   listSortMode = loadListSortMode();
   albumSettings = normalizeAlbumSettings();
@@ -92,6 +90,7 @@ const els = {
     detectionSettings: document.querySelector("#detectionSettingsView"),
     localImageSearch: document.querySelector("#localImageSearchView"),
     generalSettings: document.querySelector("#generalSettingsView"),
+    featureTest: document.querySelector("#featureTestView"),
     apiSettings: document.querySelector("#apiSettingsView"),
     localImageSearchSettings: document.querySelector("#localImageSearchSettingsView"),
   },
@@ -101,8 +100,6 @@ const els = {
   aiSettingsPanel: document.querySelector(".ai-panel"),
   updateAvailableButton: document.querySelector("#updateAvailableButton"),
   feedbackFormLink: document.querySelector("#feedbackFormLink"),
-  tutorialEntry: document.querySelector("#tutorialEntry"),
-  guideEntry: document.querySelector("#guideEntry"),
   workEntry: document.querySelector("#workEntry"),
   detectEntry: document.querySelector("#detectEntry"),
   localImageSearchEntry: document.querySelector("#localImageSearchEntry"),
@@ -172,6 +169,7 @@ const els = {
   assetList: document.querySelector("#assetList"),
   fileCount: document.querySelector("#fileCount"),
   namingModeSelect: document.querySelector("#namingModeSelect"),
+  namingModeMenu: document.querySelector("#namingModeMenu"),
   runSelectedNaming: document.querySelector("#runSelectedNaming"),
   stopNaming: document.querySelector("#stopNaming"),
   exportModeSelect: document.querySelector("#exportModeSelect"),

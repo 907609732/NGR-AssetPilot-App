@@ -11,6 +11,54 @@
   let updateTimer = null;
   let updateListenerCleanup = () => {};
   let controlsBound = false;
+  let historyData = null, historyLoading = false, historyError = "";
+  let historyObserver = null;
+
+  function renderHistory() {
+    document.querySelectorAll("[data-release-history]").forEach((host) => {
+      // Preserve expanded entries and scroll position while a cached list refreshes.
+      let heading = host.querySelector(".release-history-heading");
+      if (!heading) {
+        heading = document.createElement("div"); heading.className = "release-history-heading";
+        const title = document.createElement("strong"); title.textContent = "所有历史版本";
+        const retry = document.createElement("button"); retry.type = "button"; retry.className = "ghost-action"; retry.textContent = "刷新";
+        retry.addEventListener("click", () => void loadHistory());
+        heading.append(title, retry);
+        const status = document.createElement("p"); status.className = "release-history-status"; status.setAttribute("role", "status");
+        const list = document.createElement("div"); list.className = "release-history-list";
+        host.append(heading, status, list);
+      }
+      heading.querySelector("button").disabled = historyLoading;
+      host.querySelector(".release-history-status").textContent = historyLoading ? "正在加载全部历史版本…" : historyError || (historyData ? `${historyData.releases.length} 个已发布版本${historyData.stale ? ` · 暂无法联网刷新，显示 ${formatReleaseDate(historyData.fetchedAt)} 的记录` : " · 按发布时间倒序"}` : "打开设置或更新窗口时加载");
+      if (!historyData || host.dataset.fetchedAt === historyData.fetchedAt) return;
+      const list = host.querySelector(".release-history-list");
+      const expanded = new Set([...list.querySelectorAll("details[open]")].map((entry) => entry.dataset.version));
+      const scroll = list.scrollTop;
+      list.replaceChildren();
+      for (const release of historyData.releases) {
+        const entry = document.createElement("details"); entry.dataset.version = release.version;
+        entry.open = expanded.has(release.version);
+        const summary = document.createElement("summary");
+        const name = document.createElement("strong"); name.textContent = release.name || versionLabel(release.version);
+        const meta = document.createElement("span");
+        const current = String(release.version).replace(/^v/i, "") === String(updateState?.currentVersion || desktopInfo.version).replace(/^v/i, "");
+        meta.textContent = `${versionLabel(release.version)} · ${formatReleaseDate(release.date)}${release.prerelease ? " · 预发布" : ""}${current ? " · 当前版本" : ""}`;
+        const notes = document.createElement("pre"); notes.textContent = release.notes || "暂无更新说明";
+        summary.append(name, meta); entry.append(summary, notes); list.append(entry);
+      }
+      if (!historyData.releases.length) list.textContent = "暂无已发布版本";
+      list.scrollTop = scroll;
+      host.dataset.fetchedAt = historyData.fetchedAt;
+    });
+  }
+
+  async function loadHistory() {
+    if (historyLoading) return;
+    historyLoading = true; historyError = ""; renderHistory();
+    try { historyData = await NgrDesktopBridge.getReleaseHistory(); }
+    catch { historyError = "历史版本加载失败，请检查网络后点击刷新。"; }
+    finally { historyLoading = false; renderHistory(); }
+  }
 
   function formatBytes(bytes) {
     const value = Number(bytes);
@@ -176,6 +224,7 @@
     renderUpdateState();
     els.updateDialogOverlay?.classList.remove("hidden");
     els.updateDialogOverlay?.setAttribute("aria-hidden", "false");
+    void loadHistory();
   }
 
   function closeUpdateDialog() {
@@ -246,6 +295,13 @@
 
   async function initializeUpdates() {
     bindUpdateControls();
+    renderHistory();
+    const settings = document.getElementById("generalSettingsView");
+    if (settings) {
+      historyObserver = new MutationObserver(() => { if (settings.classList.contains("active")) void loadHistory(); });
+      historyObserver.observe(settings, { attributes: true, attributeFilter: ["class"] });
+      if (settings.classList.contains("active")) void loadHistory();
+    }
     desktopInfo = await NgrDesktopBridge.getInfo().catch(() => desktopInfo);
     updateState = await NgrDesktopBridge.getUpdateState().catch(() => null);
     if (!updateState) {
@@ -271,6 +327,7 @@
   }
 
   globalScope.addEventListener?.("pagehide", () => {
+    historyObserver?.disconnect();
     updateListenerCleanup();
     if (updateTimer) globalScope.clearInterval(updateTimer);
   });

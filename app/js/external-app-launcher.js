@@ -15,7 +15,16 @@
     };
   }
 
-  function createIcon(appId) {
+  function createIcon(app) {
+    const appId = app.id;
+    if (typeof app.icon === "string" && app.icon.startsWith("data:image/png;base64,")) {
+      const image = document.createElement("img");
+      image.className = "external-app-icon";
+      image.alt = "";
+      image.src = app.icon;
+      image.addEventListener("error", () => image.replaceWith(createIcon({ id: appId })), { once: true });
+      return image;
+    }
     const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     icon.setAttribute("viewBox", "0 0 24 24");
     icon.setAttribute("aria-hidden", "true");
@@ -43,7 +52,7 @@
     button.dataset.tooltip = tooltip;
     button.title = tooltip;
     button.setAttribute("aria-label", tooltip);
-    button.append(createIcon(app.id));
+    button.append(createIcon(app));
     return button;
   }
 
@@ -78,7 +87,7 @@
       availability.textContent = app.kind === "website"
         ? "网站快捷入口 · 使用默认浏览器打开"
         : app.available ? "已就绪 · 点击打开" : "路径未配置或已失效";
-      launch.append(name, availability);
+      launch.append(createIcon(app), name, availability);
       row.append(launch);
       if (app.kind !== "website") {
         const configure = document.createElement("button");

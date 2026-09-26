@@ -1,4 +1,5 @@
 import { DesktopError, errorCodeOnly } from "../shared/core.mjs";
+import { ReleaseHistory } from "./release-history.mjs";
 
 function cloneState(state) {
   return {
@@ -46,8 +47,10 @@ export class UpdaterController {
     websiteUrl = "https://ngr.lttlt.top/",
     historyUrl = "https://github.com/907609732/NGR-AssetPilot-App/releases",
     installLaunchDelayMs = 1_100,
+    historyFetch = fetch,
   } = {}) {
     this.autoUpdater = autoUpdater;
+    this.releaseHistory = new ReleaseHistory({ fetchImpl: historyFetch });
     this.enabled = Boolean(enabled && autoUpdater);
     this.channel = String(channel || "latest").trim() || "latest";
     this.feed = feed && typeof feed === "object"

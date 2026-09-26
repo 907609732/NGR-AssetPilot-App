@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.13" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.14" />
   </head>
   <body>
     <div id="app">
@@ -15,7 +15,7 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.13</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.14</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
@@ -35,8 +35,10 @@
             <p id="externalAppStatus" class="external-app-status" aria-live="polite"></p>
           </div>
         </details>
-        <button class="settings-button tutorial-button" id="tutorialEntry" type="button" aria-label="UI切图检测教程" title="UI切图检测教程">教程</button>
-        <button class="settings-button guide-button" id="guideEntry" type="button" aria-label="操作指引" title="操作指引">?</button>
+        <button class="tutorial-center-entry" id="tutorialCenterEntry" type="button" aria-label="打开使用教程" title="使用教程">
+          <span aria-hidden="true">?</span>
+          <span>使用教程</span>
+        </button>
         <button class="update-available-button hidden" id="updateAvailableButton" type="button">发现新版本</button>
         <button class="feedback-form-button" id="feedbackFormLink" type="button" aria-label="打开反馈与建议表单" title="反馈与建议">
           <span aria-hidden="true">✦</span>
@@ -75,6 +77,13 @@
             </div>
           </div>
           <div class="general-settings-grid">
+            <section class="knowledge-panel" aria-labelledby="autoStartTitle">
+              <div class="section-head compact-head">
+                <div><h2 id="autoStartTitle">开机自启动</h2><p>默认关闭。开启后，登录 Windows 时自动打开软件。</p></div>
+                <label class="keep-awake-switch"><input id="autoStartEnabled" type="checkbox" role="switch" disabled /> 开启</label>
+              </div>
+              <p id="autoStartStatus" role="status" aria-live="polite">正在读取设置…</p>
+            </section>
             <section class="knowledge-panel keep-awake-panel" aria-labelledby="keepAwakeTitle">
               <div class="section-head compact-head">
                 <div><h2 id="keepAwakeTitle">防止息屏</h2><p>默认关闭。手动开启后长期保存，重启软件自动恢复。</p></div>
@@ -97,16 +106,85 @@
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.13</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.14</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
                 <button class="ghost-action" id="websiteDownloadLink" type="button">官网下载</button>
                 <button class="ghost-action" id="historyDownloadLink" type="button">历史版本下载</button>
               </div>
+              <section class="release-history" data-release-history aria-label="所有历史版本"></section>
             </section>
             <div id="generalSettingsMigrationSlot"></div>
           </div>
+        </section>
+
+        <section class="view feature-test-view" id="featureTestView">
+          <div class="section-head feature-test-heading">
+            <div>
+              <h2>功能测试与运行状态</h2>
+              <p>使用完整隔离样本进入正式命名与检测页面，可按日常流程操作并逐张查看结果，不修改真实图片和命名记录。</p>
+            </div>
+            <span class="feature-runtime-live" id="featureRuntimeLive"><i></i> 软件运行中</span>
+          </div>
+
+          <div class="feature-runtime-grid" aria-label="软件运行状态">
+            <article><span>运行环境</span><strong id="featureRuntimeEnvironment">正在读取…</strong><small id="featureRuntimeUptime">--</small></article>
+            <article><span>当前命名服务</span><strong id="featureRuntimeNaming">正在读取…</strong><small id="featureRuntimeNamingAssets">命名图片 0 张</small></article>
+            <article><span>当前项目</span><strong id="featureRuntimeProject">正在读取…</strong><small id="featureRuntimeScheme">--</small></article>
+            <article><span>切图检测方案</span><strong id="featureRuntimeDetection">正在读取…</strong><small id="featureRuntimeDetectionAssets">检测图片 0 张</small></article>
+          </div>
+
+          <section class="knowledge-panel feature-test-control" aria-labelledby="featureTestControlTitle">
+            <div>
+              <h3 id="featureTestControlTitle">测试控制台</h3>
+              <p>“本地核心自检”不会访问网络；切换为真实服务测试后，会用“按钮_默认”调用当前命名服务一次。</p>
+            </div>
+            <label>
+              <span>命名测试方式</span>
+              <select id="featureNamingTestMode">
+                <option value="core" selected>本地核心自检（推荐）</option>
+                <option value="current">当前命名服务真实测试</option>
+              </select>
+            </label>
+            <div class="feature-test-actions">
+              <button class="primary-action" id="runAllFeatureTests" type="button">运行全部测试</button>
+              <button class="ghost-action" id="runNamingFeatureTest" type="button">测试开始命名</button>
+              <button class="ghost-action" id="runDetectionFeatureTest" type="button">测试切图检测</button>
+              <button class="danger-action hidden" id="exitFeatureTestPreview" type="button">清除测试数据</button>
+            </div>
+            <div class="feature-test-progress" aria-hidden="true"><span id="featureTestProgressBar"></span></div>
+            <p id="featureTestSummary" class="feature-test-summary" role="status" aria-live="polite">尚未运行测试</p>
+          </section>
+
+          <div class="feature-test-grid">
+            <section class="knowledge-panel feature-test-card" id="namingFeatureTestCard" data-state="idle">
+              <header><div><h3>开始命名</h3><p>检查命名规则、推荐词生成和当前服务。</p></div><span class="feature-test-badge">未测试</span></header>
+              <ol class="feature-test-steps">
+                <li id="featureNamingEnvironment" data-state="idle"><i></i><span><strong>命名环境</strong><small>等待测试</small></span></li>
+                <li id="featureNamingRules" data-state="idle"><i></i><span><strong>规则与词库</strong><small>等待测试</small></span></li>
+                <li id="featureNamingService" data-state="idle"><i></i><span><strong>命名服务</strong><small>等待测试</small></span></li>
+                <li id="featureNamingOutput" data-state="idle"><i></i><span><strong>测试名称</strong><small>等待测试</small></span></li>
+              </ol>
+              <output class="feature-test-output" id="featureNamingResult">测试结果会显示在这里。</output>
+            </section>
+
+            <section class="knowledge-panel feature-test-card" id="detectionFeatureTestCard" data-state="idle">
+              <header><div><h3>UI 切图检测</h3><p>检查图片读取、PNG 格式和异常识别。</p></div><span class="feature-test-badge">未测试</span></header>
+              <ol class="feature-test-steps">
+                <li id="featureDetectionProfile" data-state="idle"><i></i><span><strong>检测方案</strong><small>等待测试</small></span></li>
+                <li id="featureDetectionPng" data-state="idle"><i></i><span><strong>标准 PNG</strong><small>等待测试</small></span></li>
+                <li id="featureDetectionIssue" data-state="idle"><i></i><span><strong>异常图片识别</strong><small>等待测试</small></span></li>
+                <li id="featureDetectionOutput" data-state="idle"><i></i><span><strong>检测结果</strong><small>等待测试</small></span></li>
+              </ol>
+              <output class="feature-test-output" id="featureDetectionResult">测试结果会显示在这里。</output>
+            </section>
+          </div>
+
+          <section class="knowledge-panel feature-test-log-panel">
+            <div class="section-head compact-head"><div><h3>运行日志</h3><p>仅记录本页测试过程，不包含密钥和图片内容。</p></div><button class="ghost-action" id="clearFeatureTestLog" type="button">清空日志</button></div>
+            <div class="feature-test-log" id="featureTestLog"><p>等待运行测试…</p></div>
+          </section>
         </section>
 
         <section class="view api-settings-view" id="apiSettingsView">
@@ -448,7 +526,7 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.13</span><time class="version-date" datetime="2026-09-11">更新于 2026-09-11</time></h2>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.14</span><time class="version-date" datetime="2026-09-11">更新于 2026-09-11</time></h2>
             <p>配置命名规则、方案模板和项目知识库；在线服务统一在“API”页签管理。</p>
           </div>
 
@@ -680,32 +758,47 @@
               <p id="activeRuleText">当前规则：T_UI_工程名_</p>
             </div>
             <div class="toolbar-actions">
-              <label class="toolbar-select naming-mode-field">
-                <span>命名服务</span>
-                <select id="namingModeSelect" aria-label="选择命名服务">
-                  <optgroup label="翻译服务命名">
-                    <option value="translate:local">内置离线 AI 翻译</option>
-                    <option value="translate:cfc" selected>NGR 云翻译（开箱即用）</option>
-                    <option value="translate:baidu">自有百度翻译 API</option>
-                    <option value="translate:model">OpenAI 兼容文本模型</option>
-                  </optgroup>
-                  <optgroup label="其他命名方式">
-                    <option value="local">本地知识库命名</option>
-                    <option value="ai">AI 视觉命名</option>
-                  </optgroup>
-                </select>
-              </label>
-              <button id="runSelectedNaming" class="primary-action" type="button">运行 NGR 云翻译命名</button>
+              <div class="naming-service-split-action">
+                <button id="runSelectedNaming" class="primary-action naming-run-action" type="button">运行 NGR 云翻译命名</button>
+                <details id="namingModeMenu" class="compact-action-menu naming-service-menu">
+                  <summary class="naming-service-settings-action" aria-label="选择命名服务" title="选择命名服务">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </summary>
+                  <div class="compact-menu-panel naming-service-menu-panel">
+                    <strong>选择命名服务</strong>
+                    <label>
+                      <span>当前服务</span>
+                      <select id="namingModeSelect" aria-label="选择命名服务">
+                        <optgroup label="翻译服务命名">
+                          <option value="translate:local">内置离线 AI 翻译</option>
+                          <option value="translate:cfc" selected>NGR 云翻译（开箱即用）</option>
+                          <option value="translate:baidu">自有百度翻译 API</option>
+                          <option value="translate:model">OpenAI 兼容文本模型</option>
+                        </optgroup>
+                        <optgroup label="其他命名方式">
+                          <option value="local">本地知识库命名</option>
+                          <option value="ai">AI 视觉命名</option>
+                        </optgroup>
+                      </select>
+                    </label>
+                    <small>选择后自动切换，点击左侧按钮即可运行。</small>
+                  </div>
+                </details>
+              </div>
               <button id="stopNaming" class="danger-action hidden" type="button">终止命名</button>
-              <details id="exportMenu" class="compact-action-menu export-action-menu">
-                <summary class="toolbar-download-action" aria-label="打开导出菜单" title="下载命名完成的图片">
+              <div class="export-split-action">
+                <button id="exportFiles" class="toolbar-download-action" type="button" title="下载命名完成的图片">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4" />
                   </svg>
                   <span>下载命名完成的图片</span>
+                </button>
+              <details id="exportMenu" class="compact-action-menu export-action-menu">
+                <summary class="export-settings-action" aria-label="下载设置" title="下载设置">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3z"/><circle cx="12" cy="12" r="3"/></svg>
                 </summary>
                 <div class="compact-menu-panel export-menu-panel">
-                  <strong>导出命名图片</strong>
+                  <strong>下载设置</strong>
                   <label>
                     <span>导出方式</span>
                     <select id="exportModeSelect">
@@ -713,9 +806,10 @@
                       <option value="zip">ZIP 压缩包</option>
                     </select>
                   </label>
-                  <button id="exportFiles" class="success-action" type="button">立即导出</button>
+                  <small>自动记住选择，点击左侧按钮即可下载。</small>
                 </div>
               </details>
+              </div>
             </div>
           </div>
 
@@ -772,10 +866,10 @@
               <span>前缀名</span>
               <div id="workBasePrefix" class="prefix-picker-host"></div>
             </label>
-            <label>
-              <span>当前界面工程名</span>
+            <div class="project-folder-field">
+              <div class="project-folder-heading"><label for="workProjectName">当前界面工程名</label><button id="openProjectFolder" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v12H3z"/></svg>打开文件夹</button></div>
               <input id="workProjectName" type="text" placeholder="请输入本套界面的工程名" />
-            </label>
+            </div>
             <label>
               <span>当前界面命名</span>
               <input id="workViewName" type="text" placeholder="例如：Home" />
@@ -910,6 +1004,7 @@
             <button id="detectionProblemFilter" class="ghost-action" type="button" aria-pressed="false">只看问题图片</button>
             <button id="detectionWarningFilter" class="ghost-action" type="button" aria-pressed="false">只看警告图片</button>
             <button id="clearDetectionAssets" class="danger-action" type="button">清空检测列表</button>
+            <button id="removeDetectionSelected" class="danger-action" type="button" disabled>删除选中图片</button>
           </div>
 
           <div id="detectionRulesPanel" class="detection-rules-panel hidden">
@@ -923,6 +1018,8 @@
           <div class="asset-list detection-list-wrap">
             <div class="list-head">
               <strong>检测结果</strong>
+              <label class="select-all-control"><input id="selectVisibleDetection" type="checkbox" />全选当前列表</label>
+              <span id="selectedDetectionCount">已选 0 张</span>
               <span id="detectionCount">0 张</span>
             </div>
             <div id="detectionList" class="asset-list-body empty-state">请先上传需要检测的切图文件夹</div>
@@ -1122,8 +1219,30 @@
         </section>
       </main>
 
-      <aside class="translator-panel collapsed" id="translatorPanel" role="dialog" aria-labelledby="translatorTitle">
+      <nav class="right-tools" aria-label="命名辅助工具">
+        <button id="lexiconToggle" type="button" aria-controls="lexiconPanel" aria-expanded="false">词库</button>
         <button class="translator-toggle" id="translatorToggle" type="button" aria-controls="translatorPanel" aria-expanded="false">翻译</button>
+      </nav>
+      <aside id="lexiconPanel" class="lexicon-panel" role="dialog" aria-modal="false" aria-labelledby="lexiconTitle" hidden>
+        <header class="lexicon-panel-head">
+          <div><strong id="lexiconTitle">命名词库</strong><p>按分类查词 · 中文和英文都能搜</p></div>
+          <button id="lexiconClose" class="ghost-action" type="button" aria-label="收起词库">×</button>
+        </header>
+        <section class="lexicon-target" aria-label="当前命名图片">
+          <img id="lexiconTargetImage" alt="当前图片预览" hidden />
+          <div><span id="lexiconTargetName">请在命名页面选择图片</span><strong id="lexiconTargetValue"></strong></div>
+        </section>
+        <div class="lexicon-search-row">
+          <input id="lexiconSearch" type="search" placeholder="搜索中文 / English，例如：按钮" aria-label="搜索词库" autocomplete="off" />
+          <button id="lexiconClear" class="ghost-action" type="button" aria-label="清空词库搜索" disabled>清空</button>
+        </div>
+        <div class="lexicon-summary"><span id="lexiconResultCount" role="status" aria-live="polite"></span><span>点击加入 · 再点移除</span></div>
+        <div class="lexicon-browser">
+          <nav id="lexiconCategories" aria-label="词库分类"></nav>
+          <div id="lexiconResults" class="lexicon-results" aria-label="词库搜索结果"></div>
+        </div>
+      </aside>
+      <aside class="translator-panel collapsed" id="translatorPanel" role="dialog" aria-labelledby="translatorTitle">
         <div class="translator-body">
           <div class="translator-head">
             <div class="translator-drag-handle" id="translatorDragHandle" role="button" tabindex="0" aria-label="拖动翻译窗口，可使用方向键移动" title="按住拖动窗口">
@@ -1227,6 +1346,7 @@
             </div>
             <button class="settings-button" id="updateDialogClose" type="button" aria-label="关闭更新弹窗">×</button>
           </div>
+          <div class="update-dialog-body" tabindex="0" aria-label="版本信息和历史记录">
           <dl class="update-version-grid">
             <div><dt>当前版本</dt><dd id="updateCurrentVersion">—</dd></div>
             <div><dt>最新版本</dt><dd id="updateLatestVersion">—</dd></div>
@@ -1237,6 +1357,9 @@
             <strong>新版介绍</strong>
             <pre id="updateReleaseNotes">暂无更新说明</pre>
           </div>
+          <section class="release-history" data-release-history aria-label="所有历史版本"></section>
+          </div>
+          <footer class="update-dialog-footer">
           <div class="update-progress-wrap hidden" id="updateProgressWrap" aria-live="polite">
             <div class="update-progress-head">
               <div class="update-progress-orb" aria-hidden="true"><span>↻</span></div>
@@ -1264,6 +1387,7 @@
             <button class="primary-action" id="updatePrimaryAction" type="button">下载更新</button>
             <button class="ghost-action" id="updateWebsiteAction" type="button">前往官网</button>
           </div>
+          </footer>
         </section>
       </div>
 
@@ -1464,31 +1588,66 @@
         <span id="toastMessage"></span>
         <button id="toastAction" class="toast-action hidden" type="button"></button>
       </div>
+
+      <div class="modal-overlay hidden" id="tutorialCenterOverlay" aria-hidden="true">
+        <section class="app-modal tutorial-center-dialog" role="dialog" aria-modal="true" aria-labelledby="tutorialCenterTitle">
+          <header class="tutorial-center-head">
+            <div>
+              <div class="tutorial-center-eyebrow"><span id="tutorialCenterVersion">适用于当前版本</span><span>软件内置教程</span></div>
+              <h2 id="tutorialCenterTitle">NGR AssetPilot 使用教程</h2>
+              <p>选择你要使用的功能，跟着步骤操作即可。</p>
+            </div>
+            <button class="settings-button" id="tutorialCenterClose" type="button" aria-label="关闭使用教程" title="关闭">×</button>
+          </header>
+          <div class="tutorial-center-toolbar">
+            <label class="tutorial-center-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="tutorialCenterSearch" type="search" placeholder="搜索功能，例如：批量命名、翻译、防止息屏" autocomplete="off" />
+            </label>
+            <button class="primary-action" id="tutorialCenterQuickTour" type="button">开始新手引导</button>
+          </div>
+          <div class="tutorial-center-layout">
+            <nav class="tutorial-center-nav" id="tutorialCenterNav" aria-label="教程模块"></nav>
+            <article class="tutorial-center-content" id="tutorialCenterContent" tabindex="0"></article>
+          </div>
+          <footer class="tutorial-center-footer">
+            <span id="tutorialCenterStatus" role="status" aria-live="polite"></span>
+            <span>教程随软件版本一起更新，无需打开浏览器。</span>
+          </footer>
+        </section>
+      </div>
     </div>
 
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.13"></script>
-    <script src="historical-knowledge.js?v=V3.0.13"></script>
-    <script src="js/config.js?v=V3.0.13"></script>
-    <script src="js/prefix-library.js?v=V3.0.13"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.13"></script>
-    <script src="js/keep-awake.js?v=V3.0.13"></script>
-    <script src="js/network-diagnostics.js?v=V3.0.13"></script>
-    <script src="js/external-app-launcher.js?v=V3.0.13"></script>
-    <script src="js/updates.js?v=V3.0.13"></script>
-    <script src="js/workspace-backup.js?v=V3.0.13"></script>
-    <script src="js/state-dom.js?v=V3.0.13"></script>
-    <script src="js/local-image-browser.js?v=V3.0.13"></script>
-    <script src="js/local-image-search.js?v=V3.0.13"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.13"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.13"></script>
-    <script src="js/ai-workflow.js?v=V3.0.13"></script>
-    <script src="js/assets-detection.js?v=V3.0.13"></script>
-    <script src="js/rendering.js?v=V3.0.13"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.13"></script>
-    <script src="js/export-template-storage.js?v=V3.0.13"></script>
-    <script src="js/toast.js?v=V3.0.13"></script>
-    <script src="js/workspace-storage.js?v=V3.0.13"></script>
-    <script src="js/workspace-migration.js?v=V3.0.13"></script>
-    <script src="js/main.js?v=V3.0.13"></script>
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.14"></script>
+    <script src="historical-knowledge.js?v=V3.0.14"></script>
+    <script src="js/config.js?v=V3.0.14"></script>
+    <script src="js/prefix-library.js?v=V3.0.14"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.14"></script>
+    <script src="js/keep-awake.js?v=V3.0.14"></script>
+    <script src="js/auto-start.js?v=V3.0.14"></script>
+    <script src="js/network-diagnostics.js?v=V3.0.14"></script>
+    <script src="js/external-app-launcher.js?v=V3.0.14"></script>
+    <script src="js/updates.js?v=V3.0.14"></script>
+    <script src="js/workspace-backup.js?v=V3.0.14"></script>
+    <script src="js/state-dom.js?v=V3.0.14"></script>
+    <script src="js/local-image-browser.js?v=V3.0.14"></script>
+    <script src="js/local-image-search.js?v=V3.0.14"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.14"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.14"></script>
+    <script src="js/ai-workflow.js?v=V3.0.14"></script>
+    <script src="js/assets-detection.js?v=V3.0.14"></script>
+    <script src="js/rendering.js?v=V3.0.14"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.14"></script>
+    <script src="js/lexicon-data.js?v=V3.0.14"></script>
+    <script src="js/export-template-storage.js?v=V3.0.14"></script>
+    <script src="js/toast.js?v=V3.0.14"></script>
+    <script src="js/workspace-storage.js?v=V3.0.14"></script>
+    <script src="js/workspace-migration.js?v=V3.0.14"></script>
+    <script src="js/feature-tests.js?v=V3.0.14"></script>
+    <script src="js/main.js?v=V3.0.14"></script>
+    <script src="js/selection-actions.js?v=V3.0.14"></script>
+    <script src="js/lexicon-panel.js?v=V3.0.14"></script>
+    <script src="js/arthub-folders.js?v=V3.0.14"></script>
+    <script src="js/tutorial-center.js?v=V3.0.14"></script>
   </body>
 </html>

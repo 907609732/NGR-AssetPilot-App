@@ -32,10 +32,10 @@ test("桌面依赖版本全部精确锁定", () => {
   assert.equal(packageJson.devDependencies.electron, "43.4.1");
   assert.equal(packageJson.devDependencies["electron-builder"], "26.15.3");
   assert.equal(packageJson.dependencies["electron-updater"], "6.8.9");
-  assert.equal(packageJson.dependencies["@huggingface/transformers"], "4.2.0");
-  assert.equal(packageJson.dependencies["onnxruntime-node"], "1.24.3");
-  assert.equal(packageJson.dependencies.sharp, "0.35.3");
-  assert.equal(packageJson.dependencies["adm-zip"], "0.6.0");
+  assert.equal(packageJson.dependencies["@huggingface/transformers"], "4.3.0");
+  assert.equal(packageJson.dependencies["onnxruntime-node"], "1.30.0");
+  assert.equal(packageJson.dependencies.sharp, "0.35.4");
+  assert.equal(packageJson.dependencies["adm-zip"], "0.6.1");
   assert.equal(packageJson.dependencies["electron-log"], "5.4.4");
   assert.equal(packageJson.dependencies.fflate, "0.8.3");
   assert.equal(packageJson.devDependencies["@playwright/test"], "1.62.1");
@@ -87,7 +87,9 @@ test("应用版本、界面标识和静态资源缓存版本保持一致", () =>
   assert.deepEqual([...new Set(visibleVersions)], [packageJson.version]);
 
   const cacheVersions = [...appIndex.matchAll(/[?&]v=V(\d+\.\d+\.\d+)/g)].map((match) => match[1]);
-  assert.equal(cacheVersions.length, 25);
+  const localAssets = [...appIndex.matchAll(/(?:src|href)="([^"?:]+\.(?:js|css)(?:\?[^\"]*)?)"/g)];
+  assert.ok(localAssets.length > 0);
+  assert.equal(cacheVersions.length, localAssets.length);
   assert.deepEqual([...new Set(cacheVersions)], [packageJson.version]);
 });
 
@@ -110,7 +112,7 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
   assert.equal(prod.nsis.oneClick, false);
   assert.equal(prod.nsis.allowToChangeInstallationDirectory, true);
   assert.equal(prod.nsis.perMachine, false);
-  assert.equal(prod.win.verifyUpdateCodeSignature, false);
+  assert.equal(prod.win.verifyUpdateCodeSignature, !releasePolicyFor(packageJson.version).unsigned);
   assert.equal(dev.win.verifyUpdateCodeSignature, false);
   assert.deepEqual(prod.win.target, [{ target: "nsis", arch: ["x64"] }]);
   assert.deepEqual(dev.win.target.map(({ target }) => target), ["nsis", "portable"]);

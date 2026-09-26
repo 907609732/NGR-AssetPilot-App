@@ -30,17 +30,17 @@ function buildLexiconCategories() {
   const knowledge = parseKnowledge();
   const historicalMatch = getHistoricalModuleMatch();
   const dynamicCategories = [
-    { title: "当前组件词库", terms: knowledge.componentTerms },
-    { title: "当前状态词库", terms: knowledge.stateTerms },
-    { title: "历史高频", terms: getHistoricalCommonTerms() },
+    { title: "当前方案页面词", terms: knowledge.pageTerms },
+    { title: "当前方案组件词", terms: knowledge.componentTerms },
+    { title: "当前方案状态词", terms: knowledge.stateTerms },
+    { title: "当前工程历史", terms: (historicalMatch?.terms || []).map((item) => item.word) },
+    { title: "历史高频", terms: (getHistoricalKnowledge()?.commonTerms || []).map((item) => item.word) },
   ];
-  if (historicalMatch) dynamicCategories.unshift({ title: "当前工程历史", terms: historicalMatch.terms.map((item) => item.word) });
   return [...lexiconCategories, ...dynamicCategories]
     .map((category) => ({
       title: category.title,
-      terms: uniqueCleanTerms(category.terms).slice(0, 32),
-    }))
-    .filter((category) => category.terms.length);
+      terms: uniqueCleanTerms(category.terms),
+    }));
 }
 
 function uniqueCleanTerms(terms) {

@@ -94,6 +94,7 @@ async function runTranslateNaming() {
 }
 
 async function runSelectedNaming() {
+  closeCompactActionMenu(els.namingModeMenu);
   await namingModeProviderSync.catch(() => false);
   const mode = els.namingModeSelect.value || "translate";
   try {

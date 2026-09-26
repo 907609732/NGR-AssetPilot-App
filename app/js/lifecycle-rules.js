@@ -31,6 +31,7 @@ function init() {
   initializeWorkspaceMigration();
   void initLocalImageSearch();
   void window.NgrNetworkDiagnostics?.init();
+  void window.NgrFeatureTests?.init();
   void window.NgrExternalAppLauncher?.init();
   void window.initializeUpdates();
 }
@@ -58,6 +59,7 @@ function initializeSettingsNavigation() {
     ["detectionSettings", "切图检测"],
     ["localImageSearchSettings", "本地搜图"],
     ["apiSettings", "API"],
+    ["featureTest", "功能测试"],
   ];
   for (const [viewName] of settingsViews) {
     const view = els.views[viewName];
@@ -255,8 +257,6 @@ function protectEditableShortcuts(root = document) {
 }
 
 function bindNavigation() {
-  els.tutorialEntry.addEventListener("click", openDetectionTutorial);
-  els.guideEntry.addEventListener("click", startGuideTour);
   els.rulesEntry.addEventListener("click", openContextSettings);
   els.workEntry.addEventListener("click", () => showView("work"));
   els.detectEntry.addEventListener("click", () => showView("detect"));
@@ -289,11 +289,12 @@ function bindNavigation() {
 }
 
 function showView(name) {
+  if (window.NgrFeatureTests?.shouldExitPreview?.(name)) window.NgrFeatureTests.exitPreview({ navigate: false });
   currentViewName = name;
   Object.entries(els.views).forEach(([key, node]) => node.classList.toggle("active", key === name));
   els.backButton.classList.toggle("hidden", name === "home");
   els.feedbackFormLink?.classList.toggle("hidden", name !== "home");
-  const settingsViews = new Set(["rules", "detectionSettings", "generalSettings", "localImageSearchSettings", "apiSettings"]);
+  const settingsViews = new Set(["rules", "detectionSettings", "generalSettings", "localImageSearchSettings", "apiSettings", "featureTest"]);
   els.rulesEntry.classList.toggle("hidden", settingsViews.has(name));
   document.querySelectorAll("[data-settings-view]").forEach((button) => {
     const active = button.dataset.settingsView === name;
@@ -312,6 +313,7 @@ function showView(name) {
     generalSettings: "管理软件版本、官方下载安装入口与工作区迁移备份。",
     localImageSearchSettings: "管理本地 AI 模型与只读图库索引。",
     apiSettings: "统一配置视觉命名、百度翻译和 OpenAI 兼容服务。",
+    featureTest: "检查开始命名、UI 切图检测和软件实时运行状态。",
   };
   els.pageHint.textContent = hints[name];
   if (name === "localImageSearch") globalScope.showLocalImageSearchGuide?.();
@@ -334,7 +336,7 @@ function openContextSettings() {
 }
 
 function navigateBack() {
-  if (["rules", "detectionSettings", "generalSettings", "localImageSearchSettings", "apiSettings"].includes(currentViewName)) {
+  if (["rules", "detectionSettings", "generalSettings", "localImageSearchSettings", "apiSettings", "featureTest"].includes(currentViewName)) {
     showView(settingsReturnView || "home");
     return;
   }
@@ -428,7 +430,7 @@ const guideSteps = [
     view: "work",
     selector: ".work-toolbar .toolbar-actions",
     title: "运行命名",
-    text: "先选择命名服务，再点击运行按钮。翻译命名可直接选择内置离线、NGR 云翻译、自有百度或 OpenAI 兼容模型，也支持本地知识库和 AI 视觉命名。",
+    text: "点击运行按钮可直接使用当前服务命名；点击按钮右侧的设置图标可切换内置离线、NGR 云翻译、自有百度、OpenAI 兼容模型、本地知识库或 AI 视觉命名。",
   },
   {
     view: "work",
@@ -510,6 +512,12 @@ function closeGuideTour() {
   els.guideOverlay.classList.add("hidden");
   els.guideOverlay.setAttribute("aria-hidden", "true");
 }
+
+window.NgrTutorialActions = {
+  startGuideTour,
+  openDetectionTutorial,
+  showView,
+};
 
 function bindRules() {
   [els.projectConfigName, els.projectConfigDescription, els.schemeName, els.projectName, els.separator, els.tags, els.pageTerms, els.componentTerms, els.stateTerms, els.filenameRules, els.contextDocs, els.aiPromptText].forEach((input) => {

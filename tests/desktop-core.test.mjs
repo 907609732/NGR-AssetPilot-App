@@ -53,9 +53,15 @@ test("external app registry detects desktop apps and opens the fixed NGR image-s
     const opened = [];
     const openedUrls = [];
     let selectedPath = customPath;
+    const icon = "data:image/png;base64,dGVzdA==";
+    const iconPaths = [];
     const registry = new ExternalAppRegistry({
       userDataPath,
       artHubCandidates: [artHubPath],
+      getFileIcon: async (filePath) => {
+        iconPaths.push(filePath);
+        return { isEmpty: () => false, toDataURL: () => icon };
+      },
       figmaCandidates: [figmaPath],
       getWindow: () => null,
       dialog: {
@@ -68,8 +74,8 @@ test("external app registry detects desktop apps and opens the fixed NGR image-s
     });
     const initialized = await registry.initialize();
     assert.deepEqual(initialized.apps, [
-      { id: "arthub", name: "ArtHub", builtin: true, configured: true, available: true },
-      { id: "figma", name: "Figma", builtin: true, configured: true, available: true },
+      { id: "arthub", name: "ArtHub", builtin: true, configured: true, available: true, icon },
+      { id: "figma", name: "Figma", builtin: true, configured: true, available: true, icon },
       { id: "ngr-online-ai-search", name: "NGR在线AI搜图", builtin: true, configured: true, available: true, kind: "website" },
     ]);
     assert.doesNotMatch(JSON.stringify(initialized), /ArtHub\.exe/);
@@ -92,6 +98,8 @@ test("external app registry detects desktop apps and opens the fixed NGR image-s
     const custom = added.apps.find((app) => !app.builtin);
     assert.equal(custom.name, "Uploader");
     assert.equal(custom.available, true);
+    assert.equal(custom.icon, icon);
+    assert.deepEqual([...iconPaths].sort(), [artHubPath, figmaPath, customPath].sort());
     assert.doesNotMatch(JSON.stringify(added), /Uploader\.exe/);
     await registry.launch({ appId: custom.id });
     assert.deepEqual(opened, [artHubPath, figmaPath, customPath]);
@@ -186,6 +194,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
     module.exports,
   );
   assert.deepEqual(Object.keys(exposed), [
+    "autoStart",
     "keepAwake",
     "environment",
     "credentials",

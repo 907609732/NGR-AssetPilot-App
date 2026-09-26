@@ -66,7 +66,9 @@ export function registerDesktopIpc({
   environmentInfo,
   localImageSearch,
   externalApps,
+  artHubFolders,
   keepAwake,
+  autoStart,
   runtimeLogger = null,
 }) {
   const registered = [];
@@ -110,6 +112,8 @@ export function registerDesktopIpc({
 
   handle(channels.environmentGetInfo, async () => environmentInfo());
   handle(channels.keepAwakeGet, async () => keepAwake.getState());
+  handle(channels.autoStartGet, async () => autoStart.getState());
+  handle(channels.autoStartSet, async (_event, request) => autoStart.setSettings(request));
   handle(channels.keepAwakeSet, async (_event, request) => keepAwake.setSettings(request));
   handle(channels.credentialsGetStatus, async () => credentialStore.getStatus());
   handle(channels.providersList, async () => providerRegistry.list());
@@ -159,6 +163,7 @@ export function registerDesktopIpc({
   handle(channels.backupRollbackApply, async (event, payload) => backupService.rollbackApply(payload, event.sender.id));
   handle(channels.backupFinalizeApply, async (event, payload) => backupService.finalizeApply(payload, event.sender.id));
   handle(channels.updaterGetState, async () => updater.getState());
+  handle(channels.updaterHistory, async () => updater.releaseHistory.list());
   handle(channels.updaterCheck, async () => updater.check());
   handle(channels.updaterDownload, async () => updater.download());
   const disposeUpdaterSubscription = typeof updater.subscribe === "function"
@@ -178,6 +183,10 @@ export function registerDesktopIpc({
     return { opened: true };
   });
   handle(channels.externalAppsList, async () => externalApps.list());
+  handle(channels.artHubFoldersStatus, async () => artHubFolders.status());
+  handle(channels.artHubFoldersConfigure, async (_event, payload) => artHubFolders.configure(payload));
+  handle(channels.artHubFoldersSearch, async (_event, payload) => artHubFolders.search(payload));
+  handle(channels.artHubFoldersOpen, async (_event, payload) => artHubFolders.open(payload));
   handle(channels.externalAppsChoose, async (_event, payload) => externalApps.choose(payload));
   handle(channels.externalAppsRemove, async (_event, payload) => externalApps.remove(payload));
   handle(channels.externalAppsLaunch, async (_event, payload) => externalApps.launch(payload));

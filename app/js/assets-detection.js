@@ -45,7 +45,8 @@ function syncBatchOperationMode() {
 }
 
 function removeSelectedAssets() {
-  const targetIds = new Set(assets.filter((asset) => asset.checked || asset.id === selectedId).map((asset) => asset.id));
+  const checked = assets.filter((asset) => asset.checked);
+  const targetIds = new Set((checked.length ? checked : assets.filter((asset) => asset.id === selectedId)).map((asset) => asset.id));
   if (!targetIds.size) return;
   assets.forEach((asset) => {
     if (targetIds.has(asset.id)) revokeAssetPreviewUrl(asset);
@@ -519,22 +520,21 @@ async function fileToAsset(file) {
     customBasePrefix: "",
     customProjectName: "",
     customViewName: "",
-    lexiconOpen: false,
     namingStatus: "idle",
     statusMessage: "",
   };
 }
 
-async function fileToDetectionAsset(file) {
+async function fileToDetectionAsset(file, options = {}) {
   const url = URL.createObjectURL(file);
-  const dimensions = await readImageDimensions(url).catch(() => ({ width: 0, height: 0 }));
+  const dimensions = options.dimensions || await readImageDimensions(url).catch(() => ({ width: 0, height: 0 }));
   URL.revokeObjectURL(url);
   const formatValidation = await validateDetectionFormat(file);
-  const profile = getActiveDetectionProfile();
+  const profile = options.profile ? normalizeDetectionProfile(options.profile) : getActiveDetectionProfile();
   const result = mergeDetectionValidation(
     validateDetectionDimensions(dimensions, profile),
     formatValidation,
-    validateDetectionFileConstraints(file, profile),
+    validateDetectionFileConstraints(options.fileSize == null ? file : { size: options.fileSize }, profile),
   );
   const duplicateConfig = getDuplicateSensitivityConfig(profile.duplicateSensitivity);
   const fingerprint = duplicateConfig.disabled ? null : await imageFileToFingerprint(file).catch(() => null);
@@ -550,6 +550,8 @@ async function fileToDetectionAsset(file) {
     fingerprint,
     detectedFormat: formatValidation.detectedFormat,
     formatMessages: formatValidation.messages,
+    checked: false,
+    similarNames: [],
     ...result,
   };
 }
@@ -822,6 +824,20 @@ function clearSimilarResourceWarnings() {
     asset.warnings = baseWarnings;
     asset.hasWarning = Boolean(asset.warnings.length);
   });
+}
+
+function getVisibleDetectionAssets() {
+  return detectionAssets.filter((asset) => showDetectionProblemOnly ? asset.hasIssue : showDetectionWarningOnly ? asset.hasWarning && !asset.hasIssue : true);
+}
+
+function removeSelectedDetectionAssets() {
+  const selected = detectionAssets.filter((asset) => asset.checked);
+  if (!selected.length) return;
+  selected.forEach(revokeAssetPreviewUrl);
+  detectionAssets = detectionAssets.filter((asset) => !asset.checked);
+  detectionRenderLimit = DETECTION_RENDER_BATCH_SIZE;
+  renderDetectionList();
+  showToast("已删除 " + selected.length + " 张选中的图片");
 }
 
 function clearDetectionAssetList() {

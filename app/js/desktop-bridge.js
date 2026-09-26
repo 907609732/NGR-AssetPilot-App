@@ -273,6 +273,10 @@
   }
 
   const externalApps = Object.freeze({
+    folderStatus: () => invoke("externalApps.folderStatus"),
+    configureFolders: (request) => invoke("externalApps.configureFolders", request),
+    searchFolders: (request) => invoke("externalApps.searchFolders", request),
+    openFolder: (request) => invoke("externalApps.openFolder", request),
     isAvailable: () => hasCapability("externalApps.list"),
     list: () => invoke("externalApps.list"),
     choose: (request) => invoke("externalApps.choose", request),
@@ -359,6 +363,7 @@
     rollbackBackupApply,
     finalizeBackupApply,
     getUpdateState,
+    getReleaseHistory: () => invoke("updater.getHistory"),
     checkForUpdates,
     downloadUpdate,
     onUpdateStateChanged,

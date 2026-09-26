@@ -17,13 +17,14 @@ const BUILTIN_APPS = Object.freeze([
 const BUILTIN_APP_IDS = new Set(BUILTIN_APPS.map(({ id }) => id));
 const MAX_APPS = 20;
 
-function publicEntry(entry, available) {
+function publicEntry(entry, available, icon = "") {
   return Object.freeze({
     id: entry.id,
     name: entry.name,
     builtin: entry.builtin === true,
     configured: Boolean(entry.executablePath),
     available,
+    icon,
   });
 }
 
@@ -82,10 +83,12 @@ function validateId(payload) {
 }
 
 export class ExternalAppRegistry {
-  constructor({ userDataPath, dialog, shell, getWindow, artHubCandidates = null, figmaCandidates = null }) {
+  constructor({ userDataPath, dialog, shell, getWindow, getFileIcon = null, artHubCandidates = null, figmaCandidates = null }) {
     this.dialog = dialog;
     this.shell = shell;
     this.getWindow = getWindow;
+    this.getFileIcon = getFileIcon;
+    this.iconCache = new Map();
     this.storePath = path.join(userDataPath, "external-apps.json");
     this.entries = [];
     this.artHubCandidates = artHubCandidates || defaultArtHubCandidates();
@@ -158,7 +161,22 @@ export class ExternalAppRegistry {
 
   async list() {
     const applications = await Promise.all(
-      this.entries.map(async (entry) => publicEntry(entry, await isLaunchableExecutable(entry.executablePath))),
+      this.entries.map(async (entry) => {
+        const available = await isLaunchableExecutable(entry.executablePath);
+        let icon = "";
+        if (available && this.getFileIcon) {
+          try {
+            const stat = await lstat(entry.executablePath);
+            const key = `${entry.executablePath}:${stat.size}:${stat.mtimeMs}`;
+            if (!this.iconCache.has(key)) {
+              const image = await this.getFileIcon(entry.executablePath, { size: "normal" });
+              if (!image.isEmpty()) this.iconCache.set(key, image.toDataURL());
+            }
+            icon = this.iconCache.get(key) || "";
+          } catch { /* A missing icon must not prevent launching an application. */ }
+        }
+        return publicEntry(entry, available, icon);
+      }),
     );
     const builtinApplicationCount = applications.filter((entry) => entry.builtin).length;
     return {

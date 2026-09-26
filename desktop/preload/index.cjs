@@ -8,6 +8,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 const channels = Object.freeze({
   environmentGetInfo: "ngr:environment:get-info",
   keepAwakeGet: "ngr:keep-awake:get",
+  autoStartGet: "ngr:auto-start:get",
+  autoStartSet: "ngr:auto-start:set",
   keepAwakeSet: "ngr:keep-awake:set",
   credentialsGetStatus: "ngr:credentials:get-status",
   providersList: "ngr:providers:list",
@@ -48,9 +50,14 @@ const channels = Object.freeze({
   updaterCheck: "ngr:updater:check",
   updaterDownload: "ngr:updater:download",
   updaterGetState: "ngr:updater:get-state",
+  updaterHistory: "ngr:updater:history",
   updaterStateChanged: "ngr:updater:state-changed",
   shellOpenExternal: "ngr:shell:open-external",
   externalAppsList: "ngr:external-apps:list",
+  artHubFoldersStatus: "ngr:arthub-folders:status",
+  artHubFoldersConfigure: "ngr:arthub-folders:configure",
+  artHubFoldersSearch: "ngr:arthub-folders:search",
+  artHubFoldersOpen: "ngr:arthub-folders:open",
   externalAppsChoose: "ngr:external-apps:choose",
   externalAppsRemove: "ngr:external-apps:remove",
   externalAppsLaunch: "ngr:external-apps:launch",
@@ -92,6 +99,10 @@ function deepFreeze(value) {
 }
 
 const api = deepFreeze({
+  autoStart: {
+    getState: () => invoke(channels.autoStartGet),
+    setSettings: (request) => invoke(channels.autoStartSet, request),
+  },
   keepAwake: {
     getState: () => invoke(channels.keepAwakeGet),
     setSettings: (request) => invoke(channels.keepAwakeSet, request),
@@ -158,6 +169,7 @@ const api = deepFreeze({
     check: () => invoke(channels.updaterCheck),
     download: () => invoke(channels.updaterDownload),
     getState: () => invoke(channels.updaterGetState),
+    getHistory: () => invoke(channels.updaterHistory),
     onStateChanged(callback) {
       if (typeof callback !== "function") throw new TypeError("callback must be a function");
       const listener = (_event, state) => callback(state);
@@ -173,6 +185,10 @@ const api = deepFreeze({
       ),
   },
   externalApps: {
+    folderStatus: () => invoke(channels.artHubFoldersStatus),
+    configureFolders: (request) => invoke(channels.artHubFoldersConfigure, request),
+    searchFolders: (request) => invoke(channels.artHubFoldersSearch, request),
+    openFolder: (request) => invoke(channels.artHubFoldersOpen, request),
     list: () => invoke(channels.externalAppsList),
     choose: (request) => invoke(channels.externalAppsChoose, request),
     remove: (request) => invoke(channels.externalAppsRemove, request),

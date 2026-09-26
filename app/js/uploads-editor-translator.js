@@ -46,7 +46,7 @@ function bindUploads() {
 }
 
 function bindCompactActionMenus() {
-  const menus = [els.uploadSourceMenu, els.exportMenu].filter(Boolean);
+  const menus = [els.uploadSourceMenu, els.namingModeMenu, els.exportMenu].filter(Boolean);
   menus.forEach((menu) => {
     menu.addEventListener("toggle", () => {
       if (!menu.open) return;
@@ -357,6 +357,7 @@ async function ensureTranslationProviderReady(options = {}) {
 }
 
 function openTranslatorPanel(options = {}) {
+  window.NgrLexiconPanel?.close({ restoreFocus: false });
   const shouldFocus = options.focusInput !== false;
   els.translatorPanel.classList.remove("collapsed");
   els.translatorToggle.setAttribute("aria-expanded", "true");
@@ -366,11 +367,11 @@ function openTranslatorPanel(options = {}) {
   });
 }
 
-function closeTranslatorPanel() {
+function closeTranslatorPanel(options = {}) {
   finishTranslatorDrag();
   els.translatorPanel.classList.add("collapsed");
   els.translatorToggle.setAttribute("aria-expanded", "false");
-  requestAnimationFrame(() => els.translatorToggle.focus());
+  if (options.restoreFocus !== false) requestAnimationFrame(() => els.translatorToggle.focus());
 }
 
 function bindTranslatorDragging() {
@@ -687,7 +688,11 @@ function readEntryFiles(entry) {
 }
 
 function bindEditor() {
-  els.namingModeSelect.addEventListener("change", handleNamingModeChange);
+  els.namingModeSelect.addEventListener("change", () => {
+    handleNamingModeChange();
+    closeCompactActionMenu(els.namingModeMenu);
+    els.runSelectedNaming.focus({ preventScroll: true });
+  });
   els.runSelectedNaming.addEventListener("click", runSelectedNaming);
   els.stopNaming.addEventListener("click", stopNaming);
   els.newNamingSession.addEventListener("click", createNamingSession);
@@ -697,6 +702,18 @@ function bindEditor() {
   els.problemFilter.addEventListener("click", toggleProblemFilter);
   els.removeSelected.addEventListener("click", removeSelectedAssets);
   els.exportFiles.addEventListener("click", exportRenamedFiles);
+  const exportPreferenceKey = "ngr-export-mode";
+  els.exportModeSelect.value = localStorage.getItem(exportPreferenceKey) === "zip" ? "zip" : "folder";
+  const updateExportHint = () => {
+    els.exportFiles.title = `下载命名完成的图片 · ${els.exportModeSelect.value === "zip" ? "ZIP 压缩包" : "工程文件夹"}`;
+  };
+  updateExportHint();
+  els.exportModeSelect.addEventListener("change", () => {
+    localStorage.setItem(exportPreferenceKey, els.exportModeSelect.value);
+    updateExportHint();
+    closeCompactActionMenu(els.exportMenu);
+    els.exportFiles.focus({ preventScroll: true });
+  });
   els.listDisplayModeSelect.addEventListener("change", () => {
     listDisplayMode = normalizeListDisplayMode(els.listDisplayModeSelect.value);
     albumPage = 1;

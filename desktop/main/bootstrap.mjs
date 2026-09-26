@@ -9,6 +9,7 @@ import { BackupFileService } from "../services/backup-files.mjs";
 import { CredentialStore } from "../services/credential-store.mjs";
 import { DirectoryTokenStore } from "../services/directory-tokens.mjs";
 import { ExternalAppRegistry } from "../services/external-app-registry.mjs";
+import { ArtHubFolders } from "../services/arthub-folders.mjs";
 import { NetworkClient } from "../services/network-client.mjs";
 import { NetworkDiagnosticsService } from "../services/network-diagnostics-service.mjs";
 import { OfflineTranslationService } from "../services/offline-translation/service.mjs";
@@ -19,6 +20,7 @@ import { LocalImageSearchController } from "../services/local-image-search/contr
 import { loadManagedProviderConfig } from "../services/managed-provider-config.mjs";
 import { registerDesktopIpc } from "./ipc.mjs";
 import { KeepAwakeService } from "../services/keep-awake.mjs";
+import { AutoStartService } from "../services/auto-start.mjs";
 import { QuitCoordinator } from "./lifecycle.mjs";
 import { installAppProtocol, registerAppScheme } from "./protocol.mjs";
 import { createSecureWindowOptions, hardenSession, hardenWindow } from "./security.mjs";
@@ -171,6 +173,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   const updaterRequested = app.isPackaged && isProductionEdition;
   const autoUpdater = await resolveAutoUpdater(updaterRequested);
   const updater = new UpdaterController({
+    historyFetch: net.fetch.bind(net),
     autoUpdater,
     enabled: updaterRequested && Boolean(autoUpdater),
     currentVersion: app.getVersion(),
@@ -185,12 +188,17 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   });
   const directoryTokens = new DirectoryTokenStore();
   const externalApps = new ExternalAppRegistry({
+    getFileIcon: app.getFileIcon.bind(app),
     userDataPath: app.getPath("userData"),
     dialog,
     shell,
     getWindow: () => mainWindow,
   });
   await externalApps.initialize();
+  const artHubFolders = new ArtHubFolders({
+    store: new CredentialStore({ safeStorage, userDataPath: app.getPath("userData"), fileName: "arthub-connection.v2.json", legacyFileName: "arthub-connection.v1.json" }),
+    fetchImpl: net.fetch.bind(net),
+  });
   const networkClient = new NetworkClient({
     fetchImpl: net.fetch.bind(net),
     providerRegistry,
@@ -227,6 +235,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   const lifecycle = new QuitCoordinator({ app, channel: channels.appBeforeQuit });
   const keepAwake = new KeepAwakeService({ userDataPath, powerSaveBlocker: electron.powerSaveBlocker, powerMonitor: electron.powerMonitor });
   keepAwake.initialize();
+  const autoStart = new AutoStartService({ app });
   const backupService = new BackupFileService({
     dialog,
     getWindow: () => mainWindow,
@@ -311,7 +320,9 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     environmentInfo,
     localImageSearch,
     externalApps,
+    artHubFolders,
     keepAwake,
+    autoStart,
     runtimeLogger,
   });
 

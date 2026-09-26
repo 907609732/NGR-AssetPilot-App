@@ -146,6 +146,10 @@ async function performNamingWorkspaceSave(options = {}) {
 }
 
 function saveNamingWorkspaceNow(options = {}) {
+  if (window.NgrFeatureTests?.isPreviewActive?.()) {
+    if (options.manual) showToast("当前是功能测试环境，测试修改不会写入真实命名进度");
+    return Promise.resolve(false);
+  }
   if (namingWorkspaceSaveTimer) {
     window.clearTimeout(namingWorkspaceSaveTimer);
     namingWorkspaceSaveTimer = null;
@@ -156,6 +160,10 @@ function saveNamingWorkspaceNow(options = {}) {
 }
 
 function scheduleNamingWorkspaceSave() {
+  if (window.NgrFeatureTests?.isPreviewActive?.()) {
+    setNamingWorkspaceSaveStatus("saved", "功能测试中 · 不写入真实进度");
+    return;
+  }
   if (!namingWorkspacePersistenceReady) return;
   if (namingWorkspaceSaveTimer) window.clearTimeout(namingWorkspaceSaveTimer);
   setNamingWorkspaceSaveStatus("pending", "有未保存修改");
