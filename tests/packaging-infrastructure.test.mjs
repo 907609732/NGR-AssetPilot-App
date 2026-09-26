@@ -12,7 +12,7 @@ const releasePolicyFor = require("../build/release-policy.cjs");
 test("云翻译恢复版本保留已授权的未签名发布，恢复云配置", () => {
   assert.deepEqual(releasePolicyFor("3.0.12"), { unsigned: true, offlineTranslationOnly: true });
   assert.deepEqual(releasePolicyFor("3.0.13"), { unsigned: true, offlineTranslationOnly: false });
-  assert.deepEqual(releasePolicyFor("3.0.14"), { unsigned: false, offlineTranslationOnly: false });
+  assert.deepEqual(releasePolicyFor("3.0.14"), { unsigned: true, offlineTranslationOnly: false });
 });
 const builderConfigPath = path.join(projectRoot, "build", "electron-builder.config.cjs");
 

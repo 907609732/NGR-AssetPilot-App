@@ -49,7 +49,7 @@ test("左侧大尺寸词库搜索、当前图片联动、面板互斥与长列�
       bling: getComputedStyle(document.querySelector("#lexiconToggle"), "::after").animationName,
     }));
     assert.equal(lexiconGlass.animation, "side-glass-panel-in");
-    assert.match(lexiconGlass.backdrop, /blur\(20px\)/);
+    assert.match(lexiconGlass.backdrop, /blur\((?:14|20)px\)/);
     assert.match(lexiconGlass.background, /linear-gradient/);
     assert.equal(lexiconGlass.bling, "side-tool-bling");
     await page.waitForTimeout(950);

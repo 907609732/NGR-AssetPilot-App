@@ -17,6 +17,7 @@ test("长列表可在底部勾选删除，记录热区与开机启动系统接�
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.waitForFunction(() => document.querySelector("#generalSettingsView .settings-tabs"));
+    await page.setViewportSize({ width: 1800, height: 1000 });
     await page.locator("#workEntry").click();
     const toolbarLayout = await page.evaluate(() => {
       const selectors = [

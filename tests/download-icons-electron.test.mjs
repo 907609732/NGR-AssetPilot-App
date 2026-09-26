@@ -32,6 +32,7 @@ test("下载主按钮直接导出、设置记忆与 EXE 图标显示", { timeout
     }
     await page.screenshot({ path: path.join(evidence, "application-icons.png") });
     await page.locator("#workEntry").click();
+    await page.locator("#namingModeSelect").selectOption("translate:cfc", { force: true });
     assert.equal(await page.locator(".naming-mode-field").count(), 0);
     assert.match(await page.locator("#runSelectedNaming").innerText(), /NGR 云翻译/);
     await page.locator(".naming-service-settings-action").click();

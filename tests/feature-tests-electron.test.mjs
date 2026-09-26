@@ -20,6 +20,7 @@ test("设置页可隔离测试开始命名和切图检测并显示运行状态",
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.waitForFunction(() => document.querySelector("#generalSettingsView .settings-tabs"));
+    await page.locator("#namingModeSelect").selectOption("translate:cfc", { force: true });
     await page.locator("#rulesEntry").click();
     await page.locator('#generalSettingsView [data-settings-view="featureTest"]').click();
     await page.waitForFunction(() => document.getElementById("featureTestView").classList.contains("active"));
