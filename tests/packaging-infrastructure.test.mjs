@@ -13,6 +13,7 @@ test("云翻译恢复版本保留已授权的未签名发布，恢复云配置",
   assert.deepEqual(releasePolicyFor("3.0.12"), { unsigned: true, offlineTranslationOnly: true });
   assert.deepEqual(releasePolicyFor("3.0.13"), { unsigned: true, offlineTranslationOnly: false });
   assert.deepEqual(releasePolicyFor("3.0.14"), { unsigned: true, offlineTranslationOnly: false });
+  assert.deepEqual(releasePolicyFor("3.0.15"), { unsigned: true, offlineTranslationOnly: false });
 });
 const builderConfigPath = path.join(projectRoot, "build", "electron-builder.config.cjs");
 
@@ -38,6 +39,7 @@ test("桌面依赖版本全部精确锁定", () => {
   assert.equal(packageJson.dependencies["adm-zip"], "0.6.1");
   assert.equal(packageJson.dependencies["electron-log"], "5.4.4");
   assert.equal(packageJson.dependencies.fflate, "0.8.3");
+  assert.equal(packageJson.dependencies.exceljs, "4.4.0");
   assert.equal(packageJson.devDependencies["@playwright/test"], "1.62.1");
   assert.equal(packageJson.scripts["build:prod"], "node scripts/run-build.mjs prod");
   assert.equal(packageJson.scripts["build:dev"], "node scripts/run-build.mjs dev");

@@ -32,6 +32,7 @@ const channels = Object.freeze({
   offlineTranslationTranslate: "ngr:offline-translation:translate",
   filesSelectExportDirectory: "ngr:files:select-export-directory",
   filesWriteFile: "ngr:files:write-file",
+  dailyReportExport: "ngr:daily-report:export",
   backupBeginExport: "ngr:backup:begin-export",
   backupWriteExportChunk: "ngr:backup:write-export-chunk",
   backupFinishExport: "ngr:backup:finish-export",
@@ -160,6 +161,9 @@ const api = deepFreeze({
     getApplyState: (request) => invoke(channels.backupGetApplyState, request),
     rollbackApply: (request) => invoke(channels.backupRollbackApply, request),
     finalizeApply: (request) => invoke(channels.backupFinalizeApply, request),
+  },
+  dailyReport: {
+    export: (request) => invoke(channels.dailyReportExport, request),
   },
   offlineTranslation: {
     getStatus: () => invoke(channels.offlineTranslationGetStatus),

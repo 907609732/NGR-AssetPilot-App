@@ -84,6 +84,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
       "autoStart",
       "backup",
       "credentials",
+      "dailyReport",
       "diagnostics",
       "environment",
       "externalApps",
@@ -101,11 +102,19 @@ test("Electron development app boots with the Dev identity and an isolated rende
       const work = document.querySelector("#workEntry").getBoundingClientRect();
       const detect = document.querySelector("#detectEntry").getBoundingClientRect();
       const local = document.querySelector("#localImageSearchEntry").getBoundingClientRect();
+      const dailyReport = document.querySelector("#dailyReportEntry").getBoundingClientRect();
+      const home = document.querySelector("#homeView").getBoundingClientRect();
       return {
-        visible: [work, detect, local].every((rect) => rect.width > 0 && rect.height > 0),
+        visible: [work, detect, local, dailyReport].every((rect) => rect.width > 0 && rect.height > 0),
+        localRestored: Math.abs(local.width - work.width) < 2 && Math.abs(local.height - work.height) < 2,
+        dailyReportSecondary: dailyReport.width >= 150 && dailyReport.width <= 210 && dailyReport.height >= 40 && dailyReport.height <= 54,
+        dailyReportAtBottomCenter: Math.abs((dailyReport.left + dailyReport.width / 2) - (home.left + home.width / 2)) < 2 && home.bottom - dailyReport.bottom <= 30,
       };
     });
     assert.equal(homeLayout.visible, true);
+    assert.equal(homeLayout.localRestored, true);
+    assert.equal(homeLayout.dailyReportSecondary, true);
+    assert.equal(homeLayout.dailyReportAtBottomCenter, true);
     assert.equal(await window.locator("#feedbackFormLink").isVisible(), true);
     assert.match(await window.locator("#feedbackFormLink").innerText(), /反馈与建议/);
 
@@ -154,6 +163,39 @@ test("Electron development app boots with the Dev identity and an isolated rende
     await window.locator("#detectionRulesToggle").click();
     assert.match(await window.locator("#detectionActiveRuleSummary").innerText(), /图集宽高为 2 的倍数/);
     assert.match(await window.locator("#detectionGeneralRuleSummary").innerText(), /最小尺寸 64x1 px/);
+    await window.locator("#backButton").click();
+    await window.waitForFunction(() => document.querySelector("#homeView")?.classList.contains("active"));
+
+    await window.locator("#dailyReportEntry").click();
+    await window.waitForFunction(() => document.querySelector("#dailyReportView")?.classList.contains("active"));
+    assert.equal(await window.locator("#dailyReportYear").count(), 0);
+    assert.equal(await window.locator("#dailyReportReset").innerText(), "清除所有数据");
+    assert.match(await window.locator("#dailyReportReset").getAttribute("class"), /\bdanger-action\b/);
+    assert.ok((await window.locator("#dailyReportSource").boundingBox()).height >= 500);
+    await window.locator("#dailyReportSource").fill([
+      "8/5（S2）1人天",
+      "【商业化】竹庭清赏活动-联调",
+      "【运营活动】三丽鸥正式资源替换",
+      "共计1人天任务",
+    ].join("\n"));
+    await window.locator("#dailyReportParse").click();
+    await window.waitForFunction(() => document.querySelector("#dailyReportVisibleCount")?.textContent === "显示 2 / 2 行");
+    assert.deepEqual(await window.locator('#dailyReportTableBody input[data-field="workload"]').evaluateAll((inputs) => inputs.map((input) => input.value)), ["0.5", "0.5"]);
+    assert.match(await window.locator("#dailyReportCategorySummary").innerText(), /商业化 1/);
+    assert.match(await window.locator("#dailyReportCategorySummary").innerText(), /运营活动 1/);
+    assert.equal(await window.locator("#dailyReportCopy").isEnabled(), true);
+    assert.equal(await window.locator("#dailyReportExport").isEnabled(), true);
+    await window.screenshot({ path: path.join(projectRoot, ".tmp", "daily-report-preview.png"), fullPage: true });
+    await window.locator("#dailyReportCategoryFilter").selectOption("商业化");
+    await window.waitForFunction(() => document.querySelector("#dailyReportVisibleCount")?.textContent === "显示 1 / 2 行");
+    await window.locator('#dailyReportTableBody textarea[data-field="objectName"]').fill("【商业化】竹庭清赏活动-联调修改");
+    await window.locator('#dailyReportTableBody textarea[data-field="objectName"]').blur();
+    assert.match(await window.locator('#dailyReportTableBody textarea[data-field="objectName"]').inputValue(), /修改$/);
+    window.once("dialog", (dialog) => dialog.accept());
+    await window.locator("#dailyReportReset").click();
+    await window.waitForFunction(() => document.querySelector("#dailyReportVisibleCount")?.textContent === "显示 0 / 0 行");
+    assert.equal(await window.locator("#dailyReportSource").inputValue(), "");
+    assert.equal(await window.locator("#dailyReportDefaultProducer").inputValue(), "陈月财");
     await window.locator("#backButton").click();
     await window.waitForFunction(() => document.querySelector("#homeView")?.classList.contains("active"));
 

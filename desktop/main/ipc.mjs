@@ -14,6 +14,7 @@ const AUDITED_CHANNELS = new Map([
   [channels.diagnosticsCancel, "diagnostics-cancel"],
   [channels.diagnosticsExportHistory, "diagnostics-export"],
   [channels.diagnosticsClearHistory, "diagnostics-history-clear"],
+  [channels.dailyReportExport, "daily-report-export"],
   [channels.backupBeginExport, "backup-export-begin"],
   [channels.backupFinishExport, "backup-export-finish"],
   [channels.backupCancelExport, "backup-export-cancel"],
@@ -69,6 +70,7 @@ export function registerDesktopIpc({
   artHubFolders,
   keepAwake,
   autoStart,
+  dailyReport,
   runtimeLogger = null,
 }) {
   const registered = [];
@@ -146,6 +148,7 @@ export function registerDesktopIpc({
     return { canceled: false, ...grant };
   });
   handle(channels.filesWriteFile, async (event, payload) => directoryTokens.writeFile(payload, event.sender.id));
+  handle(channels.dailyReportExport, async (_event, payload) => dailyReport.export(payload));
 
   handle(channels.backupBeginExport, async (event, payload) => backupService.beginExport(payload, event.sender.id));
   handle(channels.backupWriteExportChunk, async (event, payload) => backupService.writeExportChunk(payload, event.sender.id));

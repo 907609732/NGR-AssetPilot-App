@@ -4,7 +4,7 @@
 
 主进程通过 GitHub Releases API 每页 100 条读取到末页，不将加载到一半的分页视为完整结果；并发请求合并，成功结果缓存 5 分钟。接口固定在项目仓库，无需用户配置 GitHub Token。
 
-随包快照 `desktop/services/release-history-snapshot.json` 已核对当前全部 13 个正式发布记录。遇到断网或公共 API 限流时显示快照或本次运行最近成功的记录，并明确显示记录日期。后续发布前应刷新随包快照；客户端联网后自动获取新发布记录。参考接口：https://docs.github.com/en/rest/releases/releases
+随包快照 `desktop/services/release-history-snapshot.json` 已包含截至 v3.0.15 的 14 个正式发布记录。遇到断网或公共 API 限流时显示快照或本次运行最近成功的记录，并明确显示记录日期。后续发布前应刷新随包快照；客户端联网后自动获取新发布记录。参考接口：https://docs.github.com/en/rest/releases/releases
 
 更新弹窗采用固定标题、独立滚动内容、固定底部三部分。下载进度、速度、校验和安装状态及操作按钮放在底部，不随版本说明或历史列表滚动。
 

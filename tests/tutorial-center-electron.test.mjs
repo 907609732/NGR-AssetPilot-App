@@ -25,7 +25,7 @@ test("顶部教程合并为按版本和模块分类的软件内教程中心", { 
     await page.locator("#tutorialCenterEntry").click();
     await page.locator("#tutorialCenterOverlay").waitFor({ state: "visible" });
     assert.equal(await page.locator(".tutorial-center-nav-item").count(), 11);
-    assert.equal(await page.locator("#tutorialCenterVersion").innerText(), "适用于 V3.0.14");
+    assert.equal(await page.locator("#tutorialCenterVersion").innerText(), "适用于 V3.0.15");
     assert.match(await page.locator("#tutorialCenterContent").innerText(), /这个功能是干什么的？/);
     assert.match(await page.locator("#tutorialCenterContent").innerText(), /照着下面做/);
     await page.screenshot({ path: path.join(evidence, "tutorial-center.png") });

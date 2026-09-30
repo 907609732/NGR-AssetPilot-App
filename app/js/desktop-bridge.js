@@ -166,6 +166,11 @@
     return invoke("backup.beginExport", { suggestedName, expectedSize: null });
   }
 
+  async function exportDailyReport(request) {
+    if (!hasCapability("dailyReport.export")) throw new Error("桌面日报导出能力不可用");
+    return invoke("dailyReport.export", request);
+  }
+
   async function writeBackupStreamChunk(sessionId, offset, data) {
     return invoke("backup.writeExportChunk", { sessionId, offset, data });
   }
@@ -348,6 +353,7 @@
     importLegacyProviders,
     selectExportDirectory,
     writeFileInChunks,
+    exportDailyReport,
     beginBackupStream,
     writeBackupStreamChunk,
     finishBackupStream,

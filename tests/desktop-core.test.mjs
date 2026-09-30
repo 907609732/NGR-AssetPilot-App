@@ -203,6 +203,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
     "diagnostics",
     "files",
     "backup",
+    "dailyReport",
     "offlineTranslation",
     "updater",
     "shell",
@@ -223,6 +224,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.offlineTranslation.getStatus, "function");
   assert.equal(typeof exposed.offlineTranslation.translate, "function");
   assert.equal(typeof exposed.files.writeFile, "function");
+  assert.equal(typeof exposed.dailyReport.export, "function");
   assert.equal(typeof exposed.backup.beginImport, "function");
   assert.equal(typeof exposed.backup.finishImport, "function");
   assert.equal(typeof exposed.backup.cancelImport, "function");
@@ -268,6 +270,8 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.deepEqual(calls.at(-1), [ipcChannels.backupFinishImport, { sessionId: "import-session" }]);
   await exposed.backup.beginApply();
   assert.deepEqual(calls.at(-1), [ipcChannels.backupBeginApply, undefined]);
+  await exposed.dailyReport.export({ year: 2026, month: 8, producer: "陈月财", rows: [] });
+  assert.deepEqual(calls.at(-1), [ipcChannels.dailyReportExport, { year: 2026, month: 8, producer: "陈月财", rows: [] }]);
 });
 
 test("IPC handlers reject non-main-frame and non-app senders", async () => {
@@ -295,6 +299,7 @@ test("IPC handlers reject non-main-frame and non-app senders", async () => {
     backupService: {},
     updater: {},
     lifecycle: {},
+    dailyReport: { export: async () => ({ canceled: true }) },
     environmentInfo: () => ({ safe: true }),
     runtimeLogger: {
       info(stage, details) { runtimeEvents.push({ level: "info", stage, details }); },

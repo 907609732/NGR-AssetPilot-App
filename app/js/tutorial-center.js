@@ -1,5 +1,5 @@
 (() => {
-  const TUTORIAL_RELEASE = "3.0.14";
+  const TUTORIAL_RELEASE = "3.0.15";
   const modules = [
     {
       id: "quick-start",

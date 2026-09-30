@@ -33,6 +33,7 @@ function init() {
   void window.NgrNetworkDiagnostics?.init();
   void window.NgrFeatureTests?.init();
   void window.NgrExternalAppLauncher?.init();
+  window.NgrDailyReport?.init();
   void window.initializeUpdates();
 }
 
@@ -261,6 +262,7 @@ function bindNavigation() {
   els.workEntry.addEventListener("click", () => showView("work"));
   els.detectEntry.addEventListener("click", () => showView("detect"));
   els.localImageSearchEntry.addEventListener("click", () => showView("localImageSearch"));
+  els.dailyReportEntry.addEventListener("click", () => showView("dailyReport"));
   els.detectionSettingsEntry?.addEventListener("click", () => openSettingsView("detectionSettings", "detect"));
   els.backToDetection.addEventListener("click", () => showView("detect"));
   els.backButton.addEventListener("click", navigateBack);
@@ -310,6 +312,7 @@ function showView(name) {
     detect: "上传切图文件夹，按项目组规则检测分辨率是否符合规范。",
     detectionSettings: "单独配置 UI 切图检测项目组和分辨率参数。",
     localImageSearch: "截图粘贴、图片或中英文文字搜索本地相似素材；图片和查询均不上传。",
+    dailyReport: "粘贴整月日报，自动分类、核对工时并生成可复制或导出的提单表。",
     generalSettings: "管理软件版本、官方下载安装入口与工作区迁移备份。",
     localImageSearchSettings: "管理本地 AI 模型与只读图库索引。",
     apiSettings: "统一配置视觉命名、百度翻译和 OpenAI 兼容服务。",

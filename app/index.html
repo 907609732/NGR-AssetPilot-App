@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.14" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.15" />
   </head>
   <body>
     <div id="app">
@@ -15,7 +15,7 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.14</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.15</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
@@ -67,6 +67,78 @@
             <a href="https://ngr.lttlt.top" target="_blank" rel="noreferrer">官网：ngr.lttlt.top</a>
             <p>若有合作意向或意见建议，可发送邮件至 907609732@qq.com，也欢迎前往 GitHub 提交反馈。</p>
           </div>
+          <button class="home-secondary-feature" id="dailyReportEntry" type="button" title="基地提单表自动填">
+            <span aria-hidden="true">▦</span>
+            <span>基地提单表</span>
+          </button>
+        </section>
+
+        <section class="view daily-report-view" id="dailyReportView">
+          <div class="section-head daily-report-heading">
+            <div>
+              <h2>基地提单表自动填</h2>
+              <p>粘贴日报原文后按日期、分类和等级整理。所有处理均在本机完成，原始样本不会被修改。</p>
+            </div>
+            <div class="daily-report-heading-actions">
+              <button class="danger-action" id="dailyReportReset" type="button">清除所有数据</button>
+              <button class="ghost-action" id="dailyReportRedistribute" type="button" disabled>重新平均分配工时</button>
+              <button class="primary-action" id="dailyReportParse" type="button">解析日报</button>
+            </div>
+          </div>
+
+          <div class="daily-report-layout">
+            <aside class="daily-report-input-panel">
+              <label>日报原文
+                <textarea id="dailyReportSource" rows="18" maxlength="100000" placeholder="粘贴 9/1（S2）1人天【商业化】……"></textarea>
+              </label>
+              <div class="daily-report-defaults-head">
+                <strong>提单默认值</strong>
+                <button class="text-action" id="dailyReportResetDefaults" type="button">恢复默认</button>
+              </div>
+              <div class="daily-report-defaults-grid">
+                <label>工作量单位<input id="dailyReportDefaultWorkUnit" type="text" maxlength="100" /></label>
+                <label>制作等级<input id="dailyReportDefaultProductionLevel" type="text" maxlength="100" placeholder="默认留空" /></label>
+                <label class="wide">推荐供应商<input id="dailyReportDefaultVendor" type="text" maxlength="200" /></label>
+                <label>是否测试单<input id="dailyReportDefaultTestOrder" type="text" maxlength="100" /></label>
+                <label>需求内容<input id="dailyReportDefaultRequirementType" type="text" maxlength="100" /></label>
+                <label>尺寸 长<input id="dailyReportDefaultLength" type="number" min="1" step="1" /></label>
+                <label>尺寸 宽<input id="dailyReportDefaultWidth" type="number" min="1" step="1" /></label>
+                <label>制作方式<input id="dailyReportDefaultMethod" type="text" maxlength="100" /></label>
+                <label>制作人员<input id="dailyReportDefaultProducer" type="text" maxlength="100" /></label>
+              </div>
+            </aside>
+
+            <div class="daily-report-workspace">
+              <div class="daily-report-summary" id="dailyReportSummary" aria-live="polite">
+                <article><span>日期组</span><strong>0</strong></article>
+                <article><span>任务行</span><strong>0</strong></article>
+                <article><span>文本声明</span><strong>--</strong></article>
+                <article><span>当前合计</span><strong>0</strong></article>
+                <article><span>差额</span><strong>--</strong></article>
+              </div>
+              <div class="daily-report-issues" id="dailyReportIssues" role="status">请先粘贴日报并点击“解析日报”。</div>
+              <div class="daily-report-browser-bar">
+                <label>分类<select id="dailyReportCategoryFilter"><option value="all">全部分类</option></select></label>
+                <label>等级<select id="dailyReportLevelFilter"><option value="all">全部等级</option></select></label>
+                <label>日期<input id="dailyReportDateFilter" type="date" /></label>
+                <label class="daily-report-search">搜索<input id="dailyReportSearch" type="search" placeholder="搜索物件名称" /></label>
+                <button class="ghost-action" id="dailyReportClearFilters" type="button">清除筛选</button>
+                <span id="dailyReportVisibleCount">显示 0 / 0 行</span>
+              </div>
+              <div class="daily-report-category-summary" id="dailyReportCategorySummary"></div>
+              <div class="daily-report-table-wrap">
+                <table class="daily-report-table">
+                  <thead><tr id="dailyReportTableHead"></tr></thead>
+                  <tbody id="dailyReportTableBody"><tr><td colspan="13" class="daily-report-empty">解析后的表格会显示在这里。</td></tr></tbody>
+                </table>
+              </div>
+              <div class="daily-report-footer-actions">
+                <span id="dailyReportStatus">尚未解析</span>
+                <button class="ghost-action" id="dailyReportCopy" type="button" disabled>复制表格</button>
+                <button class="primary-action" id="dailyReportExport" type="button" disabled>导出 Excel</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="view general-settings-view" id="generalSettingsView">
@@ -106,7 +178,7 @@
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.14</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.15</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
@@ -526,7 +598,7 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.14</span><time class="version-date" datetime="2026-09-11">更新于 2026-09-11</time></h2>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.15</span><time class="version-date" datetime="2026-09-30">更新于 2026-09-30</time></h2>
             <p>配置命名规则、方案模板和项目知识库；在线服务统一在“API”页签管理。</p>
           </div>
 
@@ -1618,36 +1690,38 @@
       </div>
     </div>
 
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.14"></script>
-    <script src="historical-knowledge.js?v=V3.0.14"></script>
-    <script src="js/config.js?v=V3.0.14"></script>
-    <script src="js/prefix-library.js?v=V3.0.14"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.14"></script>
-    <script src="js/keep-awake.js?v=V3.0.14"></script>
-    <script src="js/auto-start.js?v=V3.0.14"></script>
-    <script src="js/network-diagnostics.js?v=V3.0.14"></script>
-    <script src="js/external-app-launcher.js?v=V3.0.14"></script>
-    <script src="js/updates.js?v=V3.0.14"></script>
-    <script src="js/workspace-backup.js?v=V3.0.14"></script>
-    <script src="js/state-dom.js?v=V3.0.14"></script>
-    <script src="js/local-image-browser.js?v=V3.0.14"></script>
-    <script src="js/local-image-search.js?v=V3.0.14"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.14"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.14"></script>
-    <script src="js/ai-workflow.js?v=V3.0.14"></script>
-    <script src="js/assets-detection.js?v=V3.0.14"></script>
-    <script src="js/rendering.js?v=V3.0.14"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.14"></script>
-    <script src="js/lexicon-data.js?v=V3.0.14"></script>
-    <script src="js/export-template-storage.js?v=V3.0.14"></script>
-    <script src="js/toast.js?v=V3.0.14"></script>
-    <script src="js/workspace-storage.js?v=V3.0.14"></script>
-    <script src="js/workspace-migration.js?v=V3.0.14"></script>
-    <script src="js/feature-tests.js?v=V3.0.14"></script>
-    <script src="js/main.js?v=V3.0.14"></script>
-    <script src="js/selection-actions.js?v=V3.0.14"></script>
-    <script src="js/lexicon-panel.js?v=V3.0.14"></script>
-    <script src="js/arthub-folders.js?v=V3.0.14"></script>
-    <script src="js/tutorial-center.js?v=V3.0.14"></script>
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.15"></script>
+    <script src="historical-knowledge.js?v=V3.0.15"></script>
+    <script src="js/config.js?v=V3.0.15"></script>
+    <script src="js/prefix-library.js?v=V3.0.15"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.15"></script>
+    <script src="js/daily-report-core.js?v=V3.0.15"></script>
+    <script src="js/daily-report.js?v=V3.0.15"></script>
+    <script src="js/keep-awake.js?v=V3.0.15"></script>
+    <script src="js/auto-start.js?v=V3.0.15"></script>
+    <script src="js/network-diagnostics.js?v=V3.0.15"></script>
+    <script src="js/external-app-launcher.js?v=V3.0.15"></script>
+    <script src="js/updates.js?v=V3.0.15"></script>
+    <script src="js/workspace-backup.js?v=V3.0.15"></script>
+    <script src="js/state-dom.js?v=V3.0.15"></script>
+    <script src="js/local-image-browser.js?v=V3.0.15"></script>
+    <script src="js/local-image-search.js?v=V3.0.15"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.15"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.15"></script>
+    <script src="js/ai-workflow.js?v=V3.0.15"></script>
+    <script src="js/assets-detection.js?v=V3.0.15"></script>
+    <script src="js/rendering.js?v=V3.0.15"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.15"></script>
+    <script src="js/lexicon-data.js?v=V3.0.15"></script>
+    <script src="js/export-template-storage.js?v=V3.0.15"></script>
+    <script src="js/toast.js?v=V3.0.15"></script>
+    <script src="js/workspace-storage.js?v=V3.0.15"></script>
+    <script src="js/workspace-migration.js?v=V3.0.15"></script>
+    <script src="js/feature-tests.js?v=V3.0.15"></script>
+    <script src="js/main.js?v=V3.0.15"></script>
+    <script src="js/selection-actions.js?v=V3.0.15"></script>
+    <script src="js/lexicon-panel.js?v=V3.0.15"></script>
+    <script src="js/arthub-folders.js?v=V3.0.15"></script>
+    <script src="js/tutorial-center.js?v=V3.0.15"></script>
   </body>
 </html>

@@ -21,6 +21,7 @@ import { loadManagedProviderConfig } from "../services/managed-provider-config.m
 import { registerDesktopIpc } from "./ipc.mjs";
 import { KeepAwakeService } from "../services/keep-awake.mjs";
 import { AutoStartService } from "../services/auto-start.mjs";
+import { DailyReportExportService } from "../services/daily-report-export.mjs";
 import { QuitCoordinator } from "./lifecycle.mjs";
 import { installAppProtocol, registerAppScheme } from "./protocol.mjs";
 import { createSecureWindowOptions, hardenSession, hardenWindow } from "./security.mjs";
@@ -236,6 +237,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   const keepAwake = new KeepAwakeService({ userDataPath, powerSaveBlocker: electron.powerSaveBlocker, powerMonitor: electron.powerMonitor });
   keepAwake.initialize();
   const autoStart = new AutoStartService({ app });
+  const dailyReport = new DailyReportExportService({ dialog, getWindow: () => mainWindow });
   const backupService = new BackupFileService({
     dialog,
     getWindow: () => mainWindow,
@@ -323,6 +325,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     artHubFolders,
     keepAwake,
     autoStart,
+    dailyReport,
     runtimeLogger,
   });
 
