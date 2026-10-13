@@ -24,6 +24,7 @@ import { UpdaterController, updaterMetadata } from "../desktop/services/updater-
 import { installAppProtocol, resolveAppResource } from "../desktop/main/protocol.mjs";
 import { registerDesktopIpc } from "../desktop/main/ipc.mjs";
 import { QuitCoordinator } from "../desktop/main/lifecycle.mjs";
+import { TrayController } from "../desktop/main/tray-controller.mjs";
 import {
   createSecureWindowOptions,
   isAllowedExternalUrl,
@@ -204,6 +205,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
     "files",
     "backup",
     "dailyReport",
+    "tapdReport",
     "offlineTranslation",
     "updater",
     "shell",
@@ -225,6 +227,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.offlineTranslation.translate, "function");
   assert.equal(typeof exposed.files.writeFile, "function");
   assert.equal(typeof exposed.dailyReport.export, "function");
+  assert.equal(typeof exposed.tapdReport.open, "function");
   assert.equal(typeof exposed.backup.beginImport, "function");
   assert.equal(typeof exposed.backup.finishImport, "function");
   assert.equal(typeof exposed.backup.cancelImport, "function");
@@ -272,6 +275,8 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.deepEqual(calls.at(-1), [ipcChannels.backupBeginApply, undefined]);
   await exposed.dailyReport.export({ year: 2026, month: 8, producer: "陈月财", rows: [] });
   assert.deepEqual(calls.at(-1), [ipcChannels.dailyReportExport, { year: 2026, month: 8, producer: "陈月财", rows: [] }]);
+  await exposed.tapdReport.open();
+  assert.deepEqual(calls.at(-1), [ipcChannels.tapdReportOpen, undefined]);
 });
 
 test("IPC handlers reject non-main-frame and non-app senders", async () => {
@@ -300,6 +305,7 @@ test("IPC handlers reject non-main-frame and non-app senders", async () => {
     updater: {},
     lifecycle: {},
     dailyReport: { export: async () => ({ canceled: true }) },
+    tapdReport: { open: async () => ({ opened: true }) },
     environmentInfo: () => ({ safe: true }),
     runtimeLogger: {
       info(stage, details) { runtimeEvents.push({ level: "info", stage, details }); },
@@ -323,6 +329,10 @@ test("IPC handlers reject non-main-frame and non-app senders", async () => {
   );
   assert.deepEqual(runtimeEvents.map(({ stage }) => stage), ["network-request:start", "network-request:complete"]);
   assert.equal(runtimeEvents[1].details.operationId, "request-1");
+  assert.deepEqual(
+    await handlers.get(ipcChannels.tapdReportOpen)({ sender: webContents, senderFrame: mainFrame }),
+    { opened: true },
+  );
   dispose();
   assert.equal(handlers.size, 0);
   assert.equal(listeners.size, 0);
@@ -954,6 +964,63 @@ test("quit coordinator runs finalizers in parallel with renderer persistence and
   await new Promise((resolve) => setTimeout(resolve, 45));
   assert.equal(boundedQuitCalls, 1, "deadline must release quit when renderer never responds");
   bounded.dispose();
+});
+
+test("Windows tray hides close, restores the existing window, and keeps explicit quit", () => {
+  class FakeTray extends EventEmitter {
+    constructor(iconPath) {
+      super();
+      this.iconPath = iconPath;
+      this.destroyed = false;
+    }
+    setToolTip(value) { this.toolTip = value; }
+    setContextMenu(value) { this.contextMenu = value; }
+    displayBalloon(value) { this.balloon = value; }
+    isDestroyed() { return this.destroyed; }
+    destroy() { this.destroyed = true; }
+  }
+  const app = new EventEmitter();
+  let quitCalls = 0;
+  app.quit = () => { quitCalls += 1; };
+  const menu = { buildFromTemplate: (template) => ({ template }) };
+  const window = new EventEmitter();
+  const calls = [];
+  window.isDestroyed = () => false;
+  window.isMinimized = () => true;
+  window.setSkipTaskbar = (value) => calls.push(["skip", value]);
+  window.hide = () => calls.push(["hide"]);
+  window.restore = () => calls.push(["restore"]);
+  window.show = () => calls.push(["show"]);
+  window.focus = () => calls.push(["focus"]);
+  let hideOnClose = true;
+  const controller = new TrayController({
+    app,
+    Tray: FakeTray,
+    Menu: menu,
+    iconPath: "tray-icon.ico",
+    applicationName: "NGR AssetPilot",
+    getWindow: () => window,
+    shouldHideOnClose: () => hideOnClose,
+  });
+  const tray = controller.initialize();
+  controller.attachWindow(window);
+  const closeEvent = { prevented: false, preventDefault() { this.prevented = true; } };
+  window.emit("close", closeEvent);
+  assert.equal(closeEvent.prevented, true);
+  assert.deepEqual(calls, [["skip", true], ["hide"]]);
+  assert.match(tray.balloon.content, /托盘图标/);
+  tray.emit("click");
+  assert.deepEqual(calls.slice(2), [["skip", false], ["restore"], ["show"], ["focus"]]);
+  assert.match(tray.toolTip, /点击打开主界面/);
+  assert.equal(tray.contextMenu.template[0].label, "打开主界面");
+  tray.contextMenu.template[2].click();
+  assert.equal(quitCalls, 1);
+  hideOnClose = false;
+  const quitCloseEvent = { prevented: false, preventDefault() { this.prevented = true; } };
+  window.emit("close", quitCloseEvent);
+  assert.equal(quitCloseEvent.prevented, false);
+  controller.dispose();
+  assert.equal(tray.destroyed, true);
 });
 
 test("runtime logger rotates locally, redacts paths and secrets, and tracks clean shutdown", async () => {

@@ -14,12 +14,12 @@ export class QuitCoordinator {
     app.on("before-quit", this.onBeforeQuit);
   }
 
-  attachWindow(window) {
+  attachWindow(window, { interceptClose = true } = {}) {
     if (this.window && !this.window.isDestroyed()) {
       this.window.removeListener("close", this.onWindowClose);
     }
     this.window = window;
-    window.on("close", this.onWindowClose);
+    if (interceptClose) window.on("close", this.onWindowClose);
   }
 
   addFinalizer(name, finalizer) {

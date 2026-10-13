@@ -171,6 +171,11 @@
     return invoke("dailyReport.export", request);
   }
 
+  async function openTapdReport() {
+    if (!hasCapability("tapdReport.open")) throw new Error("TAPD 月报功能仅在桌面版中可用");
+    return invoke("tapdReport.open");
+  }
+
   async function writeBackupStreamChunk(sessionId, offset, data) {
     return invoke("backup.writeExportChunk", { sessionId, offset, data });
   }
@@ -354,6 +359,7 @@
     selectExportDirectory,
     writeFileInChunks,
     exportDailyReport,
+    openTapdReport,
     beginBackupStream,
     writeBackupStreamChunk,
     finishBackupStream,

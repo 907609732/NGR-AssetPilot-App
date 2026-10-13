@@ -263,6 +263,16 @@ function bindNavigation() {
   els.detectEntry.addEventListener("click", () => showView("detect"));
   els.localImageSearchEntry.addEventListener("click", () => showView("localImageSearch"));
   els.dailyReportEntry.addEventListener("click", () => showView("dailyReport"));
+  els.tapdReportEntry?.addEventListener("click", async () => {
+    els.tapdReportEntry.disabled = true;
+    try {
+      await window.NgrDesktopBridge.openTapdReport();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    } finally {
+      els.tapdReportEntry.disabled = false;
+    }
+  });
   els.detectionSettingsEntry?.addEventListener("click", () => openSettingsView("detectionSettings", "detect"));
   els.backToDetection.addEventListener("click", () => showView("detect"));
   els.backButton.addEventListener("click", navigateBack);

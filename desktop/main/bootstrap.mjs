@@ -22,7 +22,9 @@ import { registerDesktopIpc } from "./ipc.mjs";
 import { KeepAwakeService } from "../services/keep-awake.mjs";
 import { AutoStartService } from "../services/auto-start.mjs";
 import { DailyReportExportService } from "../services/daily-report-export.mjs";
+import { TapdReportWindowService } from "../services/tapd-report-window.mjs";
 import { QuitCoordinator } from "./lifecycle.mjs";
+import { TrayController } from "./tray-controller.mjs";
 import { installAppProtocol, registerAppScheme } from "./protocol.mjs";
 import { createSecureWindowOptions, hardenSession, hardenWindow } from "./security.mjs";
 import channels from "../shared/ipc-channels.cjs";
@@ -30,13 +32,16 @@ import channels from "../shared/ipc-channels.cjs";
 const {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
+  Menu,
   net,
   protocol,
   safeStorage,
   session,
   shell,
+  Tray,
   utilityProcess,
 } = electron;
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -136,9 +141,12 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   }
 
   let mainWindow = null;
+  let trayController = null;
   app.on("second-instance", () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (trayController?.showMainWindow()) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.setSkipTaskbar?.(false);
     mainWindow.show();
     mainWindow.focus();
   });
@@ -238,6 +246,24 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   keepAwake.initialize();
   const autoStart = new AutoStartService({ app });
   const dailyReport = new DailyReportExportService({ dialog, getWindow: () => mainWindow });
+  const tapdReport = new TapdReportWindowService({
+    app,
+    BrowserWindow,
+    clipboard,
+    dialog,
+    ipcMain,
+    shell,
+    createWindowOptions: (childPreloadPath) => createSecureWindowOptions({
+      preloadPath: childPreloadPath,
+      isPackaged: app.isPackaged,
+    }),
+    hardenWindow: (window) => hardenWindow(window, { shell }),
+    getMainWindow: () => mainWindow,
+    preloadPath: path.resolve(moduleDirectory, "../preload/tapd-report.cjs"),
+    pageUrl: `${APP_URL}tapd-report/index.html`,
+    templatePath: path.join(appRoot, "tapd-report", "monthly-template.xlsx"),
+  });
+  lifecycle.addFinalizer("tapd-report", () => tapdReport.close());
   const backupService = new BackupFileService({
     dialog,
     getWindow: () => mainWindow,
@@ -290,7 +316,28 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   writeStartupLog(app, "window-created");
   const rendererOwnerId = mainWindow.webContents.id;
   hardenWindow(mainWindow, { shell });
-  lifecycle.attachWindow(mainWindow);
+  const trayIconPath = app.isPackaged
+    ? path.join(process.resourcesPath, "tray-icon.ico")
+    : path.resolve(moduleDirectory, "../../build/icon.ico");
+  try {
+    trayController = new TrayController({
+      app,
+      Tray,
+      Menu,
+      iconPath: trayIconPath,
+      applicationName,
+      getWindow: () => mainWindow,
+      shouldHideOnClose: () => !lifecycle.allowQuit,
+    });
+    trayController.initialize();
+    trayController.attachWindow(mainWindow);
+    lifecycle.attachWindow(mainWindow, { interceptClose: false });
+  } catch (error) {
+    trayController?.dispose();
+    trayController = null;
+    lifecycle.attachWindow(mainWindow);
+    runtimeLogger.warn("tray-initialize-failed", { code: errorCodeOnly(error) });
+  }
 
   const environmentInfo = () => ({
     platform: process.platform,
@@ -326,6 +373,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     keepAwake,
     autoStart,
     dailyReport,
+    tapdReport,
     runtimeLogger,
   });
 
@@ -394,7 +442,9 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   }
 
   app.on("activate", () => {
+    if (trayController?.showMainWindow()) return;
     if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setSkipTaskbar?.(false);
       mainWindow.show();
       mainWindow.focus();
     }
@@ -403,8 +453,10 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     if (process.platform !== "darwin") app.quit();
   });
   app.once("will-quit", () => {
+    trayController?.dispose();
     keepAwake.dispose();
     disposeIpc();
+    void tapdReport.dispose();
     lifecycle.dispose();
   });
 }

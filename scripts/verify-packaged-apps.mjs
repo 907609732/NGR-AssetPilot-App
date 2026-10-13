@@ -79,6 +79,16 @@ async function verifyTarget(target) {
     }
     assert.match(state.title, new RegExp(target.product));
     assert.equal(state.nodeRequireType, "undefined");
+    const tapdWindowPromise = electronApp.waitForEvent("window");
+    await window.locator("#tapdReportEntry").click();
+    const tapdWindow = await tapdWindowPromise;
+    await tapdWindow.waitForLoadState("domcontentloaded");
+    await tapdWindow.waitForFunction(() => Boolean(window.tapd?.load));
+    await tapdWindow.getByRole("button", { name: "打开 TAPD 登录" }).waitFor({ state: "visible" });
+    assert.match(await tapdWindow.title(), /TAPD 周报／月报/);
+    assert.equal(await tapdWindow.getByRole("button", { name: "下载月报 Excel" }).isVisible(), true);
+    assert.equal(await tapdWindow.getByRole("button", { name: "清除所有数据" }).isVisible(), true);
+    await tapdWindow.close();
     if (target.edition === "prod" && !releasePolicyFor(packageJson.version).offlineTranslationOnly) {
       const cloud = await window.evaluate(async () => {
         const response = await window.NgrDesktopBridge.requestProvider("baidu-cfc", "translate", {

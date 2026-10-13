@@ -71,6 +71,7 @@ export function registerDesktopIpc({
   keepAwake,
   autoStart,
   dailyReport,
+  tapdReport,
   runtimeLogger = null,
 }) {
   const registered = [];
@@ -149,6 +150,7 @@ export function registerDesktopIpc({
   });
   handle(channels.filesWriteFile, async (event, payload) => directoryTokens.writeFile(payload, event.sender.id));
   handle(channels.dailyReportExport, async (_event, payload) => dailyReport.export(payload));
+  handle(channels.tapdReportOpen, async () => tapdReport.open());
 
   handle(channels.backupBeginExport, async (event, payload) => backupService.beginExport(payload, event.sender.id));
   handle(channels.backupWriteExportChunk, async (event, payload) => backupService.writeExportChunk(payload, event.sender.id));

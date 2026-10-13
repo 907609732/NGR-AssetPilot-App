@@ -1,4 +1,4 @@
-/* NGR AssetPilot V3.0.15 module: feature-tests.js */
+/* NGR AssetPilot V3.0.16 module: feature-tests.js */
 (function initializeFeatureTestModule(globalScope) {
   "use strict";
 

@@ -33,6 +33,7 @@ const channels = Object.freeze({
   filesSelectExportDirectory: "ngr:files:select-export-directory",
   filesWriteFile: "ngr:files:write-file",
   dailyReportExport: "ngr:daily-report:export",
+  tapdReportOpen: "ngr:tapd-report:open",
   backupBeginExport: "ngr:backup:begin-export",
   backupWriteExportChunk: "ngr:backup:write-export-chunk",
   backupFinishExport: "ngr:backup:finish-export",
@@ -164,6 +165,9 @@ const api = deepFreeze({
   },
   dailyReport: {
     export: (request) => invoke(channels.dailyReportExport, request),
+  },
+  tapdReport: {
+    open: () => invoke(channels.tapdReportOpen),
   },
   offlineTranslation: {
     getStatus: () => invoke(channels.offlineTranslationGetStatus),

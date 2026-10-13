@@ -333,11 +333,18 @@ main {
   border-color: rgba(23, 126, 137, 0.42);
 }
 
-.home-secondary-feature {
+.home-secondary-actions {
   position: absolute;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.home-secondary-feature {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -353,6 +360,11 @@ main {
   font-weight: 750;
   box-shadow: 0 6px 18px rgba(27, 36, 40, 0.06);
   cursor: pointer;
+}
+
+.home-secondary-feature:disabled {
+  opacity: 0.62;
+  cursor: wait;
 }
 
 .home-secondary-feature:hover {

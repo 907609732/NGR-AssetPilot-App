@@ -105,6 +105,7 @@ const els = {
   detectEntry: document.querySelector("#detectEntry"),
   localImageSearchEntry: document.querySelector("#localImageSearchEntry"),
   dailyReportEntry: document.querySelector("#dailyReportEntry"),
+  tapdReportEntry: document.querySelector("#tapdReportEntry"),
   projectSelect: document.querySelector("#projectSelect"),
   projectConfigName: document.querySelector("#projectConfigName"),
   projectConfigDescription: document.querySelector("#projectConfigDescription"),

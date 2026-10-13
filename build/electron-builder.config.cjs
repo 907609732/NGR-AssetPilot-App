@@ -52,6 +52,10 @@ const windowsTargets = edition === "prod"
     ];
 const extraResources = [
   {
+    from: path.join(projectRoot, "build", "icon.ico"),
+    to: "tray-icon.ico",
+  },
+  {
     from: path.join(projectRoot, "build", "generated", "offline-translation"),
     to: "offline-translation",
     filter: ["**/*"],
@@ -76,6 +80,8 @@ module.exports = {
     "node_modules/onnxruntime-node/bin/**/*",
     "node_modules/sharp/**/*",
     "node_modules/@img/**/*",
+    "node_modules/playwright-core/**/*",
+    "node_modules/sql.js/dist/sql-wasm.wasm",
   ],
   compression: "maximum",
   npmRebuild: false,

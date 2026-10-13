@@ -95,6 +95,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
       "offlineTranslation",
       "providers",
       "shell",
+      "tapdReport",
       "updater",
     ]);
 
@@ -103,20 +104,37 @@ test("Electron development app boots with the Dev identity and an isolated rende
       const detect = document.querySelector("#detectEntry").getBoundingClientRect();
       const local = document.querySelector("#localImageSearchEntry").getBoundingClientRect();
       const dailyReport = document.querySelector("#dailyReportEntry").getBoundingClientRect();
+      const tapdReport = document.querySelector("#tapdReportEntry").getBoundingClientRect();
+      const secondaryActions = document.querySelector(".home-secondary-actions").getBoundingClientRect();
       const home = document.querySelector("#homeView").getBoundingClientRect();
       return {
-        visible: [work, detect, local, dailyReport].every((rect) => rect.width > 0 && rect.height > 0),
+        visible: [work, detect, local, dailyReport, tapdReport].every((rect) => rect.width > 0 && rect.height > 0),
         localRestored: Math.abs(local.width - work.width) < 2 && Math.abs(local.height - work.height) < 2,
-        dailyReportSecondary: dailyReport.width >= 150 && dailyReport.width <= 210 && dailyReport.height >= 40 && dailyReport.height <= 54,
-        dailyReportAtBottomCenter: Math.abs((dailyReport.left + dailyReport.width / 2) - (home.left + home.width / 2)) < 2 && home.bottom - dailyReport.bottom <= 30,
+        secondaryButtons: [dailyReport, tapdReport].every((rect) => rect.width >= 150 && rect.width <= 210 && rect.height >= 40 && rect.height <= 54),
+        secondaryActionsAtBottomCenter: Math.abs((secondaryActions.left + secondaryActions.width / 2) - (home.left + home.width / 2)) < 2 && home.bottom - secondaryActions.bottom <= 30,
       };
     });
     assert.equal(homeLayout.visible, true);
     assert.equal(homeLayout.localRestored, true);
-    assert.equal(homeLayout.dailyReportSecondary, true);
-    assert.equal(homeLayout.dailyReportAtBottomCenter, true);
+    assert.equal(homeLayout.secondaryButtons, true);
+    assert.equal(homeLayout.secondaryActionsAtBottomCenter, true);
     assert.equal(await window.locator("#feedbackFormLink").isVisible(), true);
     assert.match(await window.locator("#feedbackFormLink").innerText(), /反馈与建议/);
+    await window.screenshot({ path: path.join(projectRoot, ".tmp", "home-tapd-entry.png"), fullPage: true });
+
+    const tapdWindowPromise = electronApp.waitForEvent("window");
+    await window.locator("#tapdReportEntry").click();
+    const tapdWindow = await tapdWindowPromise;
+    await tapdWindow.waitForLoadState("domcontentloaded");
+    await tapdWindow.waitForFunction(() => Boolean(window.tapd?.load));
+    await tapdWindow.getByRole("button", { name: "打开 TAPD 登录" }).waitFor({ state: "visible" });
+    assert.match(await tapdWindow.title(), /TAPD 周报／月报/);
+    assert.equal(await tapdWindow.getByRole("button", { name: "打开 TAPD 登录" }).isVisible(), true);
+    assert.equal(await tapdWindow.getByRole("button", { name: "抓取所选日期" }).isVisible(), true);
+    assert.equal(await tapdWindow.getByRole("button", { name: "下载月报 Excel" }).isVisible(), true);
+    assert.equal(await tapdWindow.getByRole("button", { name: "清除所有数据" }).isVisible(), true);
+    await tapdWindow.screenshot({ path: path.join(projectRoot, ".tmp", "tapd-report-integration.png"), fullPage: true });
+    await tapdWindow.close();
 
     await window.locator("#detectEntry").click();
     await window.waitForFunction(() => document.querySelector("#detectView")?.classList.contains("active"));

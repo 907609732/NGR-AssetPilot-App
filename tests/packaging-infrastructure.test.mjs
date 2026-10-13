@@ -14,6 +14,7 @@ test("云翻译恢复版本保留已授权的未签名发布，恢复云配置",
   assert.deepEqual(releasePolicyFor("3.0.13"), { unsigned: true, offlineTranslationOnly: false });
   assert.deepEqual(releasePolicyFor("3.0.14"), { unsigned: true, offlineTranslationOnly: false });
   assert.deepEqual(releasePolicyFor("3.0.15"), { unsigned: true, offlineTranslationOnly: false });
+  assert.deepEqual(releasePolicyFor("3.0.16"), { unsigned: true, offlineTranslationOnly: false });
 });
 const builderConfigPath = path.join(projectRoot, "build", "electron-builder.config.cjs");
 
@@ -35,7 +36,7 @@ test("桌面依赖版本全部精确锁定", () => {
   assert.equal(packageJson.dependencies["electron-updater"], "6.8.9");
   assert.equal(packageJson.dependencies["@huggingface/transformers"], "4.3.0");
   assert.equal(packageJson.dependencies["onnxruntime-node"], "1.30.0");
-  assert.equal(packageJson.dependencies.sharp, "0.35.4");
+  assert.equal(packageJson.dependencies.sharp, "0.35.5");
   assert.equal(packageJson.dependencies["adm-zip"], "0.6.1");
   assert.equal(packageJson.dependencies["electron-log"], "5.4.4");
   assert.equal(packageJson.dependencies.fflate, "0.8.3");
@@ -132,7 +133,9 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
     const cloudResource = config.extraResources.find(({ to }) => to === "managed-provider-config.json");
     const cloudExpected = fs.existsSync(path.join(projectRoot, "build/generated/managed-provider-config.json"));
     assert.equal(Boolean(cloudResource), cloudExpected);
-    assert.equal(config.extraResources.length, cloudExpected ? 2 : 1);
+    assert.equal(config.extraResources.length, cloudExpected ? 3 : 2);
+    const trayIcon = config.extraResources.find(({ to }) => to === "tray-icon.ico");
+    assert.match(trayIcon.from, /build[\\/]icon\.ico$/);
     const offlineTranslation = config.extraResources.find(({ to }) => to === "offline-translation");
     assert.match(offlineTranslation.from, /build[\\/]generated[\\/]offline-translation$/);
     assert.ok(config.files.includes("!build/generated/**/*"));
