@@ -2,7 +2,7 @@ import { MotionController } from "./motion";
 import { getDesktopRelease } from "../lib/desktop-release.mjs";
 
 const githubUrl = "https://github.com/907609732/NGR-AssetPilot-App";
-const candidateVersion = "3.0.1";
+const candidateVersion = "3.0.16";
 
 const features = [
   {
@@ -127,7 +127,7 @@ export default function Home() {
           <div className="product-window">
             <div className="window-bar">
               <div className="window-brand"><LogoMark compact /><strong>NGR AssetPilot</strong></div>
-              <span className="window-version">V3.0.1</span>
+              <span className="window-version">V3.0.16</span>
             </div>
             <div className="window-body">
               <aside className="window-sidebar">
