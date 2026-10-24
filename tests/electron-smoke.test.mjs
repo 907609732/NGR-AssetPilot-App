@@ -144,6 +144,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
     const tapdWindowPromise = electronApp.waitForEvent("window");
     await window.locator("#moreFeaturesEntry").click();
     await window.locator("#tapdReportEntry").click();
+    assert.equal(await window.locator("#moreFeaturesPopover").isVisible(), false);
     const tapdWindow = await tapdWindowPromise;
     await tapdWindow.waitForLoadState("domcontentloaded");
     await tapdWindow.waitForFunction(() => Boolean(window.tapd?.load));
@@ -159,6 +160,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.equal(await tapdWindow.getByRole("button", { name: "清除所有数据" }).isVisible(), true);
     await tapdWindow.screenshot({ path: path.join(projectRoot, ".tmp", "tapd-report-integration.png"), fullPage: true });
     await tapdWindow.close();
+    assert.equal(await window.locator("#moreFeaturesPopover").isVisible(), false);
 
     await window.locator("#detectEntry").click();
     await window.waitForFunction(() => document.querySelector("#detectView")?.classList.contains("active"));

@@ -9,25 +9,25 @@
       "verifiedVersion": "0.7.0",
       "integration": "hosted",
       "hostApi": 1,
-      "minimumHostVersion": "3.0.17",
+      "minimumHostVersion": "3.0.18",
       "packageVersion": "0.7.0",
       "verifiedAt": "2026-10-24",
       "registrationFromVersion": "0.5.6",
       "publicHostInstallerBuilt": true,
       "publicDownloadAvailable": false,
       "verificationScope": {
-        "hostSourceVersion": "3.0.17",
+        "hostSourceVersion": "3.0.18",
         "electronVersion": "43.4.1",
         "hostApi": 1,
         "actualZipImportedThroughHostUI": true,
         "artifactSha256": "9451554ee41ebadc0627fd9059c30b4466d8f37ad42b67e539ce73e0703039f2",
         "appAsarSha256": "3a423698b18b85a65fec44ec501c4c3466c0a7121ba086eac1b5fed43969f4a0",
-        "report": "artifacts/release-v3.0.17/extension/hosted-extension.json",
-        "scope": "宿主 3.0.17 生产包、Electron 43.4.1、隔离资料库、真实 0.7.0 扩展 ZIP 导入、RTX 图搜与媒体播放、重复打开和正常退出释放推理进程均通过；未进行真实双机 NAS 验收",
-        "hostPackagedVersion": "3.0.17",
+        "report": "artifacts/release-v3.0.18/extension/hosted-extension.json",
+        "scope": "宿主 3.0.18 生产包、Electron 43.4.1、隔离资料库、真实 0.7.0 扩展 ZIP 导入、RTX 图搜与媒体播放、重复打开和正常退出释放推理进程均通过；未进行真实双机 NAS 验收",
+        "hostPackagedVersion": "3.0.18",
         "productionPackageRuntimeValidated": true
       },
-      "decision": "宿主 3.0.17 生产包已通过真实 0.7.0 扩展 ZIP 验收，兼容并沿用原扩展，无需同步升版。扩展与模型独立分发，不随主安装器附带；扩展尚未提供公开下载，GitHub 公开的旧独立版不能作为扩展导入。"
+      "decision": "宿主 3.0.18 生产包已通过真实 0.7.0 扩展 ZIP 验收，兼容并沿用原扩展，无需同步升版。扩展与模型独立分发，不随主安装器附带；扩展尚未提供公开下载，GitHub 公开的旧独立版不能作为扩展导入。"
     }
   ]
 }

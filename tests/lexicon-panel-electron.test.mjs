@@ -121,9 +121,10 @@ test("左侧大尺寸词库搜索、当前图片联动、面板互斥与长列�
       animation: getComputedStyle(node.querySelector(".translator-body")).animationName,
       backdrop: getComputedStyle(node.querySelector(".translator-body")).backdropFilter || getComputedStyle(node.querySelector(".translator-body")).webkitBackdropFilter,
       background: getComputedStyle(node.querySelector(".translator-body")).backgroundImage,
+      compactLayout: matchMedia("(max-height: 700px), (max-width: 900px)").matches,
     }));
     assert.equal(translatorGlass.animation, "side-glass-panel-in");
-    assert.match(translatorGlass.backdrop, /blur\(20px\)/);
+    assert.match(translatorGlass.backdrop, translatorGlass.compactLayout ? /blur\(14px\)/ : /blur\(20px\)/);
     assert.match(translatorGlass.background, /linear-gradient/);
     await page.waitForTimeout(950);
     await page.screenshot({ path: path.join(evidence, "glass-translator-open.png") });
