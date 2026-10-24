@@ -1,0 +1,4 @@
+Bilibili icon: Simple Icons (CC0)
+https://github.com/simple-icons/simple-icons/blob/develop/icons/bilibili.svg
+https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md
+Fill color changed to Bilibili pink #fb7299. Brand trademarks belong to their owners.

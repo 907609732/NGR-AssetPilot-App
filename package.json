@@ -1,6 +1,6 @@
 {
   "name": "ngr-assetpilot-desktop",
-  "version": "3.0.16",
+  "version": "3.0.17",
   "private": true,
   "description": "NGR AssetPilot Windows desktop application",
   "license": "MIT",
@@ -17,6 +17,7 @@
     "predev:test": "npm run build:tapd-integration",
     "dev:test": "electron . --ngr-edition=test",
     "env:check": "node scripts/check-environment.mjs",
+    "extensions:check": "node scripts/check-extensions.mjs",
     "pretest": "npm run build:tapd-integration",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "test:packaging": "node --test tests/packaging-infrastructure.test.mjs",

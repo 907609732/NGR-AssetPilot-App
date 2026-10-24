@@ -8,6 +8,7 @@ import { prepareManagedProviderConfig } from "./prepare-managed-provider-config.
 import { prepareOfflineTranslationModel } from "./prepare-offline-translation-model.mjs";
 import { verifyWindowsSignatures } from "./verify-windows-signature.mjs";
 import releasePolicyFor from "../build/release-policy.cjs";
+import { writeExtensionReport } from "./check-extensions.mjs";
 const releasePolicy = releasePolicyFor(JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8")).version);
 
 const edition = process.argv[2];
@@ -74,10 +75,18 @@ function runBuilder(env) {
 
 const releaseBuildLock = acquireBuildLock();
 try {
+  const extensionReportDirectory = path.join(projectPaths.temp, `extensions-${edition}`);
+  const extensionReport = await writeExtensionReport(extensionReportDirectory).catch((error) => {
+    console.warn(`【扩展更新提醒】检查未完成：${error.message}`);
+    return null;
+  });
   requireProductionSigningEnvironment(process.env);
   await prepareOfflineTranslationModel();
   if (!releasePolicy.offlineTranslationOnly) prepareManagedProviderConfig({ required: edition === "prod" });
   safelyResetOutput(artifactDirectory);
+  if (extensionReport) {
+    for (const name of ["extension-report.json", "extension-release-notes.md"]) fs.copyFileSync(path.join(extensionReportDirectory, name), path.join(artifactDirectory, name));
+  }
   const env = createProjectEnvironment({ CSC_IDENTITY_AUTO_DISCOVERY: "false", NGR_BUILD_EDITION: edition });
   runBuilder(env);
   if (edition === "prod" && !releasePolicy.unsigned) verifyWindowsSignatures({ edition });

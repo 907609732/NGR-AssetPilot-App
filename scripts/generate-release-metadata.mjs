@@ -102,6 +102,9 @@ export function generateReleaseMetadata(edition) {
   fs.writeFileSync(path.join(artifactDirectory, checksumsName), checksums, "utf8");
 
   const manifest = {
+    extensions: fs.existsSync(path.join(artifactDirectory, "extension-report.json"))
+      ? JSON.parse(fs.readFileSync(path.join(artifactDirectory, "extension-report.json"), "utf8")).extensions
+      : JSON.parse(fs.readFileSync(path.join(projectRoot, "build/extensions.json"), "utf8")).extensions.map((entry) => ({ ...entry, checkState: "unchecked" })),
     schemaVersion: 1,
     product: edition === "prod" ? "NGR AssetPilot" : edition === "test" ? "NGR AssetPilot Test" : "NGR AssetPilot Dev",
     edition,

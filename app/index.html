@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.16" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.17" />
+    <link rel="stylesheet" href="tutorials/figma-guide.css?v=V3.0.17" />
   </head>
   <body>
     <div id="app">
@@ -15,7 +16,7 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.16</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.17</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
@@ -68,14 +69,27 @@
             <p>若有合作意向或意见建议，可发送邮件至 907609732@qq.com，也欢迎前往 GitHub 提交反馈。</p>
           </div>
           <div class="home-secondary-actions" aria-label="辅助功能">
-            <button class="home-secondary-feature" id="dailyReportEntry" type="button" title="基地提单表自动填">
+            <button class="home-secondary-feature" id="moreFeaturesEntry" type="button" popovertarget="moreFeaturesPopover">
+              <span aria-hidden="true">⋯</span><span>更多功能</span>
+            </button>
+          </div>
+          <div id="moreFeaturesPopover" class="more-features-popover" popover aria-label="更多功能">
+            <strong>更多功能</strong>
+            <button class="more-feature-item" id="dailyReportEntry" type="button" title="基地提单表自动填" popovertarget="moreFeaturesPopover" popovertargetaction="hide">
               <span aria-hidden="true">▦</span>
               <span>基地提单表</span>
             </button>
-            <button class="home-secondary-feature" id="tapdReportEntry" type="button" title="打开 TAPD 周报／月报工具">
+            <button class="more-feature-item" id="tapdReportEntry" type="button" title="自动生成TAPD周报" popovertarget="moreFeaturesPopover" popovertargetaction="hide">
               <span aria-hidden="true">T</span>
-              <span>TAPD 月报</span>
+              <span>自动生成TAPD周报</span>
             </button>
+            <button class="more-feature-item" id="figmaVariantsEntry" type="button" popovertarget="moreFeaturesPopover" popovertargetaction="hide">
+              <span aria-hidden="true">F</span><span>Figma一键变体</span>
+            </button>
+            <div class="finder-feature-row">
+              <button class="more-feature-item" id="finderExtensionEntry" type="button" popovertarget="moreFeaturesPopover" popovertargetaction="hide"><span aria-hidden="true">⌕</span><span>快速找界面</span><small>扩展</small></button>
+              <button id="finderExtensionManage" class="ghost-action" type="button" aria-label="管理快速找界面扩展" title="管理扩展">⚙</button>
+            </div>
           </div>
         </section>
 
@@ -184,7 +198,7 @@
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.16</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.17</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
@@ -604,7 +618,7 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.16</span><time class="version-date" datetime="2026-10-14">更新于 2026-10-14</time></h2>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.17</span><time class="version-date" datetime="2026-10-24">更新于 2026-10-24</time></h2>
             <p>配置命名规则、方案模板和项目知识库；在线服务统一在“API”页签管理。</p>
           </div>
 
@@ -1696,38 +1710,77 @@
       </div>
     </div>
 
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.16"></script>
-    <script src="historical-knowledge.js?v=V3.0.16"></script>
-    <script src="js/config.js?v=V3.0.16"></script>
-    <script src="js/prefix-library.js?v=V3.0.16"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.16"></script>
-    <script src="js/daily-report-core.js?v=V3.0.16"></script>
-    <script src="js/daily-report.js?v=V3.0.16"></script>
-    <script src="js/keep-awake.js?v=V3.0.16"></script>
-    <script src="js/auto-start.js?v=V3.0.16"></script>
-    <script src="js/network-diagnostics.js?v=V3.0.16"></script>
-    <script src="js/external-app-launcher.js?v=V3.0.16"></script>
-    <script src="js/updates.js?v=V3.0.16"></script>
-    <script src="js/workspace-backup.js?v=V3.0.16"></script>
-    <script src="js/state-dom.js?v=V3.0.16"></script>
-    <script src="js/local-image-browser.js?v=V3.0.16"></script>
-    <script src="js/local-image-search.js?v=V3.0.16"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.16"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.16"></script>
-    <script src="js/ai-workflow.js?v=V3.0.16"></script>
-    <script src="js/assets-detection.js?v=V3.0.16"></script>
-    <script src="js/rendering.js?v=V3.0.16"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.16"></script>
-    <script src="js/lexicon-data.js?v=V3.0.16"></script>
-    <script src="js/export-template-storage.js?v=V3.0.16"></script>
-    <script src="js/toast.js?v=V3.0.16"></script>
-    <script src="js/workspace-storage.js?v=V3.0.16"></script>
-    <script src="js/workspace-migration.js?v=V3.0.16"></script>
-    <script src="js/feature-tests.js?v=V3.0.16"></script>
-    <script src="js/main.js?v=V3.0.16"></script>
-    <script src="js/selection-actions.js?v=V3.0.16"></script>
-    <script src="js/lexicon-panel.js?v=V3.0.16"></script>
-    <script src="js/arthub-folders.js?v=V3.0.16"></script>
-    <script src="js/tutorial-center.js?v=V3.0.16"></script>
+    <dialog id="figmaGuideImageDialog" class="figma-guide-image-dialog" aria-label="教程图片放大查看">
+      <div><strong id="figmaGuideImageTitle"></strong><button id="figmaGuideImageClose" class="ghost-action" type="button" aria-label="关闭放大图片">×</button></div>
+      <img id="figmaGuideImage" alt="" />
+    </dialog>
+    <dialog id="figmaVariantsDialog" class="figma-guide-dialog" aria-labelledby="figmaVariantsTitle">
+      <div class="figma-guide-dialog-head">
+        <div class="figma-guide-brand" aria-hidden="true"><svg width="25" height="36" viewBox="0 0 20 30" xmlns="http://www.w3.org/2000/svg"><path fill="#f24e1e" d="M5 0h5v10H5a5 5 0 0 1 0-10"/><path fill="#ff7262" d="M10 0h5a5 5 0 0 1 0 10h-5"/><path fill="#a259ff" d="M5 10h5v10H5a5 5 0 0 1 0-10"/><circle fill="#1abcfe" cx="15" cy="15" r="5"/><path fill="#0acf83" d="M5 20h5v5a5 5 0 1 1-5-5"/></svg></div>
+        <div class="figma-guide-heading"><h2 id="figmaVariantsTitle">Figma UI 锻造台 <span>安装与使用指南</span></h2><p>从下载安装到一键变体，跟着做就会</p></div>
+        <button id="figmaVariantsClose" class="ghost-action" type="button" aria-label="关闭 Figma一键变体">×</button>
+      </div>
+      <div id="figmaGuideRoot" class="figma-guide-root"></div>
+    </dialog>
+
+    <dialog id="finderExtensionDialog" class="utility-dialog finder-extension-dialog" aria-labelledby="finderExtensionTitle">
+      <header><h2 id="finderExtensionTitle">快速找界面 · 扩展工作台</h2><button id="finderExtensionClose" class="ghost-action" type="button" aria-label="关闭扩展管理">×</button></header>
+      <p>导入官方扩展 ZIP，直接在 AI资源领航中运行。复用桌面环境，模型单独下载，现有项目保持原路径。</p>
+      <p id="finderExtensionStatus" role="status" aria-live="polite">正在检测…</p>
+      <section id="finderExtensionProgress" class="finder-extension-progress" aria-label="扩展处理进度" hidden>
+        <ol id="finderExtensionProgressSteps" class="finder-extension-progress-steps" aria-label="安装步骤"></ol>
+        <div class="finder-extension-progress-heading"><h3 id="finderExtensionProgressStage">准备导入</h3><span id="finderExtensionProgressPercent">等待中</span></div>
+        <div id="finderExtensionProgressTrack" class="finder-extension-progress-track"><progress id="finderExtensionProgressBar" max="100" aria-label="当前阶段进度"></progress></div>
+        <div class="finder-extension-progress-meta"><span id="finderExtensionProgressCounts">正在准备任务…</span><span id="finderExtensionProgressElapsed">用时 0 秒</span></div>
+        <p id="finderExtensionProgressFile" class="finder-extension-progress-file"></p>
+        <p id="finderExtensionProgressHint" class="finder-extension-progress-hint">关闭此窗口不会取消导入，可稍后回来查看。</p>
+      </section>
+      <dl><dt>版本</dt><dd id="finderExtensionVersion">—</dd><dt>扩展路径</dt><dd id="finderExtensionPath">—</dd></dl>
+      <div id="finderExtensionCandidates"></div>
+      <div class="finder-extension-actions">
+        <button id="finderExtensionLaunch" class="primary-action" type="button" disabled>打开工作台</button>
+        <button id="finderExtensionDetect" class="ghost-action" type="button">重新检查</button>
+        <button id="finderExtensionChoose" class="ghost-action" type="button">导入扩展 ZIP</button>
+        <button id="finderExtensionDownload" class="ghost-action" type="button" hidden disabled>下载扩展包</button>
+      </div>
+      <p>扩展 0.7.0 当前单独分发，请导入收到的扩展 ZIP；旧独立版安装包不能导入。</p>
+    </dialog>
+
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.17"></script>
+    <script src="historical-knowledge.js?v=V3.0.17"></script>
+    <script src="js/config.js?v=V3.0.17"></script>
+    <script src="js/prefix-library.js?v=V3.0.17"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.17"></script>
+    <script src="js/daily-report-core.js?v=V3.0.17"></script>
+    <script src="js/daily-report.js?v=V3.0.17"></script>
+    <script src="js/keep-awake.js?v=V3.0.17"></script>
+    <script src="js/auto-start.js?v=V3.0.17"></script>
+    <script src="js/network-diagnostics.js?v=V3.0.17"></script>
+    <script src="js/external-app-launcher.js?v=V3.0.17"></script>
+    <script src="js/updates.js?v=V3.0.17"></script>
+    <script src="js/workspace-backup.js?v=V3.0.17"></script>
+    <script src="js/state-dom.js?v=V3.0.17"></script>
+    <script src="js/local-image-browser.js?v=V3.0.17"></script>
+    <script src="js/local-image-search.js?v=V3.0.17"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.17"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.17"></script>
+    <script src="js/ai-workflow.js?v=V3.0.17"></script>
+    <script src="js/assets-detection.js?v=V3.0.17"></script>
+    <script src="js/rendering.js?v=V3.0.17"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.17"></script>
+    <script src="js/lexicon-data.js?v=V3.0.17"></script>
+    <script src="js/export-template-storage.js?v=V3.0.17"></script>
+    <script src="js/toast.js?v=V3.0.17"></script>
+    <script src="js/workspace-storage.js?v=V3.0.17"></script>
+    <script src="js/workspace-migration.js?v=V3.0.17"></script>
+    <script src="js/feature-tests.js?v=V3.0.17"></script>
+    <script src="js/main.js?v=V3.0.17"></script>
+    <script src="js/selection-actions.js?v=V3.0.17"></script>
+    <script src="js/lexicon-panel.js?v=V3.0.17"></script>
+    <script src="js/arthub-folders.js?v=V3.0.17"></script>
+    <script src="js/tutorial-center.js?v=V3.0.17"></script>
+    <script src="js/more-features.js?v=V3.0.17"></script>
+    <script src="js/figma-guide.js?v=V3.0.17"></script>
+    <script src="js/finder-extension.js?v=V3.0.17"></script>
   </body>
 </html>

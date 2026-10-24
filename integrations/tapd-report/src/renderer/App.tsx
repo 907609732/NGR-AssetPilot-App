@@ -17,6 +17,8 @@ import {
 } from "../shared/report";
 import type {
   Bridge,
+  BugImagePreviewGroup,
+  BugImagePreviewItem,
   ExportKind,
   LocalState,
   Override,
@@ -29,6 +31,127 @@ declare global {
     tapd: Bridge;
   }
 }
+
+function BugImageGallery({
+  period,
+  bugId,
+  images,
+}: {
+  period: Period;
+  bugId: string;
+  images: BugImagePreviewItem[];
+}) {
+  const [loaded, setLoaded] = useState<
+    { item: BugImagePreviewItem; url: string }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(0);
+  const [selected, setSelected] = useState<{
+    item: BugImagePreviewItem;
+    url: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    const created: string[] = [];
+    setLoaded([]);
+    setFailed(0);
+    setLoading(true);
+    setSelected(null);
+    void (async () => {
+      const results: ({ item: BugImagePreviewItem; url: string } | null)[] =
+        new Array(images.length).fill(null);
+      let next = 0;
+      let failures = 0;
+      const workers = Array.from(
+        { length: Math.min(4, Math.max(1, images.length)) },
+        async () => {
+          while (!disposed) {
+            const index = next++;
+            if (index >= images.length) break;
+            const item = images[index];
+            try {
+              const preview = await window.tapd.getBugImage({
+                period,
+                bugId,
+                imageId: item.id,
+              });
+              const url = URL.createObjectURL(
+                new Blob([preview.data], { type: preview.mimeType }),
+              );
+              created.push(url);
+              results[index] = { item, url };
+            } catch {
+              failures++;
+            }
+          }
+        },
+      );
+      await Promise.all(workers);
+      if (!disposed) {
+        setLoaded(results.filter((value) => value !== null));
+        setFailed(failures);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      disposed = true;
+      created.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [period.start, period.end, bugId, images]);
+
+  return (
+    <div className="bug-image-panel" aria-label={`Bug ${bugId} 图片`}>
+      {loading && <p className="bug-image-loading">正在加载图片…</p>}
+      {!loading && loaded.length === 0 && (
+        <p className="bug-image-loading">图片暂时无法显示。</p>
+      )}
+      {loaded.length > 0 && (
+        <div className="bug-image-grid">
+          {loaded.map(({ item, url }) => (
+            <button
+              className="bug-image-card"
+              key={item.id}
+              aria-label={`查看大图 ${item.fileName}`}
+              onClick={() => setSelected({ item, url })}
+            >
+              <img src={url} alt={`${item.source}图片：${item.fileName}`} />
+              <span>
+                {item.source} · {item.width}×{item.height}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {failed > 0 && (
+        <p className="bug-image-warning">另有 {failed} 张预览加载失败</p>
+      )}
+      {selected && (
+        <div
+          className="bug-image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`查看图片 ${selected.item.fileName}`}
+          onClick={() => setSelected(null)}
+        >
+          <button
+            className="bug-image-lightbox-close"
+            aria-label="关闭大图"
+            onClick={() => setSelected(null)}
+          >
+            ×
+          </button>
+          <img
+            src={selected.url}
+            alt={`${selected.item.source}图片：${selected.item.fileName}`}
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const empty: LocalState = {
   capture: null,
   overrides: {},
@@ -71,7 +194,7 @@ export default function App() {
   const [month, setMonth] = useState(initial.month);
   const [week, setWeek] = useState<Period>(initial.week);
   const [custom, setCustom] = useState<Period>(initial.custom);
-  const [busy, setBusy] = useState(false);
+  const [busyTask, setBusyTask] = useState<"collect" | "images" | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(true);
   const [showAllLevels, setShowAllLevels] = useState(false);
@@ -80,6 +203,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [draft, setDraft] = useState(false);
   const [savedPath, setSavedPath] = useState("");
+  const [bugImageGroups, setBugImageGroups] = useState<BugImagePreviewGroup[]>([]);
+  const [openBugId, setOpenBugId] = useState("");
   const period = useMemo(
     () =>
       mode === "month" ? monthPeriod(month) : mode === "week" ? week : custom,
@@ -90,6 +215,7 @@ export default function App() {
     !validDate(period.end) ||
     period.start > period.end ||
     (Date.parse(period.end) - Date.parse(period.start)) / 86400000 >= 370;
+  const busy = busyTask !== null;
   const report = useMemo(
     () =>
       buildReport(
@@ -101,8 +227,17 @@ export default function App() {
   const covered = captureCovers(state.capture, period);
   const needsCapture = !state.capture?.complete || !covered;
   const included = report.items.filter((item) => item.included);
+  const bugCount = new Set(
+    report.items
+      .filter((item) => String(item.type).toLowerCase() === "bug")
+      .map((item) => `${item.workspaceId}:${item.id}`),
+  ).size;
   const pending = included.filter(
     (item) => !validLevel(item.level) || !item.category.trim() || item.changed,
+  );
+  const bugImagesById = useMemo(
+    () => new Map(bugImageGroups.map((group) => [group.bugId, group.images])),
+    [bugImageGroups],
   );
   const confirmationItems = showAllLevels ? included : pending;
   const categories = [
@@ -152,18 +287,63 @@ export default function App() {
         JSON.stringify({ mode, month, week, custom }),
       );
   }, [mode, month, week, custom, invalidPeriod]);
+  useEffect(() => {
+    let active = true;
+    setOpenBugId("");
+    if (invalidPeriod) {
+      setBugImageGroups([]);
+      return () => {
+        active = false;
+      };
+    }
+    void window.tapd
+      .listBugImages({ period })
+      .then((groups) => {
+        if (active) setBugImageGroups(groups);
+      })
+      .catch(() => {
+        if (active) setBugImageGroups([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [period.start, period.end, invalidPeriod, state.exports]);
   async function collect(all = false) {
-    setBusy(true);
+    setBusyTask("collect");
     setNotice("");
     setSavedPath("");
-    await run(async () =>
-      setState(
-        await window.tapd.collect(
-          all ? { kind: "all" } : { kind: "range", period },
+    try {
+      await run(async () =>
+        setState(
+          await window.tapd.collect(
+            all ? { kind: "all" } : { kind: "range", period },
+          ),
         ),
-      ),
-    );
-    setBusy(false);
+      );
+    } finally {
+      setBusyTask(null);
+    }
+  }
+  async function extractBugImages() {
+    setBusyTask("images");
+    setNotice("");
+    setSavedPath("");
+    try {
+      const result = await run(() => window.tapd.extractBugImages({ period }));
+      if (!result) return;
+      setSavedPath(result.outputPath);
+      const refreshed = await run(() => window.tapd.load());
+      if (refreshed) setState(refreshed);
+      setNotice(
+        result.message
+          ? `${result.message}；已保留 ${result.imageCount} 张图片，失败 ${result.failedCount} 项`
+          : result.canceled
+          ? `已停止提取：保留 ${result.imageCount} 张图片，失败 ${result.failedCount} 项`
+          : `Bug 图片提取完成：${result.imageCount} 张，重复 ${result.duplicateCount} 张，失败 ${result.failedCount} 项`,
+      );
+    } finally {
+      setBusyTask(null);
+    }
   }
   async function output(kind: ExportKind) {
     await run(async () => {
@@ -196,6 +376,8 @@ export default function App() {
     setProgress(null);
     setConfirmOpen(true);
     setShowAllLevels(false);
+    setBugImageGroups([]);
+    setOpenBugId("");
     setNotice("所有报表数据已清除");
   }
   async function confirmItem(item: PreparedItem, patch: Override) {
@@ -248,13 +430,6 @@ export default function App() {
         <h1>报表预览</h1>
         <div className="header-actions">
           <span>{state.settings.person}</span>
-          <button
-            className="quiet-button"
-            onClick={() => run(() => window.tapd.login())}
-            disabled={busy || saving}
-          >
-            打开 TAPD 登录
-          </button>
         </div>
       </header>
       <div className="content">
@@ -333,13 +508,49 @@ export default function App() {
               </div>
             )}
           </div>
-          <div className="capture-actions">
+        </div>
+        <div className="capture-actions" role="group" aria-label="按顺序完成采集">
+          <button
+            className="secondary workflow-step"
+            onClick={() => run(() => window.tapd.login())}
+            disabled={busy || saving}
+          >
+            <span className="step-number" aria-hidden="true">1</span> 登录 TAPD
+          </button>
+
             <button
-              className={needsCapture ? "primary" : "secondary"}
+              className={`workflow-step ${needsCapture ? "primary" : "secondary"}`}
               onClick={() => collect()}
               disabled={busy || saving || invalidPeriod}
             >
-              {busy ? "正在抓取…" : "抓取所选日期"}
+              <span className="step-number" aria-hidden="true">2</span>
+              {busyTask === "collect" ? "正在抓取…" : "抓取所选日期"}
+            </button>
+            <button
+              className="secondary workflow-step"
+              onClick={() => void extractBugImages()}
+              disabled={
+                busy ||
+                saving ||
+                invalidPeriod ||
+                !state.capture?.complete ||
+                !covered ||
+                bugCount === 0
+              }
+              title={
+                !state.capture
+                  ? "请先抓取所选日期"
+                  : !state.capture.complete
+                    ? "当前采集尚未完成，请重新抓取"
+                    : !covered
+                      ? "所选日期超出当前采集范围"
+                      : bugCount === 0
+                        ? "当前日期范围没有 Bug 单"
+                        : `提取当前范围内 ${bugCount} 个 Bug 单的图片`
+              }
+            >
+              <span className="step-number" aria-hidden="true">3</span>
+              {busyTask === "images" ? "正在提取图片…" : "提取 Bug 单图片"}
             </button>
             <ActionMenu label="更多采集" align="right" className="capture-menu">
               <p>需要完整历史时，读取所有时间的已办，耗时较长。</p>
@@ -347,7 +558,6 @@ export default function App() {
                 抓取全部历史
               </button>
             </ActionMenu>
-          </div>
         </div>
         {invalidPeriod && (
           <p className="warning">请选择有效日期，单次最多 370 天</p>
@@ -362,7 +572,7 @@ export default function App() {
             <span>{progress.message}</span>
             {busy && (
               <button onClick={() => run(() => window.tapd.cancel())}>
-                停止并保存草稿
+                {busyTask === "images" ? "停止提取" : "停止并保存草稿"}
               </button>
             )}
           </div>
@@ -400,6 +610,11 @@ export default function App() {
           <p className="warning">
             采集未完成：{state.capture.issues.join("；")}
             。当前数据可预览和导出草稿。
+          </p>
+        )}
+        {state.capture?.complete && covered && !invalidPeriod && bugCount === 0 && (
+          <p className="warning">
+            当前日期范围没有 Bug 单，图片提取按钮已禁用。
           </p>
         )}
         <div className="export-toolbar" aria-label="报表导出">
@@ -517,15 +732,39 @@ export default function App() {
             </div>
             <p className="confirmation-help">
               选择 S1、S2、S3 自动保存；其他等级点“自定义”，输入如 S4 或 4
-              后点“保存等级”。原始标题可展开核对。
+              后点“保存等级”。Bug 单可在单号后点击“显示图片”核对。
             </p>
             <ul className="confirmation-list">
               {confirmationItems.map((item) => (
                 <li key={item.key}>
                   <div className="confirmation-item">
-                    <span className="confirmation-meta">
-                      {item.dates[0]} · #{item.shortId}
-                    </span>
+                    <div className="confirmation-meta-row">
+                      <span className="confirmation-meta">
+                        {item.dates[0]} · #{item.shortId}
+                      </span>
+                      {String(item.type).toLowerCase() === "bug" && (() => {
+                        const images = bugImagesById.get(item.shortId) ?? [];
+                        const expanded = openBugId === item.shortId;
+                        return (
+                          <button
+                            className="bug-image-toggle"
+                            disabled={!images.length}
+                            aria-expanded={expanded}
+                            title={
+                              images.length
+                                ? `查看 Bug #${item.shortId} 的 ${images.length} 张图片`
+                                : "请先点击上方“提取 Bug 单图片”"
+                            }
+                            onClick={() =>
+                              setOpenBugId(expanded ? "" : item.shortId)
+                            }
+                          >
+                            {expanded ? "收起图片" : "显示图片"}
+                            {images.length ? ` (${images.length})` : ""}
+                          </button>
+                        );
+                      })()}
+                    </div>
                     <p>{item.cleanTitle}</p>
                     <details>
                       <summary>
@@ -548,6 +787,13 @@ export default function App() {
                         </button>
                       )}
                     </details>
+                    {openBugId === item.shortId && (
+                      <BugImageGallery
+                        period={period}
+                        bugId={item.shortId}
+                        images={bugImagesById.get(item.shortId) ?? []}
+                      />
+                    )}
                   </div>
                   <div className="confirmation-field">
                     <span>S 等级</span>

@@ -1,6 +1,10 @@
 import { APP_HOST, APP_SCHEME } from "../shared/constants.mjs";
 
 const FEEDBACK_FORM_URL = "https://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=1";
+const FIGMA_TUTORIAL_URLS = new Set([
+  "https://www.bilibili.com/video/BV1kmn865Eio/",
+  "https://www.bilibili.com/video/BV1jxHK6KEs4/",
+]);
 
 export function isTrustedAppUrl(rawUrl) {
   if (typeof rawUrl !== "string" || rawUrl.length > 4096) return false;
@@ -24,12 +28,13 @@ export function isAllowedExternalUrl(rawUrl) {
     const parsed = new URL(rawUrl);
     const allowedHosts = new Set(["ngr.lttlt.top", "github.com"]);
     const isFeedbackForm = parsed.href === FEEDBACK_FORM_URL;
+    const isFigmaTutorial = FIGMA_TUTORIAL_URLS.has(parsed.href);
     return (
       parsed.protocol === "https:" &&
       !parsed.port &&
       !parsed.username &&
       !parsed.password &&
-      (allowedHosts.has(parsed.hostname.toLowerCase()) || isFeedbackForm)
+      (allowedHosts.has(parsed.hostname.toLowerCase()) || isFeedbackForm || isFigmaTutorial)
     );
   } catch {
     return false;

@@ -65,7 +65,17 @@ jobs:
             artifacts/prod/*-SHA256SUMS.txt
             artifacts/prod/*-sbom.cdx.json
             artifacts/prod/*-build-manifest.json
+            artifacts/prod/extension-report.json
+            artifacts/prod/extension-release-notes.md
           if-no-files-found: error
+      - name: Append extension versions to release notes
+        shell: pwsh
+        run: |
+          $releaseVersion = node -p "require('./package.json').version"
+          $releaseNotes = Get-Content -LiteralPath "docs/releases/v$releaseVersion.md" -Raw
+          $extensionNotes = Get-Content -LiteralPath 'artifacts/prod/extension-release-notes.md' -Raw
+          "$releaseNotes`n`n$extensionNotes" | Set-Content -LiteralPath '.tmp/production-release-notes.md' -Encoding utf8
+          $extensionNotes | Out-File -LiteralPath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - name: Publish GitHub Release for tag
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
@@ -73,7 +83,7 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: false
-          body_path: docs/releases/${{ github.ref_name }}.md
+          body_path: .tmp/production-release-notes.md
           files: |
             artifacts/prod/*.exe
             artifacts/prod/*.blockmap
@@ -81,3 +91,5 @@ jobs:
             artifacts/prod/*-SHA256SUMS.txt
             artifacts/prod/*-sbom.cdx.json
             artifacts/prod/*-build-manifest.json
+            artifacts/prod/extension-report.json
+            artifacts/prod/extension-release-notes.md

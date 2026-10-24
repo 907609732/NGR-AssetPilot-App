@@ -114,8 +114,36 @@ export interface Progress {
   message: string;
   loaded?: number;
   total?: number | null;
+  current?: number;
+  imageCount?: number;
+  failedCount?: number;
 }
 export type ExportKind = "xlsx" | "txt" | "md" | "csv";
+export interface BugImageExportResult {
+  outputPath: string;
+  bugCount: number;
+  imageCount: number;
+  duplicateCount: number;
+  failedCount: number;
+  canceled: boolean;
+  message?: string;
+}
+export interface BugImagePreviewItem {
+  id: string;
+  bugId: string;
+  source: "描述" | "评论" | "附件" | "图片";
+  fileName: string;
+  width: number;
+  height: number;
+}
+export interface BugImagePreviewGroup {
+  bugId: string;
+  images: BugImagePreviewItem[];
+}
+export interface BugImagePreviewData {
+  mimeType: "image/webp";
+  data: ArrayBuffer;
+}
 export interface Bridge {
   load(): Promise<LocalState>;
   login(): Promise<void>;
@@ -128,6 +156,17 @@ export interface Bridge {
   }): Promise<LocalState>;
   restoreSnapshot(id: string): Promise<LocalState>;
   clearAllData(): Promise<LocalState | null>;
+  extractBugImages(input: {
+    period: Period;
+  }): Promise<BugImageExportResult | null>;
+  listBugImages(input: {
+    period: Period;
+  }): Promise<BugImagePreviewGroup[]>;
+  getBugImage(input: {
+    period: Period;
+    bugId: string;
+    imageId: string;
+  }): Promise<BugImagePreviewData>;
   export(input: {
     kind: ExportKind;
     period: Period;

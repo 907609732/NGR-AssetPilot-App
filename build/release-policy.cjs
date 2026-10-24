@@ -2,6 +2,6 @@
 // code-signing certificate is configured in the production release environment.
 // Only v3.0.12 omits managed cloud translation.
 module.exports = (version) => ({
-  unsigned: version === "3.0.12" || version === "3.0.13" || version === "3.0.14" || version === "3.0.15" || version === "3.0.16",
+  unsigned: version === "3.0.12" || version === "3.0.13" || version === "3.0.14" || version === "3.0.15" || version === "3.0.16" || version === "3.0.17",
   offlineTranslationOnly: version === "3.0.12",
 });

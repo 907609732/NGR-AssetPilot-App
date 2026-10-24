@@ -334,6 +334,7 @@ main {
 }
 
 .home-secondary-actions {
+  anchor-name: --more-features-anchor;
   position: absolute;
   left: 50%;
   bottom: 16px;
@@ -372,6 +373,80 @@ main {
   background: var(--surface);
   color: var(--primary);
 }
+
+.more-features-popover {
+  position: fixed;
+  position-anchor: --more-features-anchor;
+  inset: auto;
+  bottom: calc(anchor(top) + 10px);
+  justify-self: anchor-center;
+  width: min(280px, calc(100vw - 32px));
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 36px rgba(13, 52, 59, 0.18);
+}
+.more-features-popover > strong { display: block; padding: 4px 10px 10px; font-size: 13px; color: var(--muted); }
+.more-feature-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.more-feature-item:hover, .more-feature-item:focus-visible { background: #eaf6f7; color: var(--primary); }
+.more-feature-item > span:first-child { width: 20px; text-align: center; color: var(--primary); font-weight: 750; }
+.finder-feature-row { display: flex; align-items: center; gap: 4px; }
+.finder-feature-row .more-feature-item { flex: 1; min-width: 0; }
+.finder-feature-row small { color: var(--muted); font-size: 11px; }
+#finderExtensionManage { min-width: 32px; padding: 8px; }
+#finderExtensionDownload[hidden] { display: none; }
+.finder-extension-dialog { width: min(720px, calc(100vw - 32px)); }
+.finder-extension-dialog > p { color: var(--muted); line-height: 1.7; }
+.finder-extension-dialog dd { margin: 6px 0 16px; overflow-wrap: anywhere; }
+.finder-extension-progress { margin: 18px 0; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.finder-extension-progress[hidden] { display: none; }
+.finder-extension-progress-steps { display: flex; gap: 10px; list-style: none; margin: 0 0 20px; padding: 0; }
+.finder-extension-progress-steps li { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; font-size: 12px; color: var(--muted); }
+.finder-extension-progress-steps li::before { content: attr(data-number); display: grid; place-items: center; width: 22px; height: 22px; flex: 0 0 22px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); font-variant-numeric: tabular-nums; }
+.finder-extension-progress-steps li.is-current { color: var(--primary); font-weight: 700; }
+.finder-extension-progress-steps li.is-current::before, .finder-extension-progress-steps li.is-done::before { background: var(--primary); border-color: var(--primary); color: white; }
+.finder-extension-progress-steps li.is-done { color: var(--primary); }
+.finder-extension-progress-heading, .finder-extension-progress-meta { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.finder-extension-progress-heading h3 { margin: 0; font-size: 15px; }
+.finder-extension-progress-heading > span { color: var(--primary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.finder-extension-progress-track { position: relative; height: 8px; margin: 14px 0 10px; border-radius: 5px; overflow: hidden; background: var(--line); }
+.finder-extension-progress-track:has(progress[hidden]) { display: none; }
+.finder-extension-progress-track:has(progress:not([value]):not([hidden]))::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 42%; border-radius: 5px; background: var(--primary); pointer-events: none; animation: update-indeterminate 1.35s ease-in-out infinite; }
+#finderExtensionProgressBar { display: block; width: 100%; height: 8px; margin: 0; appearance: none; border: 0; border-radius: 5px; overflow: hidden; background: var(--line); accent-color: var(--primary); }
+#finderExtensionProgressBar::-webkit-progress-bar { background: var(--line); border-radius: 5px; }
+#finderExtensionProgressBar::-webkit-progress-value { background: var(--primary); border-radius: 5px; transition: width 160ms linear; }
+#finderExtensionProgressBar::-moz-progress-bar { background: var(--primary); border-radius: 5px; }
+#finderExtensionProgressBar[hidden] { display: none; }
+.finder-extension-progress-meta { color: var(--muted); font-size: 12px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.finder-extension-progress-file { min-height: 1.6em; margin: 8px 0; color: var(--text); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.finder-extension-progress-hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.finder-extension-progress[data-state="error"] { border-color: #cb6868; }
+.finder-extension-progress[data-state="error"] .finder-extension-progress-heading, .finder-extension-progress[data-state="error"] .finder-extension-progress-hint { color: #a72e2e; }
+.finder-extension-progress[data-state="error"] #finderExtensionProgressBar::-webkit-progress-value { background: #b74343; }
+@media (max-width: 560px) { .finder-extension-progress { padding: 14px; } .finder-extension-progress-steps { flex-wrap: wrap; row-gap: 12px; } .finder-extension-progress-steps li { flex-basis: calc(50% - 10px); } }
+@media (prefers-reduced-motion: reduce) { #finderExtensionProgressBar, #finderExtensionProgressBar::-webkit-progress-value, #finderExtensionProgressBar::-webkit-progress-bar { animation: none !important; transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .finder-extension-progress-track:has(progress:not([value]):not([hidden]))::after { animation: none; left: 29%; transform: none; } }
+.finder-extension-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+#finderExtensionCandidates { display: grid; gap: 8px; }
+#finderExtensionCandidates button { overflow-wrap: anywhere; text-align: left; }
+.figma-variants-dialog { width: min(640px, calc(100vw - 32px)); }
+.figma-variants-dialog > p { margin-top: 28px; color: var(--muted); }
+.figma-variants-dialog > a { display: block; margin-bottom: 16px; color: var(--primary); overflow-wrap: anywhere; line-height: 1.7; }
+.figma-tutorial-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.figma-tutorial-section h3 { margin: 0 0 12px; font-size: 14px; }
+.figma-tutorial-card { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid #b9dfe2; border-radius: 12px; color: var(--text); background: #f0f9fa; text-decoration: none; transition: background 160ms ease, border-color 160ms ease; }
+.figma-tutorial-card:hover { background: #e5f4f5; border-color: var(--primary); }
+.figma-tutorial-card + .figma-tutorial-card { margin-top: 12px; }
+.figma-tutorial-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.figma-tutorial-play { display: grid; place-items: center; flex: 0 0 44px; height: 44px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 17px; padding-left: 2px; }
+.figma-tutorial-copy { display: grid; gap: 7px; min-width: 0; line-height: 1.5; }
+.figma-tutorial-copy strong { font-size: 14px; overflow-wrap: anywhere; }
+.figma-tutorial-copy small { color: var(--muted); font-size: 12px; }
+.figma-tutorial-arrow { margin-left: auto; color: var(--primary); font-size: 22px; }
 
 .daily-report-view {
   min-width: 0;
@@ -4681,10 +4756,13 @@ button:disabled {
 .project-folder-heading label { white-space: nowrap; }
 .project-folder-heading button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 7px; min-height: 30px; color: var(--accent); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; }
 .project-folder-heading svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-.arthub-folder-dialog { width: min(560px, calc(100vw - 40px)); max-height: calc(100vh - 40px); box-sizing: border-box; overflow: auto; border: 1px solid var(--line); border-radius: 14px; padding: 20px; color: var(--text); background: var(--surface); }
-.arthub-folder-dialog::backdrop { background: #172c3c55; }
-.arthub-folder-dialog header, .arthub-folder-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.arthub-folder-dialog h2 { font-size: 18px; margin: 0; }
+.arthub-folder-dialog, .utility-dialog { width: min(560px, calc(100vw - 40px)); max-height: calc(100vh - 40px); box-sizing: border-box; overflow: auto; border: 1px solid var(--line); border-radius: 14px; padding: 20px; color: var(--text); background: var(--surface); }
+.arthub-folder-dialog::backdrop, .utility-dialog::backdrop { background: #172c3c55; }
+.arthub-folder-dialog header, .arthub-folder-dialog footer, .utility-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.arthub-folder-dialog h2, .utility-dialog h2 { font-size: 18px; margin: 0; }
+.utility-dialog > header button { min-width: 44px; min-height: 44px; }
+.utility-dialog.figma-variants-dialog { width: min(640px, calc(100vw - 32px)); }
+.utility-dialog.finder-extension-dialog { width: min(720px, calc(100vw - 32px)); }
 .arthub-folder-dialog [data-close] { min-width: 44px; min-height: 44px; }
 .arthub-folder-dialog form { display: grid; gap: 12px; margin-bottom: 18px; }
 .arthub-folder-dialog form[hidden] { display: none; }

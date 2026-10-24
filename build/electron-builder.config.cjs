@@ -84,6 +84,7 @@ module.exports = {
     "node_modules/sql.js/dist/sql-wasm.wasm",
   ],
   compression: "maximum",
+  electronLanguages: ["zh-CN", "zh-TW", "en-US"],
   npmRebuild: false,
   buildDependenciesFromSource: false,
   removePackageScripts: true,
@@ -110,6 +111,8 @@ module.exports = {
     "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**/*",
     "!node_modules/onnxruntime-node/bin/napi-v6/linux/**/*",
     "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**/*",
+    // TAPD uses the Node WASM entry; omit browser/ASM/worker/debug builds and ZIP archives.
+    "!node_modules/sql.js/dist/!(sql-wasm.js|sql-wasm.wasm)",
     "!**/*.map",
     "!**/.DS_Store",
   ],

@@ -9,6 +9,7 @@ import { BackupFileService } from "../services/backup-files.mjs";
 import { CredentialStore } from "../services/credential-store.mjs";
 import { DirectoryTokenStore } from "../services/directory-tokens.mjs";
 import { ExternalAppRegistry } from "../services/external-app-registry.mjs";
+import { InterfaceFinderExtension } from "../services/interface-finder-extension.mjs";
 import { ArtHubFolders } from "../services/arthub-folders.mjs";
 import { NetworkClient } from "../services/network-client.mjs";
 import { NetworkDiagnosticsService } from "../services/network-diagnostics-service.mjs";
@@ -204,6 +205,13 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     getWindow: () => mainWindow,
   });
   await externalApps.initialize();
+  const finderExtension = new InterfaceFinderExtension({
+    appDataPath: e2eUserDataPath ? path.join(userDataPath, "extension-test-appdata") : app.getPath("appData"),
+    userDataPath,
+    dialog,
+    getWindow: () => mainWindow,
+    sessionFactory: () => session.fromPartition("persist:ngr-finder-extension"),
+  });
   const artHubFolders = new ArtHubFolders({
     store: new CredentialStore({ safeStorage, userDataPath: app.getPath("userData"), fileName: "arthub-connection.v2.json", legacyFileName: "arthub-connection.v1.json" }),
     fetchImpl: net.fetch.bind(net),
@@ -242,6 +250,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
       : path.resolve(moduleDirectory, "../../build/generated/offline-translation"),
   });
   const lifecycle = new QuitCoordinator({ app, channel: channels.appBeforeQuit });
+  lifecycle.addFinalizer("finder-extension", () => finderExtension.dispose());
   const keepAwake = new KeepAwakeService({ userDataPath, powerSaveBlocker: electron.powerSaveBlocker, powerMonitor: electron.powerMonitor });
   keepAwake.initialize();
   const autoStart = new AutoStartService({ app });
@@ -374,6 +383,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     autoStart,
     dailyReport,
     tapdReport,
+    finderExtension,
     runtimeLogger,
   });
 
@@ -457,6 +467,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     keepAwake.dispose();
     disposeIpc();
     void tapdReport.dispose();
+    void finderExtension.dispose();
     lifecycle.dispose();
   });
 }

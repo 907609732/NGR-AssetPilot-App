@@ -1,6 +1,10 @@
 "use strict";
 
 module.exports = Object.freeze({
+  finderExtensionStatus: "ngr:finder-extension:status",
+  finderExtensionDetect: "ngr:finder-extension:detect",
+  finderExtensionChoose: "ngr:finder-extension:choose",
+  finderExtensionOpen: "ngr:finder-extension:open",
   environmentGetInfo: "ngr:environment:get-info",
   keepAwakeGet: "ngr:keep-awake:get",
   autoStartGet: "ngr:auto-start:get",

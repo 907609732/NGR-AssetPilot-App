@@ -40,6 +40,7 @@ function isWithin(root, candidate) {
 }
 
 export function registerAppScheme(protocol) {
+  // Electron permits only one registration call. Keep both fixed first-party schemes in this batch.
   protocol.registerSchemesAsPrivileged([
     {
       scheme: APP_SCHEME,
@@ -49,6 +50,15 @@ export function registerAppScheme(protocol) {
         supportFetchAPI: true,
         corsEnabled: true,
         codeCache: true,
+      },
+    },
+    {
+      scheme: "library",
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        stream: true,
       },
     },
   ]);

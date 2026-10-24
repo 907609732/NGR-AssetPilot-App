@@ -25,6 +25,21 @@ test("Electron Worker 使用真实 IndexedDB staging 流式校验 v1 备份", { 
     const window = await electronApp.firstWindow();
     await window.waitForLoadState("domcontentloaded");
     await window.waitForFunction(() => Boolean(window.NgrWorkspaceBackup && window.fflate));
+    const hostSecurity = await window.evaluate(() => ({ secure: isSecureContext, subtle: Boolean(globalThis.crypto?.subtle) }));
+    assert.deepEqual(hostSecurity, { secure: true, subtle: true }, "host scheme must retain its secure context and WebCrypto");
+    const finderSecurity = await electronApp.evaluate(async ({ BrowserWindow, session }) => {
+      const isolated = session.fromPartition(`finder-scheme-regression-${Date.now()}`);
+      await isolated.protocol.handle("library", () => new Response("<!doctype html><title>Scheme regression</title>", { headers: { "Content-Type": "text/html; charset=utf-8" } }));
+      const child = new BrowserWindow({ show: false, webPreferences: { session: isolated, sandbox: true, contextIsolation: true, nodeIntegration: false } });
+      try {
+        await child.loadURL("library://regression/index.html");
+        return await child.webContents.executeJavaScript("({secure: isSecureContext, subtle: Boolean(globalThis.crypto?.subtle), url: location.href})");
+      } finally {
+        child.destroy();
+        isolated.protocol.unhandle("library");
+      }
+    });
+    assert.deepEqual(finderSecurity, { secure: true, subtle: true, url: "library://regression/index.html" }, "Finder scheme must work beside the host scheme");
     const result = await window.evaluate(async () => {
       const workspace = {
         schemaVersion: 1,

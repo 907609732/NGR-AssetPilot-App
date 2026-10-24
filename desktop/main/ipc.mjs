@@ -72,6 +72,7 @@ export function registerDesktopIpc({
   autoStart,
   dailyReport,
   tapdReport,
+  finderExtension,
   runtimeLogger = null,
 }) {
   const registered = [];
@@ -151,6 +152,10 @@ export function registerDesktopIpc({
   handle(channels.filesWriteFile, async (event, payload) => directoryTokens.writeFile(payload, event.sender.id));
   handle(channels.dailyReportExport, async (_event, payload) => dailyReport.export(payload));
   handle(channels.tapdReportOpen, async () => tapdReport.open());
+  handle(channels.finderExtensionStatus, async () => finderExtension.status());
+  handle(channels.finderExtensionDetect, async () => finderExtension.detect());
+  handle(channels.finderExtensionChoose, async (_event, request) => finderExtension.choose(request));
+  handle(channels.finderExtensionOpen, async () => finderExtension.open());
 
   handle(channels.backupBeginExport, async (event, payload) => backupService.beginExport(payload, event.sender.id));
   handle(channels.backupWriteExportChunk, async (event, payload) => backupService.writeExportChunk(payload, event.sender.id));

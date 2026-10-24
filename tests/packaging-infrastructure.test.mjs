@@ -15,6 +15,8 @@ test("云翻译恢复版本保留已授权的未签名发布，恢复云配置",
   assert.deepEqual(releasePolicyFor("3.0.14"), { unsigned: true, offlineTranslationOnly: false });
   assert.deepEqual(releasePolicyFor("3.0.15"), { unsigned: true, offlineTranslationOnly: false });
   assert.deepEqual(releasePolicyFor("3.0.16"), { unsigned: true, offlineTranslationOnly: false });
+  assert.deepEqual(releasePolicyFor("3.0.17"), { unsigned: true, offlineTranslationOnly: false });
+  assert.deepEqual(releasePolicyFor("3.0.18"), { unsigned: false, offlineTranslationOnly: false });
 });
 const builderConfigPath = path.join(projectRoot, "build", "electron-builder.config.cjs");
 
@@ -199,7 +201,10 @@ test("正式版发布工作流同时上传自动更新元数据", () => {
   assert.match(workflow, /WIN_CSC_KEY_PASSWORD: \$\{\{ secrets\.WIN_CSC_KEY_PASSWORD \}\}/);
   assert.match(workflow, /draft:\s*false/);
   assert.doesNotMatch(workflow, /draft:\s*true/);
-  assert.match(workflow, /body_path:\s*docs\/releases\/\$\{\{ github\.ref_name \}\}\.md/);
+  assert.match(workflow, /body_path:\s*\.tmp\/production-release-notes\.md/);
+  assert.match(workflow, /docs\/releases\/v\$releaseVersion\.md/);
+  assert.equal((workflow.match(/artifacts\/prod\/extension-report\.json/g) || []).length, 2);
+  assert.match(workflow, /extensionNotes.*Out-File.*GITHUB_STEP_SUMMARY/);
   assert.match(workflow, /generate_release_notes:\s*false/);
 });
 

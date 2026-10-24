@@ -17,7 +17,7 @@ await build({
   format: "esm",
   target: "node22",
   outfile: runtimeOutput,
-  external: ["electron", "exceljs", "playwright-core", "sql.js"],
+  external: ["electron", "exceljs", "playwright-core", "sharp", "sql.js"],
   legalComments: "none",
   sourcemap: false,
   logLevel: "info",

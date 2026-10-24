@@ -89,6 +89,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
       "environment",
       "externalApps",
       "files",
+      "finderExtension",
       "keepAwake",
       "localImageSearch",
       "network",
@@ -103,14 +104,13 @@ test("Electron development app boots with the Dev identity and an isolated rende
       const work = document.querySelector("#workEntry").getBoundingClientRect();
       const detect = document.querySelector("#detectEntry").getBoundingClientRect();
       const local = document.querySelector("#localImageSearchEntry").getBoundingClientRect();
-      const dailyReport = document.querySelector("#dailyReportEntry").getBoundingClientRect();
-      const tapdReport = document.querySelector("#tapdReportEntry").getBoundingClientRect();
+      const more = document.querySelector("#moreFeaturesEntry").getBoundingClientRect();
       const secondaryActions = document.querySelector(".home-secondary-actions").getBoundingClientRect();
       const home = document.querySelector("#homeView").getBoundingClientRect();
       return {
-        visible: [work, detect, local, dailyReport, tapdReport].every((rect) => rect.width > 0 && rect.height > 0),
+        visible: [work, detect, local, more].every((rect) => rect.width > 0 && rect.height > 0),
         localRestored: Math.abs(local.width - work.width) < 2 && Math.abs(local.height - work.height) < 2,
-        secondaryButtons: [dailyReport, tapdReport].every((rect) => rect.width >= 150 && rect.width <= 210 && rect.height >= 40 && rect.height <= 54),
+        secondaryButtons: more.width >= 150 && more.width <= 210 && more.height >= 40 && more.height <= 54,
         secondaryActionsAtBottomCenter: Math.abs((secondaryActions.left + secondaryActions.width / 2) - (home.left + home.width / 2)) < 2 && home.bottom - secondaryActions.bottom <= 30,
       };
     });
@@ -122,15 +122,39 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.match(await window.locator("#feedbackFormLink").innerText(), /反馈与建议/);
     await window.screenshot({ path: path.join(projectRoot, ".tmp", "home-tapd-entry.png"), fullPage: true });
 
+    await window.locator("#moreFeaturesEntry").click();
+    assert.equal(await window.locator("#moreFeaturesPopover .more-feature-item").count(), 4);
+    await window.screenshot({ path: path.join(projectRoot, ".tmp", "home-more-features.png"), fullPage: true });
+    await window.locator("#figmaVariantsEntry").click();
+    assert.equal(await window.locator("#moreFeaturesPopover").isVisible(), false);
+    assert.equal(await window.locator("#figmaVariantsDialog").isVisible(), true);
+    assert.equal(await window.locator("#figmaVariantsDownload").getAttribute("href"), "https://github.com/907609732/NGR-Figma-UI-Forge/releases/latest");
+    await window.screenshot({ path: path.join(projectRoot, ".tmp", "figma-variants-dialog.png"), fullPage: true });
+    await window.keyboard.press("Escape");
+    assert.equal(await window.locator("#figmaVariantsDialog").isVisible(), false);
+    await window.locator("#moreFeaturesEntry").click();
+    await window.locator("#finderExtensionManage").click();
+    await window.waitForFunction(() => document.querySelector("#finderExtensionStatus").textContent !== "正在处理…");
+    assert.equal(await window.locator("#finderExtensionDialog").isVisible(), true);
+    assert.equal(await window.locator("#finderExtensionDownload").isVisible(), false);
+    assert.equal(await window.locator("#finderExtensionChoose").isVisible(), true);
+    await window.screenshot({ path: path.join(projectRoot, ".tmp", "finder-extension-manager.png"), fullPage: true });
+    await window.keyboard.press("Escape");
+
     const tapdWindowPromise = electronApp.waitForEvent("window");
+    await window.locator("#moreFeaturesEntry").click();
     await window.locator("#tapdReportEntry").click();
     const tapdWindow = await tapdWindowPromise;
     await tapdWindow.waitForLoadState("domcontentloaded");
     await tapdWindow.waitForFunction(() => Boolean(window.tapd?.load));
-    await tapdWindow.getByRole("button", { name: "打开 TAPD 登录" }).waitFor({ state: "visible" });
+    await tapdWindow.getByRole("button", { name: "登录 TAPD" }).waitFor({ state: "visible" });
     assert.match(await tapdWindow.title(), /TAPD 周报／月报/);
-    assert.equal(await tapdWindow.getByRole("button", { name: "打开 TAPD 登录" }).isVisible(), true);
+    assert.equal(await tapdWindow.getByRole("button", { name: "登录 TAPD" }).isVisible(), true);
     assert.equal(await tapdWindow.getByRole("button", { name: "抓取所选日期" }).isVisible(), true);
+    const extractBugImages = tapdWindow.getByRole("button", { name: "提取 Bug 单图片" });
+    assert.equal(await extractBugImages.isVisible(), true);
+    assert.equal(await extractBugImages.isDisabled(), true);
+    assert.match(await extractBugImages.getAttribute("title"), /先抓取所选日期/);
     assert.equal(await tapdWindow.getByRole("button", { name: "下载月报 Excel" }).isVisible(), true);
     assert.equal(await tapdWindow.getByRole("button", { name: "清除所有数据" }).isVisible(), true);
     await tapdWindow.screenshot({ path: path.join(projectRoot, ".tmp", "tapd-report-integration.png"), fullPage: true });
@@ -184,6 +208,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
     await window.locator("#backButton").click();
     await window.waitForFunction(() => document.querySelector("#homeView")?.classList.contains("active"));
 
+    await window.locator("#moreFeaturesEntry").click();
     await window.locator("#dailyReportEntry").click();
     await window.waitForFunction(() => document.querySelector("#dailyReportView")?.classList.contains("active"));
     assert.equal(await window.locator("#dailyReportYear").count(), 0);

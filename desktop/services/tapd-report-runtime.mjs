@@ -493,13 +493,13 @@ var LocalStore = class _LocalStore {
       throw error;
     }
   }
-  recordExport(path, kind, draft) {
+  recordExport(path2, kind, draft) {
     this.db.run(
       "INSERT INTO exports(account,at,path,kind,draft) VALUES (?,?,?,?,?)",
       [
         this.load().capture?.account ?? "",
         (/* @__PURE__ */ new Date()).toISOString(),
-        path,
+        path2,
         kind,
         Number(draft)
       ]
@@ -814,6 +814,667 @@ async function collectPage(page, scope, check, progress, settle) {
   return capture;
 }
 
+// integrations/tapd-report/src/main/bug-images.ts
+import { createHash } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { existsSync as existsSync2 } from "node:fs";
+import { mkdir, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { isIP } from "node:net";
+import path from "node:path";
+import sharp from "sharp";
+var MAX_BUGS = 200;
+var MAX_IMAGES_PER_BUG = 200;
+var MAX_IMAGE_BYTES = 50 * 1024 * 1024;
+var TAPD_ORIGIN = "https://tapd.tencent.com";
+var PREVIEW_EXTENSIONS = /* @__PURE__ */ new Set([
+  ".avif",
+  ".bmp",
+  ".gif",
+  ".jpeg",
+  ".jpg",
+  ".png",
+  ".tif",
+  ".tiff",
+  ".webp"
+]);
+var MAX_PREVIEW_FILES = 1e3;
+function asMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+function sanitizePathPart(value, fallback = "\u672A\u547D\u540D", maxLength = 80) {
+  let result = String(value ?? "").replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/\s+/g, " ").replace(/[. ]+$/g, "").trim();
+  if (!result) result = fallback;
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(result))
+    result = `_${result}`;
+  return result.slice(0, maxLength).replace(/[. ]+$/g, "") || fallback;
+}
+function unusedBugImageDirectory(parent, period) {
+  const base = `TAPD-Bug\u56FE\u7247--${period.start}\u81F3${period.end}`;
+  let candidate = path.join(parent, base);
+  for (let index = 2; existsSync2(candidate); index++)
+    candidate = path.join(parent, `${base} (${index})`);
+  return candidate;
+}
+function registeredBugImageExport(state, period) {
+  dateRange(period?.start, period?.end);
+  const base = `TAPD-Bug\u56FE\u7247--${period.start}\u81F3${period.end}`;
+  return state.exports.find((entry) => {
+    if (entry.kind !== "bug-images") return false;
+    const name = path.basename(entry.path);
+    return name === base || new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\(\\d+\\)$`).test(name);
+  });
+}
+function inside(root, target) {
+  const relative = path.relative(root, target);
+  return !!relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+async function scanBugImagePreviews(state, period) {
+  const entry = registeredBugImageExport(state, period);
+  if (!entry) return [];
+  const root = await realpath(entry.path).catch(() => "");
+  if (!root) return [];
+  const folders = await readdir(root, { withFileTypes: true }).catch(() => []);
+  const previews = [];
+  for (const folder of folders) {
+    if (!folder.isDirectory()) continue;
+    const bugId = folder.name.match(/^(\d+)-/)?.[1];
+    if (!bugId) continue;
+    const folderPath = path.join(root, folder.name);
+    const files = await readdir(folderPath, { withFileTypes: true }).catch(() => []);
+    for (const file of files) {
+      if (!file.isFile() || !PREVIEW_EXTENSIONS.has(path.extname(file.name).toLowerCase()))
+        continue;
+      const candidate = path.join(folderPath, file.name);
+      const absolutePath = await realpath(candidate).catch(() => "");
+      if (!absolutePath || !inside(root, absolutePath)) continue;
+      const details = await stat(absolutePath).catch(() => null);
+      if (!details?.isFile() || details.size <= 0 || details.size > MAX_IMAGE_BYTES)
+        continue;
+      const metadata = await sharp(absolutePath, {
+        animated: false,
+        limitInputPixels: 25e7
+      }).metadata().catch(() => null);
+      const width = metadata?.width ?? 0;
+      const height = metadata?.height ?? 0;
+      if (!metadata?.format || width > 0 && height > 0 && width < 48 && height < 48)
+        continue;
+      const relative = path.relative(root, absolutePath).replace(/\\/g, "/");
+      const source = file.name.match(/^\d+-(描述|评论|附件)-/)?.[1] ?? "\u56FE\u7247";
+      previews.push({
+        id: createHash("sha256").update(`${relative}\0${details.size}\0${Math.trunc(details.mtimeMs)}`).digest("hex").slice(0, 32),
+        bugId,
+        source,
+        fileName: file.name,
+        width,
+        height,
+        absolutePath
+      });
+      if (previews.length >= MAX_PREVIEW_FILES) return previews;
+    }
+  }
+  return previews;
+}
+async function listBugImagePreviews(state, period) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const { absolutePath: _absolutePath, ...preview } of await scanBugImagePreviews(
+    state,
+    period
+  )) {
+    const images = groups.get(preview.bugId) ?? [];
+    images.push(preview);
+    groups.set(preview.bugId, images);
+  }
+  return [...groups.entries()].map(([bugId, images]) => ({ bugId, images }));
+}
+async function getBugImagePreview(state, input) {
+  if (!/^\d{1,30}$/.test(input?.bugId ?? "") || !/^[a-f0-9]{32}$/.test(input?.imageId ?? ""))
+    throw new Error("\u56FE\u7247\u6807\u8BC6\u65E0\u6548");
+  const preview = (await scanBugImagePreviews(state, input.period)).find(
+    (item) => item.bugId === input.bugId && item.id === input.imageId
+  );
+  if (!preview) throw new Error("\u56FE\u7247\u4E0D\u5B58\u5728\u6216\u5DF2\u88AB\u79FB\u52A8");
+  const output = await sharp(preview.absolutePath, {
+    animated: false,
+    limitInputPixels: 25e7
+  }).rotate().resize({
+    width: 1600,
+    height: 1200,
+    fit: "inside",
+    withoutEnlargement: true
+  }).webp({ quality: 84 }).toBuffer();
+  const data = output.buffer.slice(
+    output.byteOffset,
+    output.byteOffset + output.byteLength
+  );
+  return { mimeType: "image/webp", data };
+}
+function selectBugImageTickets(state, period) {
+  dateRange(period?.start, period?.end);
+  if (!state.capture) throw new Error("\u8BF7\u5148\u6293\u53D6\u6240\u9009\u65E5\u671F\uFF0C\u518D\u63D0\u53D6 Bug \u5355\u56FE\u7247");
+  if (!state.capture.complete)
+    throw new Error("\u5F53\u524D\u91C7\u96C6\u5C1A\u672A\u5B8C\u6210\uFF0C\u8BF7\u91CD\u65B0\u6293\u53D6\u6240\u9009\u65E5\u671F\u540E\u518D\u63D0\u53D6\u56FE\u7247");
+  if (!captureCovers(state.capture, period))
+    throw new Error("\u6240\u9009\u65E5\u671F\u8D85\u51FA\u5F53\u524D\u91C7\u96C6\u8303\u56F4\uFF0C\u8BF7\u5148\u6293\u53D6\u6240\u9009\u65E5\u671F");
+  const report = buildReport(state, period);
+  const tickets = /* @__PURE__ */ new Map();
+  for (const item of report.items) {
+    if (String(item.type).toLowerCase() !== "bug") continue;
+    const parsed = new URL(item.url, TAPD_ORIGIN);
+    const match = parsed.pathname.match(
+      /^\/tapd_fe\/(\d+)\/bug\/(?:detail\/)?(\d+)\/?$/i
+    );
+    if (parsed.protocol !== "https:" || parsed.hostname !== "tapd.tencent.com" || !match || match[1] !== item.workspaceId || match[2] !== item.id)
+      throw new Error(`Bug #${item.shortId} \u7684 TAPD \u94FE\u63A5\u65E0\u6548\uFF0C\u8BF7\u91CD\u65B0\u6293\u53D6`);
+    const key = `${item.workspaceId}:${item.id}`;
+    if (!tickets.has(key))
+      tickets.set(key, {
+        id: item.id,
+        shortId: item.shortId,
+        workspaceId: item.workspaceId,
+        title: item.cleanTitle || item.title,
+        url: parsed.href
+      });
+  }
+  if (!tickets.size) throw new Error("\u5F53\u524D\u65E5\u671F\u8303\u56F4\u6CA1\u6709 Bug \u5355");
+  if (tickets.size > MAX_BUGS)
+    throw new Error(`\u5F53\u524D\u8303\u56F4\u6709 ${tickets.size} \u4E2A Bug\uFF0C\u5355\u6B21\u6700\u591A\u63D0\u53D6 ${MAX_BUGS} \u4E2A`);
+  return [...tickets.values()];
+}
+function readBugImagesDOM() {
+  const records = [];
+  const absolute = (raw) => {
+    if (!raw) return "";
+    try {
+      return new URL(raw, location.href).href;
+    } catch {
+      return "";
+    }
+  };
+  const hints = (element) => {
+    if (!element) return "";
+    return [
+      element.tagName,
+      element.id,
+      element.className,
+      element.getAttribute("role"),
+      element.getAttribute("aria-label"),
+      element.getAttribute("data-field"),
+      element.getAttribute("data-testid")
+    ].filter((value) => typeof value === "string").join(" ");
+  };
+  const ancestors = (element) => {
+    const values = [];
+    let parent = element.parentElement;
+    for (let depth = 0; parent && depth < 8; depth++, parent = parent.parentElement)
+      values.push(hints(parent));
+    return values.join(" ");
+  };
+  const srcset = (value) => (value ?? "").split(",").map((part) => part.trim().split(/\s+/)[0]).filter(Boolean).reverse();
+  const unique = (values) => [...new Set(values.map(absolute).filter(Boolean))];
+  document.querySelectorAll("img").forEach((image) => {
+    const img = image;
+    const link = img.closest("a[href]");
+    const linkHref = link?.getAttribute("href") ?? "";
+    const originalLink = /(?:attach|download|file)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg)(?:$|[?#])/i.test(
+      linkHref
+    ) ? [linkHref] : [];
+    const urls = unique([
+      ...originalLink,
+      img.getAttribute("data-original") ?? "",
+      img.getAttribute("data-origin") ?? "",
+      img.getAttribute("data-src") ?? "",
+      img.getAttribute("data-lazy-src") ?? "",
+      ...srcset(img.getAttribute("srcset")),
+      img.currentSrc,
+      img.getAttribute("src") ?? ""
+    ]);
+    if (!urls.length) return;
+    const rect = img.getBoundingClientRect();
+    records.push({
+      kind: "image",
+      urls,
+      fileName: link?.getAttribute("download") || img.getAttribute("data-filename") || img.alt || "\u56FE\u7247",
+      ownHints: hints(img),
+      ancestorHints: ancestors(img),
+      inMain: !!img.closest(
+        "main,[role='main'],.main-content,.bug-detail,.bug-content,.workitem-detail"
+      ),
+      visible: rect.width > 0 && rect.height > 0,
+      width: Math.max(img.naturalWidth || 0, Math.round(rect.width)),
+      height: Math.max(img.naturalHeight || 0, Math.round(rect.height))
+    });
+  });
+  document.querySelectorAll("a[href]").forEach((element) => {
+    const link = element;
+    if (link.querySelector("img")) return;
+    const href = link.getAttribute("href") ?? "";
+    const name = link.getAttribute("download") || link.getAttribute("title") || link.textContent?.trim() || "\u56FE\u7247\u9644\u4EF6";
+    const imageName = /\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg)(?:$|[?#])/i.test(
+      `${name} ${href}`
+    );
+    const attachment = /(?:attach|download|file)/i.test(
+      `${href} ${hints(link)} ${ancestors(link)}`
+    );
+    if (!imageName && !attachment) return;
+    const rect = link.getBoundingClientRect();
+    records.push({
+      kind: "attachment",
+      urls: unique([href]),
+      fileName: name,
+      ownHints: hints(link),
+      ancestorHints: ancestors(link),
+      inMain: !!link.closest(
+        "main,[role='main'],.main-content,.bug-detail,.bug-content,.workitem-detail"
+      ),
+      visible: rect.width > 0 && rect.height > 0,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    });
+  });
+  return records;
+}
+function normalizeBugImageCandidates(records, pageUrl) {
+  const candidates = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const record of records) {
+    const own = record.ownHints.toLowerCase();
+    const context = `${record.ownHints} ${record.ancestorHints}`.toLowerCase();
+    const attachment = record.kind === "attachment" || /attach|attachment|download|file-list|file-item|附件|下载/.test(context);
+    const excluded = /avatar|head[-_ ]?photo|user[-_ ]?photo|logo|emoji|emoticon|loading|spinner|captcha/.test(
+      own
+    ) || /navbar|navigation|breadcrumb|side[-_ ]?bar|global[-_ ]?header|top[-_ ]?bar/.test(
+      context
+    );
+    if (excluded && !attachment) continue;
+    if (!attachment && record.width > 0 && record.height > 0 && record.width < 48 && record.height < 48)
+      continue;
+    const comment = /comment|reply|activity|timeline|record|log-list|评论|回复|处理记录/.test(
+      context
+    );
+    const description = /description|detail|content|rich|editor|markdown|正文|描述/.test(
+      context
+    );
+    if (!attachment && !comment && !description && !record.inMain) continue;
+    const urls = record.urls.map((raw) => {
+      try {
+        return new URL(raw, pageUrl).href;
+      } catch {
+        return "";
+      }
+    }).filter((url) => url.startsWith("https://"));
+    if (!urls.length) continue;
+    if (attachment && record.width > 0 && record.height > 0 && record.width <= 32 && record.height <= 32 && urls.every((url) => /\.svg(?:$|[?#])/i.test(url)))
+      continue;
+    const source = attachment ? "\u9644\u4EF6" : comment ? "\u8BC4\u8BBA" : "\u63CF\u8FF0";
+    const key = `${source}\0${urls.join("\0")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ source, urls, fileName: record.fileName });
+    if (candidates.length >= MAX_IMAGES_PER_BUG) break;
+  }
+  return candidates;
+}
+function privateAddress(address) {
+  const value = address.toLowerCase();
+  if (value === "::1" || value === "::" || value.startsWith("fc") || value.startsWith("fd") || value.startsWith("fe8") || value.startsWith("fe9") || value.startsWith("fea") || value.startsWith("feb"))
+    return true;
+  const mapped = value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
+  const ipv4 = mapped ?? (isIP(value) === 4 ? value : "");
+  if (!ipv4) return false;
+  const [a, b] = ipv4.split(".").map(Number);
+  return a === 0 || a === 10 || a === 127 || a === 100 && b >= 64 && b <= 127 || a === 169 && b === 254 || a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168 || a >= 224;
+}
+async function assertSafeImageUrl(raw) {
+  const url = new URL(raw);
+  if (url.protocol !== "https:") throw new Error("\u4EC5\u5141\u8BB8\u4E0B\u8F7D HTTPS \u56FE\u7247");
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+  if (!hostname || hostname === "localhost" || hostname.endsWith(".local"))
+    throw new Error("\u5DF2\u62D2\u7EDD\u672C\u673A\u6216\u5185\u7F51\u56FE\u7247\u5730\u5740");
+  if (isIP(hostname)) {
+    if (privateAddress(hostname)) throw new Error("\u5DF2\u62D2\u7EDD\u672C\u673A\u6216\u5185\u7F51\u56FE\u7247\u5730\u5740");
+  } else {
+    const addresses = await lookup(hostname, { all: true, verbatim: true });
+    if (!addresses.length || addresses.some((entry) => privateAddress(entry.address)))
+      throw new Error("\u5DF2\u62D2\u7EDD\u672C\u673A\u6216\u5185\u7F51\u56FE\u7247\u5730\u5740");
+  }
+  return url;
+}
+function extensionFor(format, contentType) {
+  const value = (format || contentType.split(";")[0].split("/")[1] || "image").toLowerCase().replace(/^x-/, "");
+  const normalized = { jpeg: "jpg", svgxml: "svg", "svg+xml": "svg", tiff: "tif" }[value] ?? value.replace(/[^a-z0-9]/g, "");
+  return normalized || "image";
+}
+function dispositionName(value) {
+  const encoded = value.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+    }
+  }
+  return value.match(/filename="?([^";]+)"?/i)?.[1] ?? "";
+}
+async function fetchOnce(request, rawUrl, referer) {
+  let current = (await assertSafeImageUrl(rawUrl)).href;
+  for (let redirect = 0; redirect <= 5; redirect++) {
+    const response = await request.get(current, {
+      failOnStatusCode: false,
+      headers: { Referer: referer },
+      maxRedirects: 0,
+      timeout: 3e4
+    });
+    const status = response.status();
+    const headers = response.headers();
+    if (status >= 300 && status < 400 && headers.location) {
+      const next = new URL(headers.location, current).href;
+      await response.dispose();
+      current = (await assertSafeImageUrl(next)).href;
+      continue;
+    }
+    if (status < 200 || status >= 300) {
+      await response.dispose();
+      throw new Error(`\u4E0B\u8F7D\u8FD4\u56DE HTTP ${status}`);
+    }
+    const declared = Number(headers["content-length"] ?? 0);
+    if (declared > MAX_IMAGE_BYTES) {
+      await response.dispose();
+      throw new Error("\u56FE\u7247\u8D85\u8FC7 50 MB");
+    }
+    const body = await response.body();
+    await response.dispose();
+    if (!body.length) throw new Error("\u56FE\u7247\u5185\u5BB9\u4E3A\u7A7A");
+    if (body.length > MAX_IMAGE_BYTES) throw new Error("\u56FE\u7247\u8D85\u8FC7 50 MB");
+    let metadata;
+    try {
+      metadata = await sharp(body, {
+        animated: false,
+        limitInputPixels: 25e7
+      }).metadata();
+    } catch {
+      throw new Error("\u54CD\u5E94\u5185\u5BB9\u4E0D\u662F\u6709\u6548\u56FE\u7247");
+    }
+    if (!metadata.format) throw new Error("\u54CD\u5E94\u5185\u5BB9\u4E0D\u662F\u6709\u6548\u56FE\u7247");
+    return {
+      body,
+      url: current,
+      format: metadata.format,
+      contentType: headers["content-type"] ?? "",
+      fileName: dispositionName(headers["content-disposition"] ?? "")
+    };
+  }
+  throw new Error("\u56FE\u7247\u91CD\u5B9A\u5411\u6B21\u6570\u8FC7\u591A");
+}
+async function fetchCandidate(request, candidate, referer) {
+  let lastError = "\u56FE\u7247\u4E0B\u8F7D\u5931\u8D25";
+  for (const url of candidate.urls) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await fetchOnce(request, url, referer);
+      } catch (error) {
+        lastError = asMessage(error);
+        const permanent = /仅允许|已拒绝|不是有效图片|超过 50 MB|内容为空/.test(
+          lastError
+        );
+        if (attempt === 0 && !permanent)
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        else break;
+      }
+    }
+  }
+  throw new Error(lastError);
+}
+async function revealAllImageContent(page, stopped) {
+  let stable = 0;
+  let lastHeight = 0;
+  for (let round = 0; round < 30 && stable < 2 && !stopped(); round++) {
+    const clicked = await page.evaluate(() => {
+      const pattern = /^(展开|展开全部|查看更多|加载更多|更多评论|全部评论|更多记录|查看全部)(?:\s*\(?.*\)?)?$/;
+      const elements = [
+        ...document.querySelectorAll("button,a,[role='button']")
+      ].filter((element) => {
+        const text = element.textContent?.trim() ?? "";
+        const rect = element.getBoundingClientRect();
+        return pattern.test(text) && rect.width > 0 && rect.height > 0;
+      });
+      elements.slice(0, 8).forEach(
+        (element) => element.click()
+      );
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      return elements.length;
+    });
+    await page.waitForTimeout(350);
+    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    stable = !clicked && height === lastHeight ? stable + 1 : 0;
+    lastHeight = height;
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+async function writeManifest(root, rows) {
+  const header = [
+    "Bug\u5355\u53F7",
+    "\u6807\u9898",
+    "\u6765\u6E90\u4F4D\u7F6E",
+    "\u539F\u5730\u5740",
+    "\u4FDD\u5B58\u6587\u4EF6",
+    "SHA-256",
+    "\u72B6\u6001",
+    "\u5931\u8D25\u539F\u56E0"
+  ];
+  const lines = [
+    header,
+    ...rows.map((row) => [
+      row.bugId,
+      row.title,
+      row.source,
+      row.originalUrl,
+      row.savedFile,
+      row.sha256,
+      row.status,
+      row.error
+    ])
+  ];
+  await writeFile(
+    path.join(root, "\u63D0\u53D6\u6E05\u5355.csv"),
+    `\uFEFF${lines.map((line) => line.map(csvCell).join(",")).join("\r\n")}\r
+`,
+    "utf8"
+  );
+}
+function availableFilePath(directory, stem, extension) {
+  let candidate = path.join(directory, `${stem}.${extension}`);
+  for (let index = 2; existsSync2(candidate); index++)
+    candidate = path.join(directory, `${stem} (${index}).${extension}`);
+  return candidate;
+}
+async function extractBugImagesToDirectory(input) {
+  const { context, page, tickets, outputPath, progress, stopped } = input;
+  const readCandidates = input.readCandidates ?? (async (targetPage, ticket, isStopped) => {
+    await targetPage.goto(ticket.url, {
+      waitUntil: "domcontentloaded",
+      timeout: 45e3
+    });
+    if (/\/ptlogin\/|\/login(?:[/?]|$)/i.test(targetPage.url()))
+      throw new Error("TAPD \u767B\u5F55\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55\u540E\u518D\u8BD5");
+    await targetPage.waitForLoadState("networkidle", { timeout: 1e4 }).catch(() => {
+    });
+    await revealAllImageContent(targetPage, isStopped);
+    if (isStopped()) return [];
+    return normalizeBugImageCandidates(
+      await targetPage.evaluate(readBugImagesDOM),
+      targetPage.url()
+    );
+  });
+  const downloadCandidate = input.downloadCandidate ?? ((candidate, referer) => fetchCandidate(context.request, candidate, referer));
+  await mkdir(outputPath, { recursive: false });
+  const rows = [];
+  let imageCount = 0;
+  let duplicateCount = 0;
+  let failedCount = 0;
+  let canceled = false;
+  let resultMessage = "";
+  for (let ticketIndex = 0; ticketIndex < tickets.length; ticketIndex++) {
+    if (stopped()) {
+      canceled = true;
+      break;
+    }
+    const ticket = tickets[ticketIndex];
+    progress({
+      phase: "extracting-images",
+      message: `\u6B63\u5728\u8BFB\u53D6 Bug #${ticket.shortId}\uFF08${ticketIndex + 1}/${tickets.length}\uFF09`,
+      current: ticketIndex + 1,
+      total: tickets.length,
+      imageCount,
+      failedCount
+    });
+    const ticketDir = path.join(
+      outputPath,
+      `${sanitizePathPart(ticket.shortId, "Bug")}-${sanitizePathPart(ticket.title, "\u672A\u547D\u540D", 70)}`
+    );
+    await mkdir(ticketDir, { recursive: false });
+    let candidates;
+    try {
+      candidates = await readCandidates(page, ticket, stopped);
+      if (stopped()) {
+        canceled = true;
+        break;
+      }
+    } catch (error) {
+      failedCount++;
+      rows.push({
+        bugId: ticket.shortId,
+        title: ticket.title,
+        source: "\u5355\u636E",
+        originalUrl: ticket.url,
+        savedFile: "",
+        sha256: "",
+        status: "\u5931\u8D25",
+        error: asMessage(error)
+      });
+      if (/登录已失效/.test(asMessage(error))) {
+        resultMessage = asMessage(error);
+        progress({
+          phase: "incomplete",
+          message: "TAPD \u767B\u5F55\u5DF2\u5931\u6548\uFF0C\u5DF2\u4FDD\u7559\u5F53\u524D\u63D0\u53D6\u7ED3\u679C\u3002\u8BF7\u91CD\u65B0\u767B\u5F55\u540E\u518D\u8BD5\u3002",
+          current: ticketIndex + 1,
+          total: tickets.length,
+          imageCount,
+          failedCount
+        });
+        break;
+      }
+      continue;
+    }
+    if (!candidates.length) {
+      rows.push({
+        bugId: ticket.shortId,
+        title: ticket.title,
+        source: "\u5355\u636E",
+        originalUrl: ticket.url,
+        savedFile: "",
+        sha256: "",
+        status: "\u65E0\u56FE\u7247",
+        error: ""
+      });
+      continue;
+    }
+    const hashes = /* @__PURE__ */ new Map();
+    const urlCache = /* @__PURE__ */ new Map();
+    for (let index = 0; index < candidates.length; index++) {
+      if (stopped()) {
+        canceled = true;
+        break;
+      }
+      const candidate = candidates[index];
+      const originalUrl = candidate.urls[0];
+      try {
+        let downloaded = urlCache.get(originalUrl);
+        if (!downloaded) {
+          downloaded = await downloadCandidate(candidate, ticket.url);
+          urlCache.set(originalUrl, downloaded);
+        }
+        const hash = createHash("sha256").update(downloaded.body).digest("hex");
+        const duplicate = hashes.get(hash);
+        if (duplicate) {
+          duplicateCount++;
+          rows.push({
+            bugId: ticket.shortId,
+            title: ticket.title,
+            source: candidate.source,
+            originalUrl,
+            savedFile: duplicate,
+            sha256: hash,
+            status: "\u91CD\u590D",
+            error: ""
+          });
+          continue;
+        }
+        const extension = extensionFor(downloaded.format, downloaded.contentType);
+        const supplied = downloaded.fileName || candidate.fileName;
+        const withoutExtension = supplied.replace(/\.[a-z0-9]{1,8}$/i, "");
+        const stem = `${String(index + 1).padStart(2, "0")}-${candidate.source}-${sanitizePathPart(withoutExtension, "\u56FE\u7247", 70)}`;
+        const filename = availableFilePath(ticketDir, stem, extension);
+        await writeFile(filename, downloaded.body, { flag: "wx" });
+        const relative = path.relative(outputPath, filename).replace(/\\/g, "/");
+        hashes.set(hash, relative);
+        imageCount++;
+        rows.push({
+          bugId: ticket.shortId,
+          title: ticket.title,
+          source: candidate.source,
+          originalUrl,
+          savedFile: relative,
+          sha256: hash,
+          status: "\u6210\u529F",
+          error: ""
+        });
+      } catch (error) {
+        failedCount++;
+        rows.push({
+          bugId: ticket.shortId,
+          title: ticket.title,
+          source: candidate.source,
+          originalUrl,
+          savedFile: "",
+          sha256: "",
+          status: "\u5931\u8D25",
+          error: asMessage(error)
+        });
+      }
+      progress({
+        phase: "extracting-images",
+        message: `\u6B63\u5728\u63D0\u53D6 Bug #${ticket.shortId} \u7684\u56FE\u7247\uFF08${index + 1}/${candidates.length}\uFF09`,
+        current: ticketIndex + 1,
+        total: tickets.length,
+        imageCount,
+        failedCount
+      });
+    }
+    if (canceled) break;
+  }
+  await writeManifest(outputPath, rows);
+  progress({
+    phase: canceled || failedCount ? "incomplete" : "ready",
+    message: canceled ? `\u5DF2\u505C\u6B62\u63D0\u53D6\uFF0C\u4FDD\u7559 ${imageCount} \u5F20\u56FE\u7247\uFF0C\u5931\u8D25 ${failedCount} \u9879` : resultMessage || `\u56FE\u7247\u63D0\u53D6\u5B8C\u6210\uFF1A${imageCount} \u5F20\uFF0C\u91CD\u590D ${duplicateCount} \u5F20\uFF0C\u5931\u8D25 ${failedCount} \u9879`,
+    current: tickets.length,
+    total: tickets.length,
+    imageCount,
+    failedCount
+  });
+  return {
+    outputPath,
+    bugCount: tickets.length,
+    imageCount,
+    duplicateCount,
+    failedCount,
+    canceled,
+    ...resultMessage ? { message: resultMessage } : {}
+  };
+}
+
 // integrations/tapd-report/src/main/collector.ts
 var WORK_URL = "https://tapd.tencent.com/tapd_fe/my/work";
 var TapdCollector = class {
@@ -884,6 +1545,42 @@ var TapdCollector = class {
     await page.waitForTimeout(900);
     await page.locator(".el-loading-mask:visible").first().waitFor({ state: "hidden", timeout: 15e3 }).catch(() => {
     });
+  }
+  async authenticatedPage() {
+    const page = await this.browser();
+    if (/\/ptlogin\/|\/login(?:[/?]|$)/i.test(page.url())) {
+      await page.bringToFront();
+      throw new Error("TAPD \u767B\u5F55\u5DF2\u5931\u6548\uFF0C\u8BF7\u5728\u4E13\u7528 Chrome \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u8BD5");
+    }
+    try {
+      await page.locator(".avatar-nav[title]").waitFor({ state: "attached", timeout: 15e3 });
+    } catch {
+      await page.bringToFront();
+      throw new Error("\u672A\u68C0\u6D4B\u5230 TAPD \u767B\u5F55\u72B6\u6001\uFF0C\u8BF7\u5728\u4E13\u7528 Chrome \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u8BD5");
+    }
+    return page;
+  }
+  async prepareBugImageExtraction() {
+    if (this.running) throw new Error("\u5DF2\u6709\u91C7\u96C6\u6216\u56FE\u7247\u63D0\u53D6\u6B63\u5728\u8FDB\u884C");
+    await this.authenticatedPage();
+  }
+  async extractBugImages(tickets, outputPath) {
+    if (this.running) throw new Error("\u5DF2\u6709\u91C7\u96C6\u6216\u56FE\u7247\u63D0\u53D6\u6B63\u5728\u8FDB\u884C");
+    this.running = true;
+    this.stopped = false;
+    try {
+      const page = await this.authenticatedPage();
+      return await extractBugImagesToDirectory({
+        context: this.context,
+        page,
+        tickets,
+        outputPath,
+        progress: (progress) => this.progress(progress),
+        stopped: () => this.stopped
+      });
+    } finally {
+      this.running = false;
+    }
   }
   async resetScope(page) {
     const done = page.locator(".worktable-tab-left:not(.new-tab-left) .list-item").filter({ hasText: /^\s*已办\s*$/ });
@@ -987,21 +1684,21 @@ var TapdCollector = class {
 
 // integrations/tapd-report/src/main/exporter.ts
 import ExcelJS from "exceljs";
-import { existsSync as existsSync2 } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { existsSync as existsSync3 } from "node:fs";
+import { writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname2, extname, basename, join as join2 } from "node:path";
 var safeFilename = (text) => text.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/, "").slice(0, 120) || "\u62A5\u8868";
 function suggestedName(kind, period, state, draft) {
   const prefix = draft ? "\u8349\u7A3F--" : "";
   return kind === "xlsx" ? `${prefix}\u57FA\u5730--${Number(period.start.slice(5, 7))}\u6708UI\u63D0\u5355--${safeFilename(state.settings.person)}.xlsx` : `${prefix}${kind === "csv" ? "TAPD\u539F\u59CB\u6E05\u5355" : "\u5468\u62A5"}--${period.start}\u81F3${period.end}.${kind}`;
 }
-function unusedPath(path) {
-  const ext = extname(path), stem = basename(path, ext);
-  let n = 2, next = path;
-  while (existsSync2(next)) next = join2(dirname2(path), `${stem} (${n++})${ext}`);
+function unusedPath(path2) {
+  const ext = extname(path2), stem = basename(path2, ext);
+  let n = 2, next = path2;
+  while (existsSync3(next)) next = join2(dirname2(path2), `${stem} (${n++})${ext}`);
   return next;
 }
-function csvCell(value) {
+function csvCell2(value) {
   const text = /^[\s]*[=+@-]/.test(value) ? `'${value}` : value;
   return `"${text.replace(/"/g, '""')}"`;
 }
@@ -1036,7 +1733,7 @@ function rawCsv(state, period) {
     state.capture.complete && captureCovers(state.capture, period) ? "\u5B8C\u6574" : "\u6240\u9009\u8303\u56F4\u672A\u5B8C\u6574\u91C7\u96C6",
     captureScopeLabel(state.capture)
   ]);
-  return "\uFEFF" + [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+  return "\uFEFF" + [header, ...rows].map((row) => row.map(csvCell2).join(",")).join("\r\n");
 }
 function exportProblems(state, period) {
   const report = buildReport(state, period);
@@ -1046,7 +1743,7 @@ function exportProblems(state, period) {
   if (!report.entries.length) issues.push("\u6240\u9009\u65E5\u671F\u6CA1\u6709\u7EB3\u5165\u7684\u4E8B\u9879");
   return issues;
 }
-async function writeExport(path, kind, state, period, draft, template) {
+async function writeExport(path2, kind, state, period, draft, template) {
   const problems = exportProblems(state, period);
   if (kind !== "csv" && problems.length && !draft)
     throw new Error(
@@ -1054,13 +1751,13 @@ async function writeExport(path, kind, state, period, draft, template) {
     );
   const report = buildReport(state, period);
   if (kind === "csv")
-    return writeFile(path, rawCsv(state, period), {
+    return writeFile2(path2, rawCsv(state, period), {
       encoding: "utf8",
       flag: "wx"
     });
   if (kind !== "xlsx")
-    return writeFile(
-      path,
+    return writeFile2(
+      path2,
       kind === "md" ? weeklyMarkdown(report, draft) : weeklyText(report, draft),
       { encoding: "utf8", flag: "wx" }
     );
@@ -1120,15 +1817,24 @@ async function writeExport(path, kind, state, period, draft, template) {
   workbook.creator = "TAPD\u6708\u62A5\u5DE5\u5177";
   workbook.modified = /* @__PURE__ */ new Date();
   const buffer = await workbook.xlsx.writeBuffer();
-  await writeFile(path, Buffer.from(buffer), { flag: "wx" });
+  await writeFile2(path2, Buffer.from(buffer), { flag: "wx" });
 }
 export {
   LocalStore,
   TapdCollector,
+  assertSafeImageUrl,
   buildReport,
   captureCovers,
+  dateRange,
   exportProblems,
+  extractBugImagesToDirectory,
+  getBugImagePreview,
+  listBugImagePreviews,
+  normalizeBugImageCandidates,
+  sanitizePathPart,
+  selectBugImageTickets,
   suggestedName,
+  unusedBugImageDirectory,
   unusedPath,
   weeklyHtml,
   weeklyText,

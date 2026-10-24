@@ -1,8 +1,17 @@
 import { chromium, type BrowserContext, type Page } from "playwright-core";
 import { mkdirSync } from "node:fs";
-import type { Capture, CaptureScope, Progress } from "../shared/types";
+import type {
+  BugImageExportResult,
+  Capture,
+  CaptureScope,
+  Progress,
+} from "../shared/types";
 import { dateRange, monthPeriod, todayShanghai } from "../shared/report";
 import { collectPage } from "./collect-page";
+import {
+  extractBugImagesToDirectory,
+  type BugImageTicket,
+} from "./bug-images";
 
 const WORK_URL = "https://tapd.tencent.com/tapd_fe/my/work";
 export class TapdCollector {
@@ -79,6 +88,47 @@ export class TapdCollector {
       .first()
       .waitFor({ state: "hidden", timeout: 15000 })
       .catch(() => {});
+  }
+  private async authenticatedPage() {
+    const page = await this.browser();
+    if (/\/ptlogin\/|\/login(?:[/?]|$)/i.test(page.url())) {
+      await page.bringToFront();
+      throw new Error("TAPD 登录已失效，请在专用 Chrome 完成登录后重试");
+    }
+    try {
+      await page
+        .locator(".avatar-nav[title]")
+        .waitFor({ state: "attached", timeout: 15000 });
+    } catch {
+      await page.bringToFront();
+      throw new Error("未检测到 TAPD 登录状态，请在专用 Chrome 完成登录后重试");
+    }
+    return page;
+  }
+  async prepareBugImageExtraction() {
+    if (this.running) throw new Error("已有采集或图片提取正在进行");
+    await this.authenticatedPage();
+  }
+  async extractBugImages(
+    tickets: BugImageTicket[],
+    outputPath: string,
+  ): Promise<BugImageExportResult> {
+    if (this.running) throw new Error("已有采集或图片提取正在进行");
+    this.running = true;
+    this.stopped = false;
+    try {
+      const page = await this.authenticatedPage();
+      return await extractBugImagesToDirectory({
+        context: this.context!,
+        page,
+        tickets,
+        outputPath,
+        progress: (progress) => this.progress(progress),
+        stopped: () => this.stopped,
+      });
+    } finally {
+      this.running = false;
+    }
   }
   private async resetScope(page: Page) {
     const done = page

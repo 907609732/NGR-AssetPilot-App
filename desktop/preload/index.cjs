@@ -6,6 +6,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 // Keep this immutable channel table self-contained so the real packaged
 // renderer does not depend on an unsupported relative CommonJS import.
 const channels = Object.freeze({
+  finderExtensionStatus: "ngr:finder-extension:status",
+  finderExtensionDetect: "ngr:finder-extension:detect",
+  finderExtensionChoose: "ngr:finder-extension:choose",
+  finderExtensionOpen: "ngr:finder-extension:open",
   environmentGetInfo: "ngr:environment:get-info",
   keepAwakeGet: "ngr:keep-awake:get",
   autoStartGet: "ngr:auto-start:get",
@@ -101,6 +105,12 @@ function deepFreeze(value) {
 }
 
 const api = deepFreeze({
+  finderExtension: {
+    status: () => invoke(channels.finderExtensionStatus),
+    detect: () => invoke(channels.finderExtensionDetect),
+    choose: (request) => invoke(channels.finderExtensionChoose, request),
+    open: () => invoke(channels.finderExtensionOpen),
+  },
   autoStart: {
     getState: () => invoke(channels.autoStartGet),
     setSettings: (request) => invoke(channels.autoStartSet, request),

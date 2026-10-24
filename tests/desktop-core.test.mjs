@@ -21,7 +21,7 @@ import {
   TEST_SECRETS_AAD,
 } from "../desktop/services/test-secrets.mjs";
 import { UpdaterController, updaterMetadata } from "../desktop/services/updater-controller.mjs";
-import { installAppProtocol, resolveAppResource } from "../desktop/main/protocol.mjs";
+import { installAppProtocol, resolveAppResource, registerAppScheme } from "../desktop/main/protocol.mjs";
 import { registerDesktopIpc } from "../desktop/main/ipc.mjs";
 import { QuitCoordinator } from "../desktop/main/lifecycle.mjs";
 import { TrayController } from "../desktop/main/tray-controller.mjs";
@@ -117,6 +117,16 @@ test("external app registry detects desktop apps and opens the fixed NGR image-s
   });
 });
 
+test("host and Finder privileged schemes are registered once without changing host privileges", () => {
+  const calls = [];
+  registerAppScheme({ registerSchemesAsPrivileged(schemes) { calls.push(schemes); } });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], [
+    { scheme: "ngr-assetpilot", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, codeCache: true } },
+    { scheme: "library", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  ]);
+});
+
 test("custom scheme resolves only app-hosted resources and adds a strict CSP", async () => {
   await withTempDirectory(async (appRoot) => {
     await writeFile(path.join(appRoot, "index.html"), "<!doctype html><title>NGR</title>");
@@ -153,6 +163,11 @@ test("window settings and navigation helpers enforce the renderer boundary", () 
   assert.equal(isTrustedAppUrl("ngr-assetpilot://app/js/main.js"), true);
   assert.equal(isTrustedAppUrl("ngr-assetpilot://other/js/main.js"), false);
   assert.equal(isAllowedExternalUrl("https://ngr.lttlt.top/help"), true);
+  assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1jxHK6KEs4/"), true);
+  assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1kmn865Eio/"), true);
+  assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/a-different-video/"), false);
+  assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1jxHK6KEs4/?redirect=other"), false);
+  assert.equal(isAllowedExternalUrl("http://www.bilibili.com/video/BV1jxHK6KEs4/"), false);
   assert.equal(isAllowedExternalUrl("https://github.com/907609732/NGR-AssetPilot-App/releases"), true);
   assert.equal(isAllowedExternalUrl("https://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=1"), true);
   assert.equal(isAllowedExternalUrl("https://doc.weixin.qq.com/forms/a-different-form?page=1"), false);
@@ -195,6 +210,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
     module.exports,
   );
   assert.deepEqual(Object.keys(exposed), [
+    "finderExtension",
     "autoStart",
     "keepAwake",
     "environment",
@@ -228,6 +244,15 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.files.writeFile, "function");
   assert.equal(typeof exposed.dailyReport.export, "function");
   assert.equal(typeof exposed.tapdReport.open, "function");
+  assert.deepEqual(Object.keys(exposed.finderExtension), ["status", "detect", "choose", "open"]);
+  await exposed.finderExtension.status();
+  assert.deepEqual(calls.at(-1), [ipcChannels.finderExtensionStatus, undefined]);
+  await exposed.finderExtension.detect();
+  assert.deepEqual(calls.at(-1), [ipcChannels.finderExtensionDetect, undefined]);
+  await exposed.finderExtension.choose({ candidateIndex: 0 });
+  assert.deepEqual(calls.at(-1), [ipcChannels.finderExtensionChoose, { candidateIndex: 0 }]);
+  await exposed.finderExtension.open();
+  assert.deepEqual(calls.at(-1), [ipcChannels.finderExtensionOpen, undefined]);
   assert.equal(typeof exposed.backup.beginImport, "function");
   assert.equal(typeof exposed.backup.finishImport, "function");
   assert.equal(typeof exposed.backup.cancelImport, "function");

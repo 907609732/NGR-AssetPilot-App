@@ -1,4 +1,5 @@
 import path from "node:path";
+import { statSync } from "node:fs";
 import { isTrustedAppUrl } from "../main/security.mjs";
 
 const CHILD_CHANNELS = Object.freeze([
@@ -9,6 +10,9 @@ const CHILD_CHANNELS = Object.freeze([
   "tapd:save",
   "tapd:restore",
   "tapd:clear-all-data",
+  "tapd:extract-bug-images",
+  "tapd:list-bug-images",
+  "tapd:get-bug-image",
   "tapd:export",
   "tapd:copy",
   "tapd:open-path",
@@ -49,7 +53,7 @@ export class TapdReportWindowService {
     this.window = null;
     this.store = null;
     this.collector = null;
-    this.captureJob = null;
+    this.activeJob = null;
     this.runtime = null;
     this.disposed = false;
     this.registeredChannels = [];
@@ -75,24 +79,32 @@ export class TapdReportWindowService {
     this.registeredChannels.push(channel);
   }
 
+  async #runJob(handler) {
+    if (this.activeJob) throw new Error("已有采集或图片提取正在进行");
+    const job = Promise.resolve().then(handler);
+    this.activeJob = job;
+    try {
+      return await job;
+    } finally {
+      if (this.activeJob === job) this.activeJob = null;
+    }
+  }
+
   #registerHandlers() {
     this.#handle("tapd:load", async () => (await this.#ensureReady()).store.load());
-    this.#handle("tapd:login", async () => (await this.#ensureReady()).collector.login());
-    this.#handle("tapd:collect", async (scope) => {
-      const { collector, store } = await this.#ensureReady();
-      if (this.captureJob) throw new Error("已有采集正在进行");
-      this.captureJob = collector.collect(scope).then((capture) => store.capture(capture));
-      try {
-        return await this.captureJob;
-      } finally {
-        this.captureJob = null;
-      }
+    this.#handle("tapd:login", async () => {
+      if (this.activeJob) throw new Error("请等待当前任务完成或先停止");
+      return (await this.#ensureReady()).collector.login();
     });
+    this.#handle("tapd:collect", async (scope) => this.#runJob(async () => {
+      const { collector, store } = await this.#ensureReady();
+      return store.capture(await collector.collect(scope));
+    }));
     this.#handle("tapd:cancel", async () => (await this.#ensureReady()).collector.cancel());
     this.#handle("tapd:save", async (input) => (await this.#ensureReady()).store.save(input));
     this.#handle("tapd:restore", async (id) => (await this.#ensureReady()).store.restore(String(id)));
     this.#handle("tapd:clear-all-data", async () => {
-      if (this.captureJob) throw new Error("请先停止正在进行的采集");
+      if (this.activeJob) throw new Error("请先停止正在进行的采集或图片提取");
       const { response } = await this.dialog.showMessageBox(this.window, {
         type: "warning",
         title: "清除所有数据",
@@ -106,12 +118,37 @@ export class TapdReportWindowService {
       if (response !== 1) return null;
       return (await this.#ensureReady()).store.clearReportData();
     });
+    this.#handle("tapd:extract-bug-images", async (input) =>
+      this.#runJob(() => this.#extractBugImages(input)));
+    this.#handle("tapd:list-bug-images", async (input) => {
+      if (!input || typeof input !== "object" || !input.period)
+        throw new Error("请选择有效的图片日期");
+      const { runtime, store } = await this.#ensureReady();
+      runtime.dateRange(input.period.start, input.period.end);
+      return runtime.listBugImagePreviews(store.load(), input.period);
+    });
+    this.#handle("tapd:get-bug-image", async (input) => {
+      if (!input || typeof input !== "object" || !input.period)
+        throw new Error("图片请求无效");
+      const { runtime, store } = await this.#ensureReady();
+      runtime.dateRange(input.period.start, input.period.end);
+      return runtime.getBugImagePreview(store.load(), input);
+    });
     this.#handle("tapd:export", async (input) => this.#export(input));
     this.#handle("tapd:copy", async (input) => this.#copy(input));
     this.#handle("tapd:open-path", async (requestedPath) => {
       const { store } = await this.#ensureReady();
       if (!store.load().exports.some((entry) => entry.path === requestedPath)) throw new Error("找不到该导出记录");
-      this.shell.showItemInFolder(requestedPath);
+      let directory = false;
+      try {
+        directory = statSync(requestedPath).isDirectory();
+      } catch {
+        throw new Error("导出文件或文件夹已被移动或删除");
+      }
+      if (directory) {
+        const error = await this.shell.openPath(requestedPath);
+        if (error) throw new Error(error);
+      } else this.shell.showItemInFolder(requestedPath);
     });
     this.#handle("tapd:open-item", async (rawUrl) => {
       const parsed = new URL(rawUrl);
@@ -162,6 +199,31 @@ export class TapdReportWindowService {
     return outputPath;
   }
 
+  async #extractBugImages(input) {
+    if (!input || typeof input !== "object" || !input.period)
+      throw new Error("请选择有效的提取日期");
+    const { runtime, store, collector } = await this.#ensureReady();
+    runtime.dateRange(input.period.start, input.period.end);
+    const state = store.load();
+    const tickets = runtime.selectBugImageTickets(state, input.period);
+    await collector.prepareBugImageExtraction();
+    const selection = await this.dialog.showOpenDialog(this.window, {
+      title: "选择 Bug 图片保存位置",
+      defaultPath: this.app.getPath("documents"),
+      buttonLabel: "保存到这里",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (selection.canceled || !selection.filePaths?.[0]) return null;
+    const outputPath = runtime.unusedBugImageDirectory(selection.filePaths[0], input.period);
+    const result = await collector.extractBugImages(tickets, outputPath);
+    store.recordExport(
+      outputPath,
+      "bug-images",
+      result.canceled || result.failedCount > 0,
+    );
+    return result;
+  }
+
   async #copy(input) {
     const { runtime, store } = await this.#ensureReady();
     const state = store.load();
@@ -202,7 +264,7 @@ export class TapdReportWindowService {
 
   async close() {
     this.collector?.cancel();
-    await this.captureJob?.catch(() => {});
+    await this.activeJob?.catch(() => {});
     await this.collector?.close().catch(() => {});
     this.collector = null;
     this.store?.close();
