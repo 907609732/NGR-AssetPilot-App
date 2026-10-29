@@ -279,7 +279,7 @@ function reportGroups(entries) {
   }
   return [...groups.values()];
 }
-function weeklyText(report, draft = false) {
+function weeklyText(report, draft = false, options = {}) {
   const body = report.days.map((day) => {
     const entries = report.entries.filter(
       (entry) => Object.prototype.hasOwnProperty.call(entry.allocations, day.date)
@@ -295,7 +295,7 @@ function weeklyText(report, draft = false) {
     return [
       heading,
       ...entries.map(
-        (entry) => `\u3010${entry.category || "\u5F85\u5206\u7C7B"}\u3011${entry.title}`
+        (entry) => `${options.includeDate ? shortDate(day.date) : ""}\uFF08${entry.level || "\u5F85\u786E\u8BA4"}\uFF09${options.includeEffort ? `${effortText(entry.allocations[day.date])}\u4EBA\u5929` : ""}\u3010${entry.category || "\u5F85\u5206\u7C7B"}\u3011${entry.title}`
       )
     ].join("\n");
   }).join("\n");
@@ -305,10 +305,10 @@ var escapeHtml = (value) => value.replace(
   /[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
 );
-var weeklyHtml = (report, draft = false) => `<table style="border-collapse:collapse"><tbody><tr><td style="border:1px solid #d9e1e5;white-space:pre-wrap">${escapeHtml(weeklyText(report, draft)).replace(/\n/g, "<br>")}</td></tr></tbody></table>`;
-var weeklyMarkdown = (report, draft = false) => `| \u5468\u62A5 |
+var weeklyHtml = (report, draft = false, options = {}) => `<table style="border-collapse:collapse"><tbody><tr><td style="border:1px solid #d9e1e5;white-space:pre-wrap">${escapeHtml(weeklyText(report, draft, options)).replace(/\n/g, "<br>")}</td></tr></tbody></table>`;
+var weeklyMarkdown = (report, draft = false, options = {}) => `| \u5468\u62A5 |
 | --- |
-| ${weeklyText(report, draft).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\|/g, "\\|").replace(/\n/g, "<br>")} |
+| ${weeklyText(report, draft, options).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\|/g, "\\|").replace(/\n/g, "<br>")} |
 `;
 
 // integrations/tapd-report/src/main/store.ts
@@ -476,7 +476,7 @@ var LocalStore = class _LocalStore {
         }
       if (input.settings) {
         const settings = input.settings;
-        if (!settings.person?.trim() || !settings.supplier?.trim() || !Number.isFinite(settings.width) || !Number.isFinite(settings.height) || settings.width <= 0 || settings.height <= 0 || !Array.isArray(settings.rules) || settings.rules.length > 1e3 || settings.rules.some(
+        if (!settings.person?.trim() || settings.weeklyContent !== void 0 && (!settings.weeklyContent || typeof settings.weeklyContent !== "object" || [settings.weeklyContent.includeDate, settings.weeklyContent.includeEffort].some((value) => value !== void 0 && typeof value !== "boolean")) || !settings.supplier?.trim() || !Number.isFinite(settings.width) || !Number.isFinite(settings.height) || settings.width <= 0 || settings.height <= 0 || !Array.isArray(settings.rules) || settings.rules.length > 1e3 || settings.rules.some(
           (r) => typeof r.keyword !== "string" || typeof r.category !== "string" || !r.keyword.trim() || !r.category.trim()
         ))
           throw new Error("\u8BF7\u68C0\u67E5\u59D3\u540D\u3001\u4F9B\u5E94\u5546\u3001\u5C3A\u5BF8\u548C\u5206\u7C7B\u89C4\u5219");
@@ -1758,7 +1758,7 @@ async function writeExport(path2, kind, state, period, draft, template) {
   if (kind !== "xlsx")
     return writeFile2(
       path2,
-      kind === "md" ? weeklyMarkdown(report, draft) : weeklyText(report, draft),
+      kind === "md" ? weeklyMarkdown(report, draft, state.settings.weeklyContent) : weeklyText(report, draft, state.settings.weeklyContent),
       { encoding: "utf8", flag: "wx" }
     );
   const source = new ExcelJS.Workbook();

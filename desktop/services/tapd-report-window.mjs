@@ -229,8 +229,8 @@ export class TapdReportWindowService {
     const state = store.load();
     if (!input?.draft && runtime.exportProblems(state, input?.period).length) throw new Error("仍有待确认项，请先完成整理或勾选草稿");
     const report = runtime.buildReport(state, input.period);
-    const text = runtime.weeklyText(report, input.draft);
-    if (input.html) this.clipboard.write({ text, html: runtime.weeklyHtml(report, input.draft) });
+    const text = runtime.weeklyText(report, input.draft, state.settings.weeklyContent);
+    if (input.html) this.clipboard.write({ text, html: runtime.weeklyHtml(report, input.draft, state.settings.weeklyContent) });
     else this.clipboard.writeText(text);
   }
 

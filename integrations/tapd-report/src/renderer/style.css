@@ -638,6 +638,25 @@ button.bug-image-lightbox-close:hover:not(:disabled) {
   line-height: 1.7;
   white-space: normal;
 }
+.weekly-options {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 14px 0 0;
+  color: #58677e;
+  font-size: 13px;
+}
+.weekly-options .checkline {
+  margin-left: 0;
+  min-height: 32px;
+}
+.weekly-options input {
+  accent-color: #224fb8;
+}
+.weekly-options-hint {
+  color: #68758b;
+}
 .preview-heading {
   display: flex;
   justify-content: space-between;

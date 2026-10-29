@@ -113,7 +113,9 @@ export async function writeExport(
   if (kind !== "xlsx")
     return writeFile(
       path,
-      kind === "md" ? weeklyMarkdown(report, draft) : weeklyText(report, draft),
+      kind === "md"
+        ? weeklyMarkdown(report, draft, state.settings.weeklyContent)
+        : weeklyText(report, draft, state.settings.weeklyContent),
       { encoding: "utf8", flag: "wx" },
     );
   const source = new ExcelJS.Workbook();

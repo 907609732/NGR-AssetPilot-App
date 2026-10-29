@@ -113,6 +113,18 @@ async function verifyTarget(target) {
     assert.deepEqual(await tapdWindow.locator(".capture-actions > button").allTextContents().then((labels) => labels.map((label) => label.replace(/\s+/g, ""))), ["1登录TAPD", "2抓取所选日期", "3提取Bug单图片"]);
     assert.equal(await tapdWindow.getByRole("button", { name: "下载月报 Excel" }).isVisible(), true);
     assert.equal(await tapdWindow.getByRole("button", { name: "清除所有数据" }).isVisible(), true);
+    const weeklyDate = tapdWindow.getByRole("checkbox", { name: "正文添加日期" });
+    const weeklyEffort = tapdWindow.getByRole("checkbox", { name: "正文添加人天" });
+    assert.equal(await weeklyDate.isChecked(), false);
+    assert.equal(await weeklyEffort.isChecked(), false);
+    await weeklyDate.check();
+    await weeklyEffort.check();
+    await tapdWindow.waitForFunction(async () => (await window.tapd.load()).settings.weeklyContent?.includeEffort === true);
+    await tapdWindow.reload();
+    await tapdWindow.waitForFunction(() => document.querySelector('[aria-label="正文添加人天"]')?.checked);
+    assert.equal(await weeklyDate.isChecked(), true);
+    assert.equal(await weeklyEffort.isChecked(), true);
+    await tapdWindow.screenshot({ path: path.join(projectRoot, "artifacts", target.edition, "weekly-content-verification.png"), fullPage: true });
     await tapdWindow.close();
     if (target.edition === "prod" && !releasePolicyFor(packageJson.version).offlineTranslationOnly) {
       const cloud = await window.evaluate(async () => {

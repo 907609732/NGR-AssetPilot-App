@@ -25,6 +25,7 @@ import type {
   Period,
   PreparedItem,
   Progress,
+  WeeklyContentOptions,
 } from "../shared/types";
 declare global {
   interface Window {
@@ -379,6 +380,18 @@ export default function App() {
     setBugImageGroups([]);
     setOpenBugId("");
     setNotice("所有报表数据已清除");
+  }
+  async function saveWeeklyContent(patch: WeeklyContentOptions) {
+    setSaving(true);
+    const settings = {
+      ...state.settings,
+      weeklyContent: { ...state.settings.weeklyContent, ...patch },
+    };
+    const previous = state;
+    setState({ ...state, settings });
+    const saved = await run(() => window.tapd.save({ settings }));
+    setState(saved ?? previous);
+    setSaving(false);
   }
   async function confirmItem(item: PreparedItem, patch: Override) {
     setSaving(true);
@@ -867,6 +880,32 @@ export default function App() {
             </span>
           )}
         </div>
+        {view === "weekly" && (
+          <div className="weekly-options" role="group" aria-label="周报正文格式">
+            <span>正文附加：</span>
+            <label className="checkline">
+              <input
+                type="checkbox"
+                aria-label="正文添加日期"
+                checked={state.settings.weeklyContent?.includeDate === true}
+                disabled={busy || saving}
+                onChange={(event) => void saveWeeklyContent({ includeDate: event.target.checked })}
+              />
+              日期
+            </label>
+            <label className="checkline">
+              <input
+                type="checkbox"
+                aria-label="正文添加人天"
+                checked={state.settings.weeklyContent?.includeEffort === true}
+                disabled={busy || saving}
+                onChange={(event) => void saveWeeklyContent({ includeEffort: event.target.checked })}
+              />
+              人天
+            </label>
+            <span className="weekly-options-hint">每条内容显示 S 等级，上方每日汇总保持原样</span>
+          </div>
+        )}
         {!state.capture ? (
           <p className="empty-state">
             选择日期，登录 TAPD 后点击“抓取所选日期”，即可预览并导出报告。
@@ -880,9 +919,9 @@ export default function App() {
             aria-labelledby="weekly-tab"
           >
             <pre className="weekly-text">
-              {weeklyText(report, draft)
+              {weeklyText(report, draft, state.settings.weeklyContent)
                 .split(
-                  /(^\d{1,2}\/\d{1,2}(?:-\d{1,2}\/\d{1,2})?（[^）\n]+）[\d.]+人天)/gm,
+                  /(^\d{1,2}\/\d{1,2}(?:-\d{1,2}\/\d{1,2})?（[^）\n]+）[\d.]+人天$)/gm,
                 )
                 .map((part, i) =>
                   i % 2 ? (

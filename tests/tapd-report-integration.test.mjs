@@ -16,6 +16,8 @@ import {
   selectBugImageTickets,
   unusedBugImageDirectory,
   weeklyText,
+  weeklyHtml,
+  writeExport,
 } from "../desktop/services/tapd-report-runtime.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -435,8 +437,41 @@ test("周报按日期汇总且每天只输出一次日期和总人天", () => {
   assert.equal((text.match(/10\/12/g) ?? []).length, 1);
   assert.equal(
     text,
-    "10/12（S1/S2）1人天\n【运营活动】第一项\n【商业化】第二项\n【运营活动】第三项",
+    "10/12（S1/S2）1人天\n（S1）【运营活动】第一项\n（S2）【商业化】第二项\n（S2）【运营活动】第三项",
   );
+  for (const includeDate of [false, true]) {
+    for (const includeEffort of [false, true]) {
+      const options = { includeDate, includeEffort };
+      const lines = weeklyText(report, false, options).split("\n");
+      assert.equal(lines[0], "10/12（S1/S2）1人天");
+      assert.equal(lines[1], `${includeDate ? "10/12" : ""}（S1）${includeEffort ? "0.34人天" : ""}【运营活动】第一项`);
+      assert.equal(lines[2], `${includeDate ? "10/12" : ""}（S2）${includeEffort ? "0.33人天" : ""}【商业化】第二项`);
+      assert.ok(weeklyHtml(report, false, options).includes(lines.join("<br>")));
+    }
+  }
+  // A merged entry's total must not be repeated on each day.
+  report.days.push({ date: "2026-10-13", budget: 100, allocated: 100 });
+  report.entries[0].allocations["2026-10-13"] = 100;
+  report.entries[0].units = 134;
+  const merged = weeklyText(report, true, { includeDate: true, includeEffort: true });
+  assert.match(merged, /10\/13（S1）1人天【运营活动】第一项/);
+  assert.doesNotMatch(merged, /1\.34人天/);
+});
+
+test("周报 TXT 和 Markdown 导出采用已保存的正文选项", async () => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ngr-weekly-options-"));
+  try {
+    const state = capturedState([capturedItem()]);
+    state.settings.weeklyContent = { includeDate: true, includeEffort: true };
+    const period = { start: "2026-10-12", end: "2026-10-18" };
+    for (const kind of ["txt", "md"]) {
+      const output = path.join(temporaryRoot, `weekly.${kind}`);
+      await writeExport(output, kind, state, period, false, "");
+      assert.match(await readFile(output, "utf8"), /10\/12（S1）1人天【运营活动】示例问题/);
+    }
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 });
 
 test("TAPD 子窗口只接受自身主框架请求并清理 IPC", async () => {

@@ -7,6 +7,7 @@ import type {
   Report,
   ReportEntry,
   Settings,
+  WeeklyContentOptions,
 } from "./types";
 
 export const defaultSettings: Settings = {
@@ -353,7 +354,7 @@ export function reportGroups(entries: ReportEntry[]) {
   }
   return [...groups.values()];
 }
-export function weeklyText(report: Report, draft = false): string {
+export function weeklyText(report: Report, draft = false, options: WeeklyContentOptions = {}): string {
   const body = report.days
     .map((day) => {
       const entries = report.entries.filter((entry) =>
@@ -371,7 +372,8 @@ export function weeklyText(report: Report, draft = false): string {
       return [
         heading,
         ...entries.map(
-          (entry) => `【${entry.category || "待分类"}】${entry.title}`,
+          (entry) =>
+            `${options.includeDate ? shortDate(day.date) : ""}（${entry.level || "待确认"}）${options.includeEffort ? `${effortText(entry.allocations[day.date])}人天` : ""}【${entry.category || "待分类"}】${entry.title}`,
         ),
       ].join("\n");
     })
@@ -386,7 +388,7 @@ export const escapeHtml = (value: string) =>
         c
       ]!,
   );
-export const weeklyHtml = (report: Report, draft = false) =>
-  `<table style="border-collapse:collapse"><tbody><tr><td style="border:1px solid #d9e1e5;white-space:pre-wrap">${escapeHtml(weeklyText(report, draft)).replace(/\n/g, "<br>")}</td></tr></tbody></table>`;
-export const weeklyMarkdown = (report: Report, draft = false) =>
-  `| 周报 |\n| --- |\n| ${weeklyText(report, draft).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\|/g, "\\|").replace(/\n/g, "<br>")} |\n`;
+export const weeklyHtml = (report: Report, draft = false, options: WeeklyContentOptions = {}) =>
+  `<table style="border-collapse:collapse"><tbody><tr><td style="border:1px solid #d9e1e5;white-space:pre-wrap">${escapeHtml(weeklyText(report, draft, options)).replace(/\n/g, "<br>")}</td></tr></tbody></table>`;
+export const weeklyMarkdown = (report: Report, draft = false, options: WeeklyContentOptions = {}) =>
+  `| 周报 |\n| --- |\n| ${weeklyText(report, draft, options).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\|/g, "\\|").replace(/\n/g, "<br>")} |\n`;

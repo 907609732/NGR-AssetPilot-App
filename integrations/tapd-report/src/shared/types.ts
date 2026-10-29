@@ -53,7 +53,12 @@ export interface Rule {
   keyword: string;
   category: string;
 }
+export interface WeeklyContentOptions {
+  includeDate?: boolean;
+  includeEffort?: boolean;
+}
 export interface Settings {
+  weeklyContent?: WeeklyContentOptions;
   person: string;
   supplier: string;
   unit: string;

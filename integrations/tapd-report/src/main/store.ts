@@ -209,6 +209,10 @@ export class LocalStore {
         const settings = input.settings;
         if (
           !settings.person?.trim() ||
+          (settings.weeklyContent !== undefined &&
+            (!settings.weeklyContent || typeof settings.weeklyContent !== "object" ||
+              [settings.weeklyContent.includeDate, settings.weeklyContent.includeEffort]
+                .some((value) => value !== undefined && typeof value !== "boolean"))) ||
           !settings.supplier?.trim() ||
           !Number.isFinite(settings.width) ||
           !Number.isFinite(settings.height) ||
