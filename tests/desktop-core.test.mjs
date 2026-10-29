@@ -122,7 +122,7 @@ test("host and Finder privileged schemes are registered once without changing ho
   registerAppScheme({ registerSchemesAsPrivileged(schemes) { calls.push(schemes); } });
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], [
-    { scheme: "ngr-assetpilot", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, codeCache: true } },
+    { scheme: "ngr-assetpilot", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, codeCache: true, stream: true } },
     { scheme: "library", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
   ]);
 });

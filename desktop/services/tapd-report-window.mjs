@@ -1,6 +1,8 @@
 import path from "node:path";
 import { statSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { isTrustedAppUrl } from "../main/security.mjs";
+import { bugMediaFileResponse } from "./tapd-media-response.mjs";
 
 const CHILD_CHANNELS = Object.freeze([
   "tapd:load",
@@ -13,6 +15,10 @@ const CHILD_CHANNELS = Object.freeze([
   "tapd:extract-bug-images",
   "tapd:list-bug-images",
   "tapd:get-bug-image",
+  "tapd:list-bug-media",
+  "tapd:get-bug-media-url",
+  "tapd:copy-bug-media-image",
+  "tapd:reveal-bug-media",
   "tapd:export",
   "tapd:copy",
   "tapd:open-path",
@@ -28,6 +34,7 @@ export class TapdReportWindowService {
     app,
     BrowserWindow,
     clipboard,
+    nativeImage,
     dialog,
     ipcMain,
     shell,
@@ -41,6 +48,9 @@ export class TapdReportWindowService {
     this.app = app;
     this.BrowserWindow = BrowserWindow;
     this.clipboard = clipboard;
+    this.nativeImage = nativeImage;
+    this.mediaLibrary = null;
+    this.mediaTokens = new Map();
     this.dialog = dialog;
     this.ipcMain = ipcMain;
     this.shell = shell;
@@ -116,7 +126,10 @@ export class TapdReportWindowService {
         noLink: true,
       });
       if (response !== 1) return null;
-      return (await this.#ensureReady()).store.clearReportData();
+      const cleared = (await this.#ensureReady()).store.clearReportData();
+      this.mediaLibrary?.clear();
+      this.mediaTokens.clear();
+      return cleared;
     });
     this.#handle("tapd:extract-bug-images", async (input) =>
       this.#runJob(() => this.#extractBugImages(input)));
@@ -133,6 +146,31 @@ export class TapdReportWindowService {
       const { runtime, store } = await this.#ensureReady();
       runtime.dateRange(input.period.start, input.period.end);
       return runtime.getBugImagePreview(store.load(), input);
+    });
+    this.#handle("tapd:list-bug-media", async (input) => {
+      const { store } = await this.#ensureReady();
+      return this.mediaLibrary.list(store.load(), input?.period, true);
+    });
+    this.#handle("tapd:get-bug-media-url", async (input) => {
+      const { store } = await this.#ensureReady();
+      await this.mediaLibrary.resolve(store.load(), input);
+      if (input.variant !== undefined && !["thumbnail", "original"].includes(input.variant)) throw new Error("媒体预览格式无效");
+      const token = randomBytes(24).toString("hex");
+      this.mediaTokens.set(token, { period: { ...input.period }, bugId: input.bugId, mediaId: input.mediaId, variant: input.variant });
+      if (this.mediaTokens.size > 4000) this.mediaTokens.delete(this.mediaTokens.keys().next().value);
+      return new URL(`/tapd-media/${token}`, this.pageUrl).href;
+    });
+    this.#handle("tapd:copy-bug-media-image", async (input) => {
+      const { store } = await this.#ensureReady();
+      const buffer = await this.mediaLibrary.imageBuffer(store.load(), input);
+      const image = this.nativeImage.createFromBuffer(buffer);
+      if (image.isEmpty()) throw new Error("图片无法复制，可定位到本地文件");
+      this.clipboard.writeImage(image);
+    });
+    this.#handle("tapd:reveal-bug-media", async (input) => {
+      const { store } = await this.#ensureReady();
+      const file = await this.mediaLibrary.resolve(store.load(), input);
+      this.shell.showItemInFolder(file.absolutePath);
     });
     this.#handle("tapd:export", async (input) => this.#export(input));
     this.#handle("tapd:copy", async (input) => this.#copy(input));
@@ -162,6 +200,7 @@ export class TapdReportWindowService {
   async #ensureReady() {
     if (this.disposed) throw new Error("TAPD 月报功能已关闭");
     if (!this.runtime) this.runtime = await import("./tapd-report-runtime.mjs");
+    this.mediaLibrary ??= new this.runtime.BugMediaLibrary();
     if (!this.store) {
       const dataRoot = process.env.NGR_E2E_USER_DATA
         ? path.join(this.app.getPath("userData"), "tapd-report")
@@ -208,7 +247,7 @@ export class TapdReportWindowService {
     const tickets = runtime.selectBugImageTickets(state, input.period);
     await collector.prepareBugImageExtraction();
     const selection = await this.dialog.showOpenDialog(this.window, {
-      title: "选择 Bug 图片保存位置",
+      title: "选择 Bug 图片和视频保存位置",
       defaultPath: this.app.getPath("documents"),
       buttonLabel: "保存到这里",
       properties: ["openDirectory", "createDirectory"],
@@ -216,6 +255,7 @@ export class TapdReportWindowService {
     if (selection.canceled || !selection.filePaths?.[0]) return null;
     const outputPath = runtime.unusedBugImageDirectory(selection.filePaths[0], input.period);
     const result = await collector.extractBugImages(tickets, outputPath);
+    this.mediaLibrary.clear();
     store.recordExport(
       outputPath,
       "bug-images",
@@ -232,6 +272,22 @@ export class TapdReportWindowService {
     const text = runtime.weeklyText(report, input.draft, state.settings.weeklyContent);
     if (input.html) this.clipboard.write({ text, html: runtime.weeklyHtml(report, input.draft, state.settings.weeklyContent) });
     else this.clipboard.writeText(text);
+  }
+
+  async serveMedia(request) {
+    const token = new URL(request.url).pathname.match(/^\/tapd-media\/([a-f0-9]{48})$/)?.[1];
+    const input = token && this.mediaTokens.get(token);
+    if (!input || !this.window || this.window.isDestroyed()) return new Response(null, { status: 404 });
+    try {
+      const { store } = await this.#ensureReady();
+      const state = store.load();
+      const file = await this.mediaLibrary.resolve(state, input);
+      if (input.variant === "thumbnail" && file.kind === "image") {
+        const image = await this.mediaLibrary.imageBuffer(state, input, true);
+        return new Response(request.method === "HEAD" ? null : image, { headers: { "Content-Type": "image/webp", "Content-Length": String(image.length), "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
+      }
+      return bugMediaFileResponse(file, request);
+    } catch { return new Response(null, { status: 404 }); }
   }
 
   async open() {
@@ -257,6 +313,7 @@ export class TapdReportWindowService {
     this.window.once("ready-to-show", () => this.window?.show());
     this.window.on("closed", () => {
       this.window = null;
+      this.mediaTokens.clear();
     });
     await this.window.loadURL(this.pageUrl);
     return { opened: true };
@@ -269,6 +326,8 @@ export class TapdReportWindowService {
     this.collector = null;
     this.store?.close();
     this.store = null;
+    this.mediaLibrary?.clear();
+    this.mediaTokens.clear();
     if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
   }

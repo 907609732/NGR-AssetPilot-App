@@ -50,6 +50,7 @@ export function registerAppScheme(protocol) {
         supportFetchAPI: true,
         corsEnabled: true,
         codeCache: true,
+        stream: true,
       },
     },
     {
@@ -94,11 +95,15 @@ export function resolveAppResource(appRoot, rawUrl) {
   return isWithin(appRoot, candidate) ? candidate : null;
 }
 
-export async function installAppProtocol({ protocol, appRoot, ResponseImpl = Response }) {
+export async function installAppProtocol({ protocol, appRoot, ResponseImpl = Response, mediaHandler }) {
   const rootRealPath = await realpath(appRoot);
   await protocol.handle(APP_SCHEME, async (request) => {
     if (request.method !== "GET" && request.method !== "HEAD") {
       return new ResponseImpl("Method Not Allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
+    }
+    const mediaUrl = new URL(request.url);
+    if (mediaUrl.protocol === `${APP_SCHEME}:` && mediaUrl.hostname === APP_HOST && !mediaUrl.port && !mediaUrl.username && !mediaUrl.password && mediaUrl.pathname.startsWith("/tapd-media/")) {
+      return mediaHandler ? mediaHandler(request) : new ResponseImpl("Not Found", { status: 404 });
     }
     const candidate = resolveAppResource(rootRealPath, request.url);
     if (!candidate) return new ResponseImpl("Not Found", { status: 404 });

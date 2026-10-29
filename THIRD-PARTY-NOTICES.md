@@ -15,6 +15,7 @@ NGR AssetPilot 的“本地 AI 搜图”模块使用以下开源运行时。完�
 - `sql.js` 1.14.2 — MIT License（本地报表快照与人工调整）
 - `React` / `React DOM` 19.3.0 — MIT License（报表预览界面）
 - `ExcelJS` 4.4.0 — MIT License（月报 Excel 生成与模板写入）
+- `p-limit` 7.3.3 — MIT License（Bug 单媒体提取及媒体索引的有界并发）
 
 安装包内置以下中译英模型，用于断网环境下的文件名翻译。运行时禁止远程模型访问：
 

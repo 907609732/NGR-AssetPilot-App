@@ -1,4 +1,5 @@
 export { LocalStore } from "./src/main/store";
+export { BugMediaLibrary } from "./src/main/bug-media";
 export { TapdCollector } from "./src/main/collector";
 export {
   buildReport,
@@ -13,6 +14,7 @@ export {
   getBugImagePreview,
   listBugImagePreviews,
   normalizeBugImageCandidates,
+  readBugImagesDOM,
   sanitizePathPart,
   selectBugImageTickets,
   unusedBugImageDirectory,

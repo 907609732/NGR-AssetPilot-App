@@ -152,7 +152,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.match(await tapdWindow.title(), /TAPD 周报／月报/);
     assert.equal(await tapdWindow.getByRole("button", { name: "登录 TAPD" }).isVisible(), true);
     assert.equal(await tapdWindow.getByRole("button", { name: "抓取所选日期" }).isVisible(), true);
-    const extractBugImages = tapdWindow.getByRole("button", { name: "提取 Bug 单图片" });
+    const extractBugImages = tapdWindow.getByRole("button", { name: "提取 Bug 图片和视频" });
     assert.equal(await extractBugImages.isVisible(), true);
     assert.equal(await extractBugImages.isDisabled(), true);
     assert.match(await extractBugImages.getAttribute("title"), /先抓取所选日期/);

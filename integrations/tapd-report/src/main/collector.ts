@@ -19,6 +19,7 @@ export class TapdCollector {
   private page: Page | null = null;
   private stopped = false;
   private running = false;
+  private mediaPages = new Set<Page>();
   constructor(
     private profilePath: string,
     private progress: (p: Progress) => void,
@@ -77,6 +78,8 @@ export class TapdCollector {
   }
   cancel() {
     this.stopped = true;
+    // Only extraction-owned detail pages are closed; the user's original TAPD page stays open.
+    for (const page of this.mediaPages) void page.close().catch(() => {});
   }
   private check() {
     if (this.stopped) throw new Error("已停止采集，当前记录保存为不完整草稿");
@@ -116,17 +119,27 @@ export class TapdCollector {
     if (this.running) throw new Error("已有采集或图片提取正在进行");
     this.running = true;
     this.stopped = false;
+    const detailPages: Page[] = [];
     try {
       const page = await this.authenticatedPage();
+      for (let index = 0; index < Math.min(2, tickets.length) && !this.stopped; index++) {
+        const detailPage = await this.context!.newPage();
+        detailPages.push(detailPage);
+        this.mediaPages.add(detailPage);
+        if (this.stopped) await detailPage.close().catch(() => {});
+      }
       return await extractBugImagesToDirectory({
         context: this.context!,
         page,
+        pages: detailPages,
         tickets,
         outputPath,
         progress: (progress) => this.progress(progress),
         stopped: () => this.stopped,
       });
     } finally {
+      await Promise.allSettled(detailPages.map((page) => page.close()));
+      detailPages.forEach((page) => this.mediaPages.delete(page));
       this.running = false;
     }
   }

@@ -110,7 +110,7 @@ async function verifyTarget(target) {
     await tapdWindow.waitForFunction(() => Boolean(window.tapd?.load));
     await tapdWindow.getByRole("button", { name: "登录 TAPD" }).waitFor({ state: "visible" });
     assert.match(await tapdWindow.title(), /TAPD 周报／月报/);
-    assert.deepEqual(await tapdWindow.locator(".capture-actions > button").allTextContents().then((labels) => labels.map((label) => label.replace(/\s+/g, ""))), ["1登录TAPD", "2抓取所选日期", "3提取Bug单图片"]);
+    assert.deepEqual(await tapdWindow.locator(".capture-actions > button").allTextContents().then((labels) => labels.map((label) => label.replace(/\s+/g, ""))), ["1登录TAPD", "2抓取所选日期", "3提取Bug图片和视频"]);
     assert.equal(await tapdWindow.getByRole("button", { name: "下载月报 Excel" }).isVisible(), true);
     assert.equal(await tapdWindow.getByRole("button", { name: "清除所有数据" }).isVisible(), true);
     const weeklyDate = tapdWindow.getByRole("checkbox", { name: "正文添加日期" });

@@ -38,6 +38,7 @@ const {
   ipcMain,
   Menu,
   net,
+  nativeImage,
   protocol,
   safeStorage,
   session,
@@ -159,7 +160,8 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     code: errorCodeOnly(error),
   }));
   app.setAppUserModelId(applicationId);
-  await installAppProtocol({ protocol, appRoot });
+  let tapdReport;
+  await installAppProtocol({ protocol, appRoot, mediaHandler: (request) => tapdReport?.serveMedia(request) ?? new Response(null, { status: 404 }) });
   writeStartupLog(app, "protocol-ready");
   hardenSession(session.defaultSession);
   const managedProviderConfigPath = app.isPackaged
@@ -255,10 +257,11 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   keepAwake.initialize();
   const autoStart = new AutoStartService({ app });
   const dailyReport = new DailyReportExportService({ dialog, getWindow: () => mainWindow });
-  const tapdReport = new TapdReportWindowService({
+  tapdReport = new TapdReportWindowService({
     app,
     BrowserWindow,
     clipboard,
+    nativeImage,
     dialog,
     ipcMain,
     shell,

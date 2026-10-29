@@ -23,7 +23,9 @@ test("点击窗口关闭后缩到 Windows 托盘，重新启动请求会恢复�
     const hidden = await electronApp.evaluate(async ({ BrowserWindow }) => {
       const window = BrowserWindow.getAllWindows()[0];
       window.close();
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      const deadline = Date.now() + 3000;
+      while (window.isVisible() && Date.now() < deadline)
+        await new Promise((resolve) => setTimeout(resolve, 50));
       return {
         destroyed: window.isDestroyed(),
         visible: window.isVisible(),

@@ -41,8 +41,17 @@ test("Electron API 页可创建自定义目标、运行本机诊断并管理历�
     const window = await electronApp.firstWindow();
     await window.waitForLoadState("domcontentloaded");
     await window.waitForFunction(() => Boolean(window.NgrNetworkDiagnostics && window.ngrDesktop?.diagnostics));
-    await window.locator("#rulesEntry").click();
-    await window.waitForFunction(() => document.querySelector("#generalSettingsView")?.classList.contains("active"));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (await window.locator("#generalSettingsView").evaluate((view) => view.classList.contains("active"))) break;
+      await window.locator("#rulesEntry").click();
+      try {
+        await window.waitForFunction(() => document.querySelector("#generalSettingsView")?.classList.contains("active"),
+          undefined, { timeout: 2000 });
+        break;
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
+    }
     await window.locator('#generalSettingsView [data-settings-view="apiSettings"]').click();
     await window.waitForFunction(() => document.querySelector("#apiSettingsView")?.classList.contains("active"));
     await window.waitForFunction(() => document.querySelectorAll("[data-diagnostics-target]").length >= 15);

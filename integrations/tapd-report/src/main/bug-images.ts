@@ -1,11 +1,13 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
-import { existsSync } from "node:fs";
-import { mkdir, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { constants, existsSync } from "node:fs";
+import { copyFile, mkdir, open, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
 import sharp from "sharp";
-import type { APIRequestContext, BrowserContext, Page } from "playwright-core";
+import pLimit from "p-limit";
+import { detectVideoFormat } from "./media-format";
+import type { BrowserContext, Page } from "playwright-core";
 import type {
   BugImageExportResult,
   BugImagePreviewData,
@@ -24,6 +26,7 @@ import {
 const MAX_BUGS = 200;
 const MAX_IMAGES_PER_BUG = 200;
 const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
 const TAPD_ORIGIN = "https://tapd.tencent.com";
 const PREVIEW_EXTENSIONS = new Set([
   ".avif",
@@ -49,7 +52,7 @@ export interface BugImageTicket {
 }
 
 export interface BugImageDOMRecord {
-  kind: "image" | "attachment";
+  kind: "image" | "video" | "attachment";
   urls: string[];
   fileName: string;
   ownHints: string;
@@ -64,6 +67,7 @@ export interface BugImageCandidate {
   source: BugImageSource;
   urls: string[];
   fileName: string;
+  mediaType?: "image" | "video";
 }
 
 interface ManifestRow {
@@ -83,6 +87,10 @@ export interface DownloadedBugImage {
   format: string;
   contentType: string;
   fileName: string;
+  mediaType?: "image" | "video";
+  temporaryPath?: string;
+  sha256?: string;
+  skipped?: boolean;
 }
 
 interface BugImagePreviewFile extends BugImagePreviewItem {
@@ -305,12 +313,20 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
       .filter(Boolean)
       .reverse();
   const unique = (values: string[]) => [...new Set(values.map(absolute).filter(Boolean))];
+  const attachmentName = (element: Element | null) => {
+    for (const selector of [".attachment-list__item-wrapper", ".attachment-item"]) {
+      const label = element?.closest(selector)?.querySelector(".attachment-list__filename");
+      const value = label?.getAttribute("title")?.trim() || label?.textContent?.trim();
+      if (value) return value;
+    }
+    return "";
+  };
 
   document.querySelectorAll("img").forEach((image) => {
     const img = image as HTMLImageElement;
     const link = img.closest("a[href]") as HTMLAnchorElement | null;
     const linkHref = link?.getAttribute("href") ?? "";
-    const originalLink = /(?:attach|download|file)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg)(?:$|[?#])/i.test(
+    const originalLink = /(?:attach|download|file)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg|mp4|webm|mov|m4v|m3u8|mpd)(?:$|[?#])/i.test(
       linkHref,
     )
       ? [linkHref]
@@ -332,6 +348,7 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
       urls,
       fileName:
         link?.getAttribute("download") ||
+        attachmentName(link || img) ||
         img.getAttribute("data-filename") ||
         img.alt ||
         "图片",
@@ -346,16 +363,33 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
     });
   });
 
+  document.querySelectorAll("video").forEach((element) => {
+    const video = element as HTMLVideoElement;
+    const rect = video.getBoundingClientRect();
+    const urls = unique([
+      video.currentSrc,
+      video.getAttribute("src") ?? "",
+      video.getAttribute("data-src") ?? "",
+      ...Array.from(video.querySelectorAll("source")).map((source) => source.getAttribute("src") ?? ""),
+    ]);
+    if (!urls.length) return;
+    records.push({ kind: "video", urls, fileName: video.getAttribute("title") || "视频",
+      ownHints: hints(video), ancestorHints: ancestors(video),
+      inMain: !!video.closest("main,[role='main'],.main-content,.bug-detail,.bug-content,.workitem-detail"),
+      visible: rect.width > 0 && rect.height > 0, width: Math.round(rect.width), height: Math.round(rect.height) });
+  });
+
   document.querySelectorAll("a[href]").forEach((element) => {
     const link = element as HTMLAnchorElement;
     if (link.querySelector("img")) return;
     const href = link.getAttribute("href") ?? "";
     const name =
       link.getAttribute("download") ||
+      attachmentName(link) ||
       link.getAttribute("title") ||
       link.textContent?.trim() ||
       "图片附件";
-    const imageName = /\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg)(?:$|[?#])/i.test(
+    const imageName = /\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg|mp4|webm|mov|m4v|m3u8|mpd)(?:$|[?#\s])/i.test(
       `${name} ${href}`,
     );
     const attachment = /(?:attach|download|file)/i.test(
@@ -377,7 +411,57 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
       height: Math.round(rect.height),
     });
   });
+
+  // TAPD renders the Bug description inside <richtext-preview>'s shadow root.
+  // Its value contains the original media URLs even when videos are not loaded
+  // and the component has not mounted all of its shadow children yet.
+  document.querySelectorAll("richtext-preview[value]").forEach((host) => {
+    const markup = host.getAttribute("value");
+    if (!markup || typeof DOMParser === "undefined") return;
+    const content = new DOMParser().parseFromString(markup, "text/html");
+    const context = `${hints(host)} ${ancestors(host)} richtext description`;
+    const inMain = !!host.closest("main,[role='main'],.main-content,.bug-detail,.bug-content,.workitem-detail");
+    const visible = host.getBoundingClientRect().width > 0;
+    content.querySelectorAll("video").forEach((element) => {
+      const video = element as HTMLVideoElement;
+      const urls = unique([
+        video.getAttribute("src") ?? "",
+        ...Array.from(video.querySelectorAll("source")).map((source) => source.getAttribute("src") ?? ""),
+      ]);
+      if (!urls.length) return;
+      records.push({ kind: "video", urls, fileName: video.getAttribute("title") || "视频",
+        ownHints: hints(video), ancestorHints: context, inMain, visible,
+        width: Number(video.getAttribute("video_original_width") || video.getAttribute("width") || 0),
+        height: Number(video.getAttribute("video_original_height") || video.getAttribute("height") || 0) });
+    });
+    content.querySelectorAll("img").forEach((element) => {
+      const img = element as HTMLImageElement;
+      const link = img.closest("a[href]");
+      const href = link?.getAttribute("href") ?? "";
+      const urls = unique([
+        /(?:attach|download|file|capture)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg)(?:$|[?#])/i.test(href) ? href : "",
+        img.getAttribute("data-original") ?? "", img.getAttribute("data-origin") ?? "",
+        img.getAttribute("data-src") ?? "", img.getAttribute("src") ?? "",
+      ]);
+      if (!urls.length) return;
+      records.push({ kind: "image", urls,
+        fileName: link?.getAttribute("download") || img.getAttribute("data-filename") || img.alt || "图片",
+        ownHints: hints(img), ancestorHints: context, inMain, visible,
+        width: Number(img.getAttribute("width") || 0), height: Number(img.getAttribute("height") || 0) });
+    });
+  });
   return records;
+}
+
+function nonMediaFilename(value: string, url = false) {
+  let filename = value;
+  try { filename = url ? new URL(value).pathname : value; } catch { return false; }
+  try { filename = decodeURIComponent(filename); } catch {}
+  // Inspect the final path segment rather than the hostname (example.com is not a file).
+  const extension = filename.split("/").at(-1)?.match(/\.([a-z0-9]{1,12})(?:$|[?#\s)])/i)?.[1]?.toLowerCase();
+  if (!extension || /^\d+$/.test(extension)) return false;
+  if (url && /^(php|aspx?|jsp|cgi)$/.test(extension)) return false;
+  return !/^(avif|bmp|gif|jpe?g|png|svg|tiff?|webp|mp4|m4v|mov|webm|m3u8|mpd)$/.test(extension);
 }
 
 export function normalizeBugImageCandidates(
@@ -389,6 +473,9 @@ export function normalizeBugImageCandidates(
   for (const record of records) {
     const own = record.ownHints.toLowerCase();
     const context = `${record.ownHints} ${record.ancestorHints}`.toLowerCase();
+    // TAPD attachment preview URLs have no suffix; use the visible filename before considering icon URLs.
+    if (nonMediaFilename(record.fileName) || record.urls.some((url) => nonMediaFilename(url, true))) continue;
+    if (/avatar|user[-_ ]?logo|user[-_ ]?photo|head[-_ ]?photo|头像/.test(context)) continue;
     const attachment =
       record.kind === "attachment" ||
       /attach|attachment|download|file-list|file-item|附件|下载/.test(context);
@@ -401,7 +488,7 @@ export function normalizeBugImageCandidates(
       );
     if (excluded && !attachment) continue;
     if (
-      !attachment &&
+      !attachment && record.kind !== "video" &&
       record.width > 0 &&
       record.height > 0 &&
       record.width < 48 &&
@@ -415,6 +502,7 @@ export function normalizeBugImageCandidates(
       context,
     );
     if (!attachment && !comment && !description && !record.inMain) continue;
+    const video = record.kind === "video" || /\.(?:mp4|webm|mov|m4v|m3u8|mpd)(?:$|[?#\s])/i.test(`${record.fileName} ${record.urls.join(" ")}`);
     const urls = record.urls
       .map((raw) => {
         try {
@@ -423,7 +511,8 @@ export function normalizeBugImageCandidates(
           return "";
         }
       })
-      .filter((url) => url.startsWith("https://"));
+      .filter((url) => !/\/(?:user_logo|avatar)\//i.test(url))
+      .filter((url) => url.startsWith("https://") || (video && url.startsWith("blob:")));
     if (!urls.length) continue;
     if (
       attachment &&
@@ -442,7 +531,7 @@ export function normalizeBugImageCandidates(
     const key = `${source}\u0000${urls.join("\u0000")}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    candidates.push({ source, urls, fileName: record.fileName });
+    candidates.push({ source, urls, fileName: record.fileName, ...(video ? { mediaType: "video" as const } : {}) });
     if (candidates.length >= MAX_IMAGES_PER_BUG) break;
   }
   return candidates;
@@ -505,109 +594,148 @@ function dispositionName(value: string) {
 }
 
 async function fetchOnce(
-  request: APIRequestContext,
-  rawUrl: string,
-  referer: string,
-) {
+  context: BrowserContext, rawUrl: string, referer: string,
+  temporaryDirectory: string, signal: AbortSignal,
+): Promise<DownloadedBugImage> {
+  if (/^blob:/i.test(rawUrl)) throw new Error("暂不支持 blob 视频，请使用原始视频附件");
+  if (/\.(?:m3u8|mpd)(?:$|[?#])/i.test(rawUrl)) throw new Error("暂不支持 HLS/DASH 流媒体，请使用 MP4/WebM 视频附件");
   let current = (await assertSafeImageUrl(rawUrl)).href;
   for (let redirect = 0; redirect <= 5; redirect++) {
-    const response = await request.get(current, {
-      failOnStatusCode: false,
-      headers: { Referer: referer },
-      maxRedirects: 0,
-      timeout: 30000,
+    signal.throwIfAborted();
+    const cookies = await context.cookies(current);
+    const response = await fetch(current, {
+      redirect: "manual", signal: AbortSignal.any([signal, AbortSignal.timeout(120000)]),
+      headers: { Referer: referer, Cookie: cookies.map((cookie) => cookie.name + "=" + cookie.value).join("; ") },
     });
-    const status = response.status();
-    const headers = response.headers();
-    if (status >= 300 && status < 400 && headers.location) {
-      const next = new URL(headers.location, current).href;
-      await response.dispose();
+    if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
+      const next = new URL(response.headers.get("location")!, current).href;
+      await response.body?.cancel();
       current = (await assertSafeImageUrl(next)).href;
       continue;
     }
-    if (status < 200 || status >= 300) {
-      await response.dispose();
-      throw new Error(`下载返回 HTTP ${status}`);
+    if (!response.ok) { await response.body?.cancel(); throw new Error("下载返回 HTTP " + response.status); }
+    const contentType = response.headers.get("content-type") ?? "";
+    const fileName = dispositionName(response.headers.get("content-disposition") ?? "");
+    if (nonMediaFilename(fileName) || /^application\/(?:zip|x-rar-compressed|vnd\.rar|x-7z-compressed|pdf|msword|vnd\.openxmlformats-officedocument\.[^;]+)(?:;|$)/i.test(contentType)) {
+      await response.body?.cancel();
+      return { body: Buffer.alloc(0), url: current, format: "", contentType, fileName, skipped: true };
     }
-    const declared = Number(headers["content-length"] ?? 0);
-    if (declared > MAX_IMAGE_BYTES) {
-      await response.dispose();
-      throw new Error("图片超过 50 MB");
-    }
-    const body = await response.body();
-    await response.dispose();
-    if (!body.length) throw new Error("图片内容为空");
-    if (body.length > MAX_IMAGE_BYTES) throw new Error("图片超过 50 MB");
-    let metadata: sharp.Metadata;
+    if (/mpegurl|dash\+xml/i.test(contentType)) { await response.body?.cancel(); throw new Error("暂不支持 HLS/DASH 流媒体"); }
+    if (!response.body) throw new Error("媒体内容为空");
+    const temporaryPath = path.join(temporaryDirectory, randomUUID() + ".partial");
+    let file: Awaited<ReturnType<typeof open>> | undefined;
     try {
-      metadata = await sharp(body, {
-        animated: false,
-        limitInputPixels: 250_000_000,
-      }).metadata();
-    } catch {
-      throw new Error("响应内容不是有效图片");
+      file = await open(temporaryPath, "wx");
+      const hash = createHash("sha256");
+      let size = 0;
+      let prefix = Buffer.alloc(0);
+      let detected: ReturnType<typeof detectVideoFormat> = null;
+      const declared = Number(response.headers.get("content-length") ?? 0);
+      if (declared > MAX_VIDEO_BYTES) throw new Error("视频超过 250 MB");
+      for await (const value of response.body) {
+        signal.throwIfAborted();
+        const chunk = Buffer.from(value);
+        size += chunk.length;
+        if (prefix.length < 65536) prefix = Buffer.concat([prefix, chunk.subarray(0, 65536 - prefix.length)]);
+        detected = detectVideoFormat(prefix);
+        const limit = detected ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+        if (size > limit || (prefix.length >= 16 && declared > limit))
+          throw new Error(detected ? "视频超过 250 MB" : "图片超过 50 MB");
+        hash.update(chunk);
+        // FileHandle.write can be partial; writeFile writes the entire chunk at the current position.
+        await file.writeFile(chunk);
+      }
+      await file.close(); file = undefined;
+      if (!size) throw new Error("媒体内容为空");
+      let format: string;
+      if (detected) format = detected.format;
+      else {
+        try {
+          const metadata = await sharp(temporaryPath, { animated: false, limitInputPixels: 250_000_000 }).metadata();
+          if (!metadata.format) throw new Error();
+          format = metadata.format;
+        } catch { throw new Error("响应内容不是有效图片或支持的视频"); }
+      }
+      return { body: Buffer.alloc(0), url: current, format, contentType: detected?.mimeType ?? contentType,
+        fileName: dispositionName(response.headers.get("content-disposition") ?? ""), temporaryPath,
+        mediaType: detected ? "video" : "image", sha256: hash.digest("hex") };
+    } catch (error) {
+      await response.body.cancel().catch(() => {});
+      await file?.close().catch(() => {});
+      await rm(temporaryPath, { force: true });
+      throw error;
     }
-    if (!metadata.format) throw new Error("响应内容不是有效图片");
-    return {
-      body,
-      url: current,
-      format: metadata.format,
-      contentType: headers["content-type"] ?? "",
-      fileName: dispositionName(headers["content-disposition"] ?? ""),
-    };
   }
-  throw new Error("图片重定向次数过多");
+  throw new Error("媒体重定向次数过多");
 }
 
-async function fetchCandidate(
-  request: APIRequestContext,
-  candidate: BugImageCandidate,
-  referer: string,
-) {
-  let lastError = "图片下载失败";
+async function fetchCandidate(context: BrowserContext, candidate: BugImageCandidate,
+  referer: string, temporaryDirectory: string, signal: AbortSignal) {
+  let lastError = "媒体下载失败";
   for (const url of candidate.urls) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await fetchOnce(request, url, referer);
-      } catch (error) {
+      signal.throwIfAborted();
+      try { return await fetchOnce(context, url, referer, temporaryDirectory, signal); }
+      catch (error) {
+        signal.throwIfAborted();
         lastError = asMessage(error);
-        const permanent = /仅允许|已拒绝|不是有效图片|超过 50 MB|内容为空/.test(
-          lastError,
-        );
-        if (attempt === 0 && !permanent)
-          await new Promise((resolve) => setTimeout(resolve, 300));
-        else break;
+        if (/仅允许|已拒绝|不是有效|超过|内容为空|暂不支持/.test(lastError)) break;
       }
     }
   }
   throw new Error(lastError);
 }
 
-async function revealAllImageContent(page: Page, stopped: () => boolean) {
+async function revealAllImageContent(page: Page, stopped: () => boolean): Promise<BugImageDOMRecord[]> {
+  const records = new Map<string, BugImageDOMRecord>();
+  const collect = async () => {
+    for (const record of await page.evaluate(readBugImagesDOM))
+      records.set(record.kind + "\u0000" + record.urls.join("\u0000"), record);
+  };
   let stable = 0;
-  let lastHeight = 0;
-  for (let round = 0; round < 30 && stable < 2 && !stopped(); round++) {
-    const clicked = await page.evaluate(() => {
+  let lastSignature = "";
+  await collect();
+  for (let round = 0; round < 100 && stable < 2 && !stopped(); round++) {
+    const snapshot = await page.evaluate(() => {
       const pattern = /^(展开|展开全部|查看更多|加载更多|更多评论|全部评论|更多记录|查看全部)(?:\s*\(?.*\)?)?$/;
-      const elements = [
-        ...document.querySelectorAll("button,a,[role='button']"),
-      ].filter((element) => {
-        const text = element.textContent?.trim() ?? "";
+      const elements = [...document.querySelectorAll("button,a,[role='button']")].filter((element) => {
         const rect = element.getBoundingClientRect();
-        return pattern.test(text) && rect.width > 0 && rect.height > 0;
+        return pattern.test(element.textContent?.trim() ?? "") && rect.width > 0 && rect.height > 0;
       });
-      elements.slice(0, 8).forEach((element) =>
-        (element as HTMLElement).click(),
-      );
-      window.scrollTo(0, document.documentElement.scrollHeight);
-      return elements.length;
+      elements.slice(0, 8).forEach((element) => (element as HTMLElement).click());
+      const candidates = [...new Set([
+        ...document.querySelectorAll(".detail-container-left__scroll-wrapper"),
+        ...document.querySelectorAll(".detail-container-left"),
+        ...document.querySelectorAll(".detail-container-content,.detail-item__content-wrapper"),
+      ])] as HTMLElement[];
+      const scrolling = candidates.filter((element) => element.scrollHeight > element.clientHeight + 2 &&
+        /auto|scroll/.test(getComputedStyle(element).overflowY));
+      const containers = scrolling.length ? scrolling : [document.scrollingElement || document.documentElement] as HTMLElement[];
+      for (const container of containers)
+        container.scrollTop = Math.min(container.scrollHeight - container.clientHeight,
+          container.scrollTop + Math.max(1, Math.floor(container.clientHeight * 0.8)));
+      return { clicked: elements.length, atBottom: containers.every((container) =>
+        container.scrollTop + container.clientHeight >= container.scrollHeight - 2) };
     });
     await page.waitForTimeout(350);
-    const height = await page.evaluate(() => document.documentElement.scrollHeight);
-    stable = !clicked && height === lastHeight ? stable + 1 : 0;
-    lastHeight = height;
+    await collect();
+    const signature = await page.evaluate(() => [
+      document.body.innerText.length,
+      ...Array.from(document.querySelectorAll(".detail-container-left__scroll-wrapper,.detail-container-left,.detail-container-content,.detail-item__content-wrapper"))
+        .map((element) => [element.scrollTop, element.scrollHeight, element.clientHeight].join(":")),
+      document.scrollingElement?.scrollTop ?? 0,
+      document.scrollingElement?.scrollHeight ?? document.documentElement.scrollHeight,
+      ...Array.from(document.querySelectorAll("img,video,source")).map((element) => element.getAttribute("src") || element.getAttribute("data-src") || ""),
+    ].join("|"));
+    stable = snapshot.atBottom && !snapshot.clicked && signature === lastSignature ? stable + 1 : 0;
+    lastSignature = signature;
   }
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => {
+    for (const element of document.querySelectorAll(".detail-container-left__scroll-wrapper,.detail-container-left,.detail-container-content,.detail-item__content-wrapper"))
+      element.scrollTop = 0;
+    window.scrollTo(0, 0);
+  });
+  return [...records.values()];
 }
 
 function csvCell(value: unknown) {
@@ -656,213 +784,156 @@ function availableFilePath(directory: string, stem: string, extension: string) {
 export async function extractBugImagesToDirectory(input: {
   context: BrowserContext;
   page: Page;
+  pages?: Page[];
   tickets: BugImageTicket[];
   outputPath: string;
   progress: (progress: Progress) => void;
   stopped: () => boolean;
-  readCandidates?: (
-    page: Page,
-    ticket: BugImageTicket,
-    stopped: () => boolean,
-  ) => Promise<BugImageCandidate[]>;
-  downloadCandidate?: (
-    candidate: BugImageCandidate,
-    referer: string,
-  ) => Promise<DownloadedBugImage>;
+  readCandidates?: (page: Page, ticket: BugImageTicket, stopped: () => boolean) => Promise<BugImageCandidate[]>;
+  downloadCandidate?: (candidate: BugImageCandidate, referer: string) => Promise<DownloadedBugImage>;
 }): Promise<BugImageExportResult> {
   const { context, page, tickets, outputPath, progress, stopped } = input;
-  const readCandidates =
-    input.readCandidates ??
-    (async (targetPage: Page, ticket: BugImageTicket, isStopped: () => boolean) => {
-      await targetPage.goto(ticket.url, {
-        waitUntil: "domcontentloaded",
-        timeout: 45000,
-      });
+  const readCandidates = input.readCandidates ?? (async (targetPage: Page, ticket: BugImageTicket, isStopped: () => boolean) => {
+    await targetPage.goto(ticket.url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    const checkLogin = () => {
       if (/\/ptlogin\/|\/login(?:[/?]|$)/i.test(targetPage.url()))
         throw new Error("TAPD 登录已失效，请重新登录后再试");
-      await targetPage
-        .waitForLoadState("networkidle", { timeout: 10000 })
-        .catch(() => {});
-      await revealAllImageContent(targetPage, isStopped);
-      if (isStopped()) return [];
-      return normalizeBugImageCandidates(
-        await targetPage.evaluate(readBugImagesDOM),
-        targetPage.url(),
-      );
-    });
-  const downloadCandidate =
-    input.downloadCandidate ??
-    ((candidate: BugImageCandidate, referer: string) =>
-      fetchCandidate(context.request, candidate, referer));
+    };
+    checkLogin();
+    try {
+      await targetPage.locator(".bug-detail .detail-container-content,.bug-detail .detail-item__content-wrapper,.detail-container-content,.detail-item__content-wrapper").first()
+        .waitFor({ state: "visible", timeout: 15000 });
+      await targetPage.locator(".bug-detail .el-loading-mask:visible,.bug-detail .el-loading-spinner:visible,.bug-detail [aria-busy='true']:visible,.detail-container-content .el-loading-mask:visible").first()
+        .waitFor({ state: "hidden", timeout: 15000 });
+    } catch (error) { checkLogin(); throw error; }
+    checkLogin();
+    const records = await revealAllImageContent(targetPage, isStopped);
+    if (isStopped()) return [];
+    return normalizeBugImageCandidates(records, targetPage.url());
+  });
   await mkdir(outputPath, { recursive: false });
-  const rows: ManifestRow[] = [];
-  let imageCount = 0;
-  let duplicateCount = 0;
-  let failedCount = 0;
-  let canceled = false;
+  const temporaryDirectory = path.join(outputPath, ".partial-downloads");
+  await mkdir(temporaryDirectory);
+  const controller = new AbortController();
+  let canceled = stopped();
+  let halted = false;
   let resultMessage = "";
-
-  for (let ticketIndex = 0; ticketIndex < tickets.length; ticketIndex++) {
-    if (stopped()) {
-      canceled = true;
-      break;
-    }
+  const isStopped = () => canceled || halted || stopped();
+  const timer = setInterval(() => { if (stopped()) { canceled = true; controller.abort(); } }, 100);
+  const downloadLimit = pLimit(4);
+  const urlCache = new Map<string, Promise<DownloadedBugImage>>();
+  const rowsByTicket: ManifestRow[][] = tickets.map(() => []);
+  let imageCount = 0, videoCount = 0, duplicateCount = 0, failedCount = 0, nextTicket = 0, completed = 0;
+  const emit = (message: string) => progress({ phase: "extracting-images", message,
+    current: completed, total: tickets.length, imageCount, videoCount, failedCount });
+  const downloadCandidate = input.downloadCandidate ?? ((candidate: BugImageCandidate, referer: string) =>
+    fetchCandidate(context, candidate, referer, temporaryDirectory, controller.signal));
+  async function processTicket(targetPage: Page, ticketIndex: number) {
     const ticket = tickets[ticketIndex];
-    progress({
-      phase: "extracting-images",
-      message: `正在读取 Bug #${ticket.shortId}（${ticketIndex + 1}/${tickets.length}）`,
-      current: ticketIndex + 1,
-      total: tickets.length,
-      imageCount,
-      failedCount,
-    });
-    const ticketDir = path.join(
-      outputPath,
-      `${sanitizePathPart(ticket.shortId, "Bug")}-${sanitizePathPart(ticket.title, "未命名", 70)}`,
-    );
+    const rows = rowsByTicket[ticketIndex];
+    const ticketDir = path.join(outputPath, sanitizePathPart(ticket.shortId, "Bug") + "-" + sanitizePathPart(ticket.title, "未命名", 70));
     await mkdir(ticketDir, { recursive: false });
+    const row = (source: string, originalUrl: string, values: Partial<ManifestRow>): ManifestRow => ({ bugId: ticket.shortId,
+      title: ticket.title, source, originalUrl, savedFile: "", sha256: "", status: "失败", error: "", ...values });
     let candidates: BugImageCandidate[];
     try {
-      candidates = await readCandidates(page, ticket, stopped);
-      if (stopped()) {
-        canceled = true;
-        break;
-      }
+      emit("正在读取 Bug #" + ticket.shortId + "（完成 " + completed + "/" + tickets.length + "）");
+      candidates = await readCandidates(targetPage, ticket, isStopped);
     } catch (error) {
+      if (isStopped()) return;
       failedCount++;
-      rows.push({
-        bugId: ticket.shortId,
-        title: ticket.title,
-        source: "单据",
-        originalUrl: ticket.url,
-        savedFile: "",
-        sha256: "",
-        status: "失败",
-        error: asMessage(error),
-      });
-      if (/登录已失效/.test(asMessage(error))) {
-        resultMessage = asMessage(error);
-        progress({
-          phase: "incomplete",
-          message: "TAPD 登录已失效，已保留当前提取结果。请重新登录后再试。",
-          current: ticketIndex + 1,
-          total: tickets.length,
-          imageCount,
-          failedCount,
-        });
-        break;
-      }
-      continue;
+      rows.push(row("单据", ticket.url, { error: asMessage(error) }));
+      if (/登录已失效/.test(asMessage(error))) { resultMessage = asMessage(error); halted = true; controller.abort(); }
+      return;
     }
-
-    if (!candidates.length) {
-      rows.push({
-        bugId: ticket.shortId,
-        title: ticket.title,
-        source: "单据",
-        originalUrl: ticket.url,
-        savedFile: "",
-        sha256: "",
-        status: "无图片",
-        error: "",
-      });
-      continue;
-    }
-
+    if (isStopped()) return;
+    if (!candidates.length) { rows.push(row("单据", ticket.url, { status: "无图片或视频" })); return; }
     const hashes = new Map<string, string>();
-    const urlCache = new Map<string, DownloadedBugImage>();
-    for (let index = 0; index < candidates.length; index++) {
-      if (stopped()) {
-        canceled = true;
-        break;
+    // Downloads overlap, but commits below retain the original candidate order.
+    const pending = candidates.map((candidate) => {
+      const key = candidate.urls.join("\u0000");
+      let promise = urlCache.get(key);
+      if (!promise) {
+        promise = downloadLimit(async () => {
+          if (isStopped()) throw new Error("已取消媒体下载");
+          return downloadCandidate(candidate, ticket.url);
+        });
+        urlCache.set(key, promise);
       }
+      return promise.then((value) => ({ value, error: null }), (error: unknown) => ({ value: null, error }));
+    });
+    for (let index = 0; index < candidates.length; index++) {
       const candidate = candidates[index];
-      const originalUrl = candidate.urls[0];
+      const result = await pending[index];
+      // A completed file is retained even when cancellation arrives while later resources download.
+      if (!result.value) {
+        if (isStopped()) continue;
+        failedCount++;
+        rows.push(row(candidate.source, candidate.urls[0], { error: asMessage(result.error) }));
+        continue;
+      }
+      const downloaded = result.value;
+      if (downloaded.skipped) {
+        rows.push(row(candidate.source, candidate.urls[0], { status: "跳过非媒体附件" }));
+        continue;
+      }
       try {
-        let downloaded = urlCache.get(originalUrl);
-        if (!downloaded) {
-          downloaded = await downloadCandidate(candidate, ticket.url);
-          urlCache.set(originalUrl, downloaded);
-        }
-        const hash = createHash("sha256").update(downloaded.body).digest("hex");
+        const hash = downloaded.sha256 || createHash("sha256").update(downloaded.body).digest("hex");
         const duplicate = hashes.get(hash);
         if (duplicate) {
           duplicateCount++;
-          rows.push({
-            bugId: ticket.shortId,
-            title: ticket.title,
-            source: candidate.source,
-            originalUrl,
-            savedFile: duplicate,
-            sha256: hash,
-            status: "重复",
-            error: "",
-          });
+          rows.push(row(candidate.source, candidate.urls[0], { status: "重复", savedFile: duplicate, sha256: hash }));
           continue;
         }
         const extension = extensionFor(downloaded.format, downloaded.contentType);
         const supplied = downloaded.fileName || candidate.fileName;
-        const withoutExtension = supplied.replace(/\.[a-z0-9]{1,8}$/i, "");
-        const stem = `${String(index + 1).padStart(2, "0")}-${candidate.source}-${sanitizePathPart(withoutExtension, "图片", 70)}`;
+        const stem = String(index + 1).padStart(2, "0") + "-" + candidate.source + "-" + sanitizePathPart(supplied.replace(/\.[a-z0-9]{1,8}$/i, ""), "媒体", 70);
         const filename = availableFilePath(ticketDir, stem, extension);
-        await writeFile(filename, downloaded.body, { flag: "wx" });
+        if (downloaded.temporaryPath) await copyFile(downloaded.temporaryPath, filename, constants.COPYFILE_EXCL);
+        else await writeFile(filename, downloaded.body, { flag: "wx" });
         const relative = path.relative(outputPath, filename).replace(/\\/g, "/");
         hashes.set(hash, relative);
-        imageCount++;
-        rows.push({
-          bugId: ticket.shortId,
-          title: ticket.title,
-          source: candidate.source,
-          originalUrl,
-          savedFile: relative,
-          sha256: hash,
-          status: "成功",
-          error: "",
-        });
+        if (downloaded.mediaType === "video" || /^video\//i.test(downloaded.contentType)) videoCount++;
+        else imageCount++;
+        rows.push(row(candidate.source, candidate.urls[0], { status: "成功", savedFile: relative, sha256: hash }));
       } catch (error) {
         failedCount++;
-        rows.push({
-          bugId: ticket.shortId,
-          title: ticket.title,
-          source: candidate.source,
-          originalUrl,
-          savedFile: "",
-          sha256: "",
-          status: "失败",
-          error: asMessage(error),
-        });
+        rows.push(row(candidate.source, candidate.urls[0], { error: asMessage(error) }));
       }
-      progress({
-        phase: "extracting-images",
-        message: `正在提取 Bug #${ticket.shortId} 的图片（${index + 1}/${candidates.length}）`,
-        current: ticketIndex + 1,
-        total: tickets.length,
-        imageCount,
-        failedCount,
-      });
+      emit("正在提取 Bug #" + ticket.shortId + " 媒体（" + (index + 1) + "/" + candidates.length + "）");
     }
-    if (canceled) break;
   }
-
-  await writeManifest(outputPath, rows);
-  progress({
-    phase: canceled || failedCount ? "incomplete" : "ready",
-    message: canceled
-      ? `已停止提取，保留 ${imageCount} 张图片，失败 ${failedCount} 项`
-      : resultMessage ||
-        `图片提取完成：${imageCount} 张，重复 ${duplicateCount} 张，失败 ${failedCount} 项`,
-    current: tickets.length,
-    total: tickets.length,
-    imageCount,
-    failedCount,
-  });
-  return {
-    outputPath,
-    bugCount: tickets.length,
-    imageCount,
-    duplicateCount,
-    failedCount,
-    canceled,
-    ...(resultMessage ? { message: resultMessage } : {}),
-  };
+  try {
+    const workers = await Promise.allSettled((input.pages?.length ? input.pages : [page]).slice(0, 2).map(async (targetPage) => {
+      while (!isStopped()) {
+        const index = nextTicket++;
+        if (index >= tickets.length) break;
+        try { await processTicket(targetPage, index); }
+        catch (error) {
+          failedCount++;
+          const ticket = tickets[index];
+          rowsByTicket[index].push({ bugId: ticket.shortId, title: ticket.title, source: "单据", originalUrl: ticket.url,
+            savedFile: "", sha256: "", status: "失败", error: asMessage(error) });
+        }
+        completed++;
+      }
+    }));
+    for (const worker of workers) if (worker.status === "rejected") {
+      failedCount++;
+      resultMessage = `部分媒体提取失败：${asMessage(worker.reason)}`;
+    }
+  } finally {
+    canceled = canceled || stopped();
+    clearInterval(timer);
+    controller.abort();
+    // Queue entries observe cancellation and settle before temporary files are removed.
+    await Promise.allSettled([...urlCache.values()]);
+    await rm(temporaryDirectory, { recursive: true, force: true });
+    await writeManifest(outputPath, rowsByTicket.flat());
+  }
+  progress({ phase: canceled || failedCount ? "incomplete" : "ready",
+    message: resultMessage || (canceled ? "已停止提取，保留 " : "媒体提取完成：") + imageCount + " 张图片、" + videoCount + " 个视频，重复 " + duplicateCount + " 项，失败 " + failedCount + " 项",
+    current: completed, total: tickets.length, imageCount, videoCount, failedCount });
+  return { outputPath, bugCount: tickets.length, imageCount, videoCount, duplicateCount, failedCount, canceled,
+    ...(resultMessage ? { message: resultMessage } : {}) };
 }

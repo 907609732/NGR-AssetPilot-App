@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { LevelEditor } from "./LevelEditor";
 import { ActionMenu } from "./ActionMenu";
+import { BugMediaBrowser } from "./BugMediaBrowser";
 import {
   buildReport,
   captureCovers,
@@ -17,8 +18,7 @@ import {
 } from "../shared/report";
 import type {
   Bridge,
-  BugImagePreviewGroup,
-  BugImagePreviewItem,
+  BugMediaGroup,
   ExportKind,
   LocalState,
   Override,
@@ -31,126 +31,6 @@ declare global {
   interface Window {
     tapd: Bridge;
   }
-}
-
-function BugImageGallery({
-  period,
-  bugId,
-  images,
-}: {
-  period: Period;
-  bugId: string;
-  images: BugImagePreviewItem[];
-}) {
-  const [loaded, setLoaded] = useState<
-    { item: BugImagePreviewItem; url: string }[]
-  >([]);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(0);
-  const [selected, setSelected] = useState<{
-    item: BugImagePreviewItem;
-    url: string;
-  } | null>(null);
-
-  useEffect(() => {
-    let disposed = false;
-    const created: string[] = [];
-    setLoaded([]);
-    setFailed(0);
-    setLoading(true);
-    setSelected(null);
-    void (async () => {
-      const results: ({ item: BugImagePreviewItem; url: string } | null)[] =
-        new Array(images.length).fill(null);
-      let next = 0;
-      let failures = 0;
-      const workers = Array.from(
-        { length: Math.min(4, Math.max(1, images.length)) },
-        async () => {
-          while (!disposed) {
-            const index = next++;
-            if (index >= images.length) break;
-            const item = images[index];
-            try {
-              const preview = await window.tapd.getBugImage({
-                period,
-                bugId,
-                imageId: item.id,
-              });
-              const url = URL.createObjectURL(
-                new Blob([preview.data], { type: preview.mimeType }),
-              );
-              created.push(url);
-              results[index] = { item, url };
-            } catch {
-              failures++;
-            }
-          }
-        },
-      );
-      await Promise.all(workers);
-      if (!disposed) {
-        setLoaded(results.filter((value) => value !== null));
-        setFailed(failures);
-        setLoading(false);
-      }
-    })();
-    return () => {
-      disposed = true;
-      created.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [period.start, period.end, bugId, images]);
-
-  return (
-    <div className="bug-image-panel" aria-label={`Bug ${bugId} 图片`}>
-      {loading && <p className="bug-image-loading">正在加载图片…</p>}
-      {!loading && loaded.length === 0 && (
-        <p className="bug-image-loading">图片暂时无法显示。</p>
-      )}
-      {loaded.length > 0 && (
-        <div className="bug-image-grid">
-          {loaded.map(({ item, url }) => (
-            <button
-              className="bug-image-card"
-              key={item.id}
-              aria-label={`查看大图 ${item.fileName}`}
-              onClick={() => setSelected({ item, url })}
-            >
-              <img src={url} alt={`${item.source}图片：${item.fileName}`} />
-              <span>
-                {item.source} · {item.width}×{item.height}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-      {failed > 0 && (
-        <p className="bug-image-warning">另有 {failed} 张预览加载失败</p>
-      )}
-      {selected && (
-        <div
-          className="bug-image-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`查看图片 ${selected.item.fileName}`}
-          onClick={() => setSelected(null)}
-        >
-          <button
-            className="bug-image-lightbox-close"
-            aria-label="关闭大图"
-            onClick={() => setSelected(null)}
-          >
-            ×
-          </button>
-          <img
-            src={selected.url}
-            alt={`${selected.item.source}图片：${selected.item.fileName}`}
-            onClick={(event) => event.stopPropagation()}
-          />
-        </div>
-      )}
-    </div>
-  );
 }
 
 const empty: LocalState = {
@@ -189,7 +69,7 @@ export default function App() {
   const [initial] = useState(loadSelection);
   const [state, setState] = useState<LocalState>(empty);
   const [mode, setMode] = useState<"month" | "week" | "custom">(initial.mode);
-  const [view, setView] = useState<"monthly" | "weekly">(
+  const [view, setView] = useState<"monthly" | "weekly" | "media">(
     initial.mode === "week" ? "weekly" : "monthly",
   );
   const [month, setMonth] = useState(initial.month);
@@ -204,8 +84,12 @@ export default function App() {
   const [error, setError] = useState("");
   const [draft, setDraft] = useState(false);
   const [savedPath, setSavedPath] = useState("");
-  const [bugImageGroups, setBugImageGroups] = useState<BugImagePreviewGroup[]>([]);
   const [openBugId, setOpenBugId] = useState("");
+  const [mediaGroups, setMediaGroups] = useState<BugMediaGroup[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaError, setMediaError] = useState("");
+  const [mediaRefresh, setMediaRefresh] = useState(0);
+  const exportsKey = JSON.stringify(state.exports);
   const period = useMemo(
     () =>
       mode === "month" ? monthPeriod(month) : mode === "week" ? week : custom,
@@ -235,10 +119,6 @@ export default function App() {
   ).size;
   const pending = included.filter(
     (item) => !validLevel(item.level) || !item.category.trim() || item.changed,
-  );
-  const bugImagesById = useMemo(
-    () => new Map(bugImageGroups.map((group) => [group.bugId, group.images])),
-    [bugImageGroups],
   );
   const confirmationItems = showAllLevels ? included : pending;
   const categories = [
@@ -290,25 +170,28 @@ export default function App() {
   }, [mode, month, week, custom, invalidPeriod]);
   useEffect(() => {
     let active = true;
-    setOpenBugId("");
+    setMediaGroups([]);
+    setMediaError("");
     if (invalidPeriod) {
-      setBugImageGroups([]);
+      setMediaLoading(false);
       return () => {
         active = false;
       };
     }
+    setMediaLoading(true);
     void window.tapd
-      .listBugImages({ period })
+      .listBugMedia({ period })
       .then((groups) => {
-        if (active) setBugImageGroups(groups);
+        if (active) setMediaGroups(groups);
       })
-      .catch(() => {
-        if (active) setBugImageGroups([]);
-      });
+      .catch((error) => {
+        if (active) setMediaError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => { if (active) setMediaLoading(false); });
     return () => {
       active = false;
     };
-  }, [period.start, period.end, invalidPeriod, state.exports]);
+  }, [period.start, period.end, invalidPeriod, exportsKey, mediaRefresh]);
   async function collect(all = false) {
     setBusyTask("collect");
     setNotice("");
@@ -335,12 +218,14 @@ export default function App() {
       setSavedPath(result.outputPath);
       const refreshed = await run(() => window.tapd.load());
       if (refreshed) setState(refreshed);
+      setView("media");
+      setMediaRefresh((value) => value + 1);
       setNotice(
         result.message
-          ? `${result.message}；已保留 ${result.imageCount} 张图片，失败 ${result.failedCount} 项`
+          ? `${result.message}；已保留 ${result.imageCount} 张图片、${result.videoCount ?? 0} 个视频，失败 ${result.failedCount} 项`
           : result.canceled
-          ? `已停止提取：保留 ${result.imageCount} 张图片，失败 ${result.failedCount} 项`
-          : `Bug 图片提取完成：${result.imageCount} 张，重复 ${result.duplicateCount} 张，失败 ${result.failedCount} 项`,
+          ? `已停止提取：保留 ${result.imageCount} 张图片、${result.videoCount ?? 0} 个视频，失败 ${result.failedCount} 项`
+          : `Bug 媒体提取完成：${result.imageCount} 张图片、${result.videoCount ?? 0} 个视频，重复 ${result.duplicateCount} 项，失败 ${result.failedCount} 项`,
       );
     } finally {
       setBusyTask(null);
@@ -377,7 +262,7 @@ export default function App() {
     setProgress(null);
     setConfirmOpen(true);
     setShowAllLevels(false);
-    setBugImageGroups([]);
+    setMediaGroups([]);
     setOpenBugId("");
     setNotice("所有报表数据已清除");
   }
@@ -559,11 +444,11 @@ export default function App() {
                       ? "所选日期超出当前采集范围"
                       : bugCount === 0
                         ? "当前日期范围没有 Bug 单"
-                        : `提取当前范围内 ${bugCount} 个 Bug 单的图片`
+                        : `提取当前范围内 ${bugCount} 个 Bug 单描述、评论和附件中的图片和视频`
               }
             >
               <span className="step-number" aria-hidden="true">3</span>
-              {busyTask === "images" ? "正在提取图片…" : "提取 Bug 单图片"}
+              {busyTask === "images" ? "正在提取媒体…" : "提取 Bug 图片和视频"}
             </button>
             <ActionMenu label="更多采集" align="right" className="capture-menu">
               <p>需要完整历史时，读取所有时间的已办，耗时较长。</p>
@@ -728,7 +613,7 @@ export default function App() {
             </span>
           </div>
         )}
-        {state.capture && confirmOpen && confirmationItems.length > 0 && (
+        {view !== "media" && state.capture && confirmOpen && confirmationItems.length > 0 && (
           <section
             id="report-confirmations"
             className="confirmation-section"
@@ -745,7 +630,7 @@ export default function App() {
             </div>
             <p className="confirmation-help">
               选择 S1、S2、S3 自动保存；其他等级点“自定义”，输入如 S4 或 4
-              后点“保存等级”。Bug 单可在单号后点击“显示图片”核对。
+              后点“保存等级”。Bug 单可在单号后点击“查看媒体”核对。
             </p>
             <ul className="confirmation-list">
               {confirmationItems.map((item) => (
@@ -756,24 +641,19 @@ export default function App() {
                         {item.dates[0]} · #{item.shortId}
                       </span>
                       {String(item.type).toLowerCase() === "bug" && (() => {
-                        const images = bugImagesById.get(item.shortId) ?? [];
-                        const expanded = openBugId === item.shortId;
+                        const media = mediaGroups.find((group) => group.bugId === item.shortId)?.items ?? [];
                         return (
                           <button
                             className="bug-image-toggle"
-                            disabled={!images.length}
-                            aria-expanded={expanded}
+                            disabled={!media.length}
                             title={
-                              images.length
-                                ? `查看 Bug #${item.shortId} 的 ${images.length} 张图片`
-                                : "请先点击上方“提取 Bug 单图片”"
+                              media.length
+                                ? `查看 Bug #${item.shortId} 的 ${media.length} 个媒体文件`
+                                : "请先点击上方“提取 Bug 图片和视频”"
                             }
-                            onClick={() =>
-                              setOpenBugId(expanded ? "" : item.shortId)
-                            }
+                            onClick={() => { setOpenBugId(item.shortId); setView("media"); }}
                           >
-                            {expanded ? "收起图片" : "显示图片"}
-                            {images.length ? ` (${images.length})` : ""}
+                            查看媒体{media.length ? ` (${media.length})` : ""}
                           </button>
                         );
                       })()}
@@ -800,13 +680,6 @@ export default function App() {
                         </button>
                       )}
                     </details>
-                    {openBugId === item.shortId && (
-                      <BugImageGallery
-                        period={period}
-                        bugId={item.shortId}
-                        images={bugImagesById.get(item.shortId) ?? []}
-                      />
-                    )}
                   </div>
                   <div className="confirmation-field">
                     <span>S 等级</span>
@@ -865,6 +738,13 @@ export default function App() {
             >
               月报行预览
             </button>
+            <button
+              role="tab"
+              aria-selected={view === "media"}
+              aria-controls="bug-media-preview"
+              id="bug-media-tab"
+              onClick={() => setView("media")}
+            >Bug 媒体</button>
           </div>
           {state.capture && (
             <span className="report-summary">
@@ -906,7 +786,13 @@ export default function App() {
             <span className="weekly-options-hint">每条内容显示 S 等级，上方每日汇总保持原样</span>
           </div>
         )}
-        {!state.capture ? (
+        {view === "media" ? (
+          <section id="bug-media-preview" role="tabpanel" aria-labelledby="bug-media-tab">
+            <BugMediaBrowser period={period} groups={mediaGroups} loading={mediaLoading}
+              error={mediaError} selectedBugId={openBugId} onSelect={setOpenBugId}
+              onRefresh={() => setMediaRefresh((value) => value + 1)} />
+          </section>
+        ) : !state.capture ? (
           <p className="empty-state">
             选择日期，登录 TAPD 后点击“抓取所选日期”，即可预览并导出报告。
           </p>

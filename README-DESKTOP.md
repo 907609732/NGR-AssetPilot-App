@@ -54,3 +54,11 @@ npm run build:all
 ```powershell
 npm run test:local-image-search:index -- --source "E:\path\to\library" --model-root "$env:APPDATA\NGR AssetPilot\local-image-search\models"
 ```
+
+## TAPD Bug 媒体
+
+“提取 Bug 图片和视频”读取所选日期内 Bug 单的描述、评论和附件，将媒体按单号保存到用户选择的文件夹。详情页最多同时读取 2 单，下载最多同时进行 4 项；停止提取会保留已完成文件和提取清单。
+
+“Bug 媒体”页签支持搜索单号或标题、按单浏览、放大和复制原图、播放视频、定位本地文件；兼容已有的仅图片导出。预览使用缓存索引与缩略图，视频按需流式读取并支持拖动进度，不会将整个视频通过 IPC 复制到界面。
+
+支持可下载的 MP4、WebM、MOV / M4V 视频；单视频限 250 MB，单图片限 50 MB。浏览器不支持的视频编码可定位文件后交给本地播放器；blob 地址和 HLS / DASH 播放列表会记入失败清单，不能当作普通视频文件保存。

@@ -541,7 +541,7 @@ test("TAPD 子窗口只接受自身主框架请求并清理 IPC", async () => {
     templatePath: path.join(projectRoot, "app/tapd-report/monthly-template.xlsx"),
   });
   try {
-    assert.equal(handlers.size, 14);
+    assert.equal(handlers.size, 18);
     assert.equal(handlers.has("tapd:extract-bug-images"), true);
     assert.equal(handlers.has("tapd:list-bug-images"), true);
     assert.equal(handlers.has("tapd:get-bug-image"), true);

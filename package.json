@@ -1,6 +1,6 @@
 {
   "name": "ngr-assetpilot-desktop",
-  "version": "3.0.19",
+  "version": "3.0.20",
   "private": true,
   "description": "NGR AssetPilot Windows desktop application",
   "license": "MIT",
@@ -53,15 +53,16 @@
     "exceljs": "4.4.0",
     "fflate": "0.8.3",
     "onnxruntime-node": "1.30.0",
+    "p-limit": "7.3.3",
     "playwright-core": "1.64.0",
     "sharp": "0.35.5",
     "sql.js": "1.14.2"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
-    "esbuild": "0.25.12",
     "electron": "43.4.1",
     "electron-builder": "26.15.3",
+    "esbuild": "0.25.12",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

@@ -121,6 +121,7 @@ export interface Progress {
   total?: number | null;
   current?: number;
   imageCount?: number;
+  videoCount?: number;
   failedCount?: number;
 }
 export type ExportKind = "xlsx" | "txt" | "md" | "csv";
@@ -128,6 +129,7 @@ export interface BugImageExportResult {
   outputPath: string;
   bugCount: number;
   imageCount: number;
+  videoCount?: number;
   duplicateCount: number;
   failedCount: number;
   canceled: boolean;
@@ -149,7 +151,33 @@ export interface BugImagePreviewData {
   mimeType: "image/webp";
   data: ArrayBuffer;
 }
+export interface BugMediaItem {
+  id: string;
+  bugId: string;
+  kind: "image" | "video";
+  source: string;
+  fileName: string;
+  width: number;
+  height: number;
+  size: number;
+  mimeType: string;
+}
+export interface BugMediaGroup {
+  bugId: string;
+  title: string;
+  items: BugMediaItem[];
+  outputPath: string;
+}
+export interface BugMediaRequest {
+  period: Period;
+  bugId: string;
+  mediaId: string;
+}
 export interface Bridge {
+  listBugMedia(input: { period: Period }): Promise<BugMediaGroup[]>;
+  getBugMediaUrl(input: BugMediaRequest & { variant?: "thumbnail" | "original" }): Promise<string>;
+  copyBugMediaImage(input: BugMediaRequest): Promise<void>;
+  revealBugMedia(input: BugMediaRequest): Promise<void>;
   load(): Promise<LocalState>;
   login(): Promise<void>;
   collect(scope: CaptureScope): Promise<LocalState>;
