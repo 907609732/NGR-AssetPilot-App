@@ -65,5 +65,5 @@ npm.cmd run test:local-image-search:index -- --source "E:\path\to\library" --mod
 ## 其他文件
 
 - [架构文档](docs/ARCHITECTURE.md)：源码结构、数据流、安全边界和部署边界。
-- [当前发布说明](docs/releases/v3.0.20.md)：GitHub Release 工作流读取的版本说明。旧版说明与旧教程可从 Git 历史和对应 tag 查阅。
+- [当前版本说明](docs/releases/v3.0.23.md)：GitHub Release 工作流读取的版本说明。旧版说明与旧教程可从 Git 历史和对应 tag 查阅。
 - [许可证](LICENSE)与[第三方声明](THIRD-PARTY-NOTICES.md)：分发所需法律文本。

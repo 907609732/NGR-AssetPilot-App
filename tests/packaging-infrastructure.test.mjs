@@ -20,6 +20,8 @@ test("云翻译恢复版本保留已授权的未签名发布，恢复云配置",
   assert.deepEqual(releasePolicyFor("3.0.19"), { unsigned: true, offlineTranslationOnly: false });
   assert.deepEqual(releasePolicyFor("3.0.20"), { unsigned: true, offlineTranslationOnly: false });
   assert.deepEqual(releasePolicyFor("3.0.21"), { unsigned: false, offlineTranslationOnly: false });
+  assert.deepEqual(releasePolicyFor("3.0.23"), { unsigned: true, offlineTranslationOnly: false });
+  assert.deepEqual(releasePolicyFor("3.0.24"), { unsigned: false, offlineTranslationOnly: false });
 });
 const builderConfigPath = path.join(projectRoot, "build", "electron-builder.config.cjs");
 
