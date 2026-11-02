@@ -42,6 +42,10 @@ export function normalizeLevel(value: string): string {
 }
 export const validLevel = (value: string): boolean =>
   /^S(?:0|[1-9]\d*)$/.test(value);
+export function levelFromFixBranch(value: string): string {
+  const match = value.toUpperCase().match(/(?:^|[^A-Z0-9])S\s*(\d+)(?=$|[^A-Z0-9])/);
+  return match ? normalizeLevel(match[1]) : "";
+}
 export function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = new Date(`${value}T00:00:00Z`);
@@ -211,7 +215,7 @@ export function buildReport(
       ...raw,
       cleanTitle: o.title ?? base.title,
       category: o.category ?? base.category,
-      level: o.level ?? base.level,
+      level: o.level ?? (base.level || levelFromFixBranch(raw.fixBranch ?? "")),
       included: o.included !== false,
       dates,
       allocations: {},

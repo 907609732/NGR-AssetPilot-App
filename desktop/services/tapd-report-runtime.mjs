@@ -41,6 +41,10 @@ function normalizeLevel(value) {
   return match ? `S${match[1].replace(/^0+(?=\d)/, "")}` : text;
 }
 var validLevel = (value) => /^S(?:0|[1-9]\d*)$/.test(value);
+function levelFromFixBranch(value) {
+  const match = value.toUpperCase().match(/(?:^|[^A-Z0-9])S\s*(\d+)(?=$|[^A-Z0-9])/);
+  return match ? normalizeLevel(match[1]) : "";
+}
 function validDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = /* @__PURE__ */ new Date(`${value}T00:00:00Z`);
@@ -156,7 +160,7 @@ function buildReport(state, period) {
       ...raw,
       cleanTitle: o.title ?? base.title,
       category: o.category ?? base.category,
-      level: o.level ?? base.level,
+      level: o.level ?? (base.level || levelFromFixBranch(raw.fixBranch ?? "")),
       included: o.included !== false,
       dates,
       allocations: {},
@@ -2180,6 +2184,49 @@ var TapdCollector = class {
       await page.locator(".list-item__filter").click();
     await this.settle(page);
   }
+  async enrichFixBranches(capture) {
+    const missing = capture.items.filter(
+      (item) => item.type.toLowerCase() === "bug" && !validLevel(cleanTitle(item.title, defaultSettings).level)
+    );
+    if (!missing.length || !this.context) return capture;
+    let next = 0;
+    let completed = 0;
+    const workers = Array.from({ length: Math.min(2, missing.length) }, async () => {
+      const detailPage = await this.context.newPage().catch(() => null);
+      if (!detailPage) return;
+      try {
+        while (next < missing.length && !this.stopped) {
+          const item = missing[next++];
+          try {
+            const url = new URL(item.url, WORK_URL);
+            if (url.protocol !== "https:" || url.hostname !== "tapd.tencent.com" || !/^\/tapd_fe\/\d+\/bug\/detail\/\d+\/?$/.test(url.pathname)) throw new Error("Bug \u8BE6\u60C5\u5730\u5740\u65E0\u6548");
+            await detailPage.goto(url.href, { waitUntil: "domcontentloaded", timeout: 3e4 });
+            const field = detailPage.locator(".entity-detail-right-col").filter({
+              has: detailPage.locator(".entity-detail-right-col__key").getByText("\u4FEE\u590D\u5206\u652F", { exact: true })
+            }).first().locator(".entity-detail-right-col__value");
+            await field.waitFor({ state: "attached", timeout: 12e3 });
+            const value = field.locator("[field]").first();
+            item.fixBranch = (await value.count() ? await value.getAttribute("value") : "")?.trim() || (await field.innerText()).trim();
+          } catch {
+          }
+          completed++;
+          this.progress({ phase: "collecting", message: `\u6B63\u5728\u8BFB\u53D6 Bug \u4FEE\u590D\u5206\u652F ${completed}/${missing.length}`, current: completed, total: missing.length });
+        }
+      } finally {
+        await detailPage.close().catch(() => {
+        });
+      }
+    });
+    await Promise.all(workers);
+    const recognized = missing.filter((item) => validLevel(levelFromFixBranch(item.fixBranch ?? ""))).length;
+    this.progress({
+      phase: capture.complete ? "complete" : "incomplete",
+      message: `Bug \u4FEE\u590D\u5206\u652F\u8BC6\u522B S \u7B49\u7EA7\uFF1A${recognized}/${missing.length}${recognized < missing.length ? "\uFF1B\u5176\u4F59\u8BF7\u4EBA\u5DE5\u9009\u62E9" : ""}`,
+      loaded: capture.loaded,
+      total: capture.total
+    });
+    return capture;
+  }
   async collect(scope = {
     kind: "range",
     period: monthPeriod(todayShanghai().slice(0, 7))
@@ -2207,13 +2254,14 @@ var TapdCollector = class {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 45e3 });
       await this.resetScope(page);
       this.check();
-      return await collectPage(
+      const capture = await collectPage(
         page,
         scope,
         () => this.check(),
         (p) => this.progress(p),
         () => this.settle(page)
       );
+      return await this.enrichFixBranches(capture);
     } finally {
       this.running = false;
     }

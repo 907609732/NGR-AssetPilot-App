@@ -6,12 +6,14 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import ExcelJS from "exceljs";
+import { chromium } from "playwright-core";
 import * as reportDates from "../integrations/tapd-report/src/shared/report.ts";
 import * as reportRuntime from "../desktop/services/tapd-report-runtime.mjs";
 
 import { TapdReportWindowService } from "../desktop/services/tapd-report-window.mjs";
 import {
   assertSafeImageUrl,
+  buildReport,
   extractBugImagesToDirectory,
   getBugImagePreview,
   listBugImagePreviews,
@@ -32,6 +34,64 @@ test("上周快捷日期按周一至周日计算并正确跨年", () => {
   assert.deepEqual(reportDates.previousWeekPeriod?.("2026-01-01"), {
     start: "2025-12-22", end: "2025-12-28",
   });
+});
+
+test("标题缺少 S 等级时从 Bug 修复分支补取，标题和人工选择优先", () => {
+  assert.equal(reportDates.levelFromFixBranch?.("Trunk_S2"), "S2");
+  assert.equal(reportDates.levelFromFixBranch?.("Trunk_S03"), "S3");
+  assert.equal(reportDates.levelFromFixBranch?.("Trunk_S2X"), "");
+  assert.equal(reportDates.levelFromFixBranch?.("Trunk"), "");
+  const item = capturedItem({ title: "【运营活动】示例问题" });
+  item.fixBranch = "Trunk_S2";
+  const state = capturedState([item]);
+  const period = { start: "2026-10-12", end: "2026-10-18" };
+  assert.equal(buildReport(state, period).items[0].level, "S2");
+  item.title = "【S1】【运营活动】示例问题";
+  assert.equal(buildReport(state, period).items[0].level, "S1");
+  state.overrides[item.key] = { level: "S3" };
+  assert.equal(buildReport(state, period).items[0].level, "S3");
+});
+
+test("采集只打开缺少 S 等级的 Bug 详情并读取修复分支 value", { timeout: 20_000 }, async () => {
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  try {
+    const context = await browser.newContext();
+    const visits = [];
+    await context.route("https://tapd.tencent.com/**", async (route) => {
+      visits.push(route.request().url());
+      await route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: `
+        <div class="entity-detail-right-col">
+          <div class="entity-detail-right-col__key"><span>修复分支</span><span>字段说明</span></div>
+          <div class="entity-detail-right-col__value"><span field="custom_field_42" value="Trunk_S2">Trunk_S2</span></div>
+        </div>` });
+    });
+    const missing = capturedItem({ title: "【运营活动】缺等级问题" });
+    const expectedUrl = missing.url;
+    missing.url = new URL(expectedUrl).pathname;
+    const titled = capturedItem({ key: "graded", id: "1020416981164433542", shortId: "164433542" });
+    const story = capturedItem({ key: "story", id: "1020416981164433543", shortId: "164433543", type: "Story", title: "【运营活动】需求" });
+    const capture = capturedState([missing, titled, story]).capture;
+    const progress = [];
+    const collector = new reportRuntime.TapdCollector("unused-test-profile", (value) => progress.push(value));
+    collector.context = context;
+    await collector.enrichFixBranches(capture);
+    assert.equal(missing.fixBranch, "Trunk_S2");
+    assert.equal(titled.fixBranch, undefined);
+    assert.equal(story.fixBranch, undefined);
+    assert.deepEqual(visits, [expectedUrl]);
+    assert.match(progress.at(-1).message, /识别 S 等级：1\/1/);
+  } finally { await browser.close(); }
+});
+
+test("Bug 详情页无法打开时保留采集结果供人工确认等级", async () => {
+  const item = capturedItem({ title: "【运营活动】缺等级问题" });
+  const capture = capturedState([item]).capture;
+  const progress = [];
+  const collector = new reportRuntime.TapdCollector("unused-test-profile", (value) => progress.push(value));
+  collector.context = { async newPage() { throw new Error("Chrome window closed"); } };
+  assert.equal(await collector.enrichFixBranches(capture), capture);
+  assert.equal(item.fixBranch, undefined);
+  assert.match(progress.at(-1).message, /0\/1；其余请人工选择/);
 });
 
 test("TAPD 月报集成产物和模板随主软件提供", async () => {

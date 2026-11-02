@@ -12,6 +12,7 @@ export interface RawItem {
   type: string;
   typeLabel: string;
   title: string;
+  fixBranch?: string;
   status: string;
   owner: string;
   processedAt: string;

@@ -6,7 +6,7 @@ import type {
   CaptureScope,
   Progress,
 } from "../shared/types";
-import { dateRange, monthPeriod, todayShanghai } from "../shared/report";
+import { cleanTitle, dateRange, defaultSettings, levelFromFixBranch, monthPeriod, todayShanghai, validLevel } from "../shared/report";
 import { collectPage } from "./collect-page";
 import {
   extractBugImagesToDirectory,
@@ -207,6 +207,51 @@ export class TapdCollector {
       await page.locator(".list-item__filter").click();
     await this.settle(page);
   }
+  private async enrichFixBranches(capture: Capture) {
+    const missing = capture.items.filter((item) =>
+      item.type.toLowerCase() === "bug" && !validLevel(cleanTitle(item.title, defaultSettings).level),
+    );
+    if (!missing.length || !this.context) return capture;
+    let next = 0;
+    let completed = 0;
+    const workers = Array.from({ length: Math.min(2, missing.length) }, async () => {
+      const detailPage = await this.context!.newPage().catch(() => null);
+      if (!detailPage) return;
+      try {
+        while (next < missing.length && !this.stopped) {
+          const item = missing[next++];
+          try {
+            const url = new URL(item.url, WORK_URL);
+            if (url.protocol !== "https:" || url.hostname !== "tapd.tencent.com" ||
+                !/^\/tapd_fe\/\d+\/bug\/detail\/\d+\/?$/.test(url.pathname)) throw new Error("Bug 详情地址无效");
+            await detailPage.goto(url.href, { waitUntil: "domcontentloaded", timeout: 30000 });
+            const field = detailPage.locator(".entity-detail-right-col").filter({
+              has: detailPage.locator(".entity-detail-right-col__key").getByText("修复分支", { exact: true }),
+            }).first().locator(".entity-detail-right-col__value");
+            await field.waitFor({ state: "attached", timeout: 12000 });
+            const value = field.locator("[field]").first();
+            item.fixBranch = ((await value.count()) ? await value.getAttribute("value") : "")?.trim()
+              || (await field.innerText()).trim();
+          } catch {
+            // If the detail field is unavailable, the S level remains editable by hand.
+          }
+          completed++;
+          this.progress({ phase: "collecting", message: `正在读取 Bug 修复分支 ${completed}/${missing.length}`, current: completed, total: missing.length });
+        }
+      } finally {
+        await detailPage.close().catch(() => {});
+      }
+    });
+    await Promise.all(workers);
+    const recognized = missing.filter((item) => validLevel(levelFromFixBranch(item.fixBranch ?? ""))).length;
+    this.progress({
+      phase: capture.complete ? "complete" : "incomplete",
+      message: `Bug 修复分支识别 S 等级：${recognized}/${missing.length}${recognized < missing.length ? "；其余请人工选择" : ""}`,
+      loaded: capture.loaded,
+      total: capture.total,
+    });
+    return capture;
+  }
   async collect(
     scope: CaptureScope = {
       kind: "range",
@@ -241,13 +286,14 @@ export class TapdCollector {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });
       await this.resetScope(page);
       this.check();
-      return await collectPage(
+      const capture = await collectPage(
         page,
         scope,
         () => this.check(),
         (p) => this.progress(p),
         () => this.settle(page),
       );
+      return await this.enrichFixBranches(capture);
     } finally {
       this.running = false;
     }
