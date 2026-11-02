@@ -151,6 +151,10 @@ flowchart TB
 | 本地搜图存储层 | `desktop/services/local-image-search/storage.mjs` | SQLite schema、图库、图片元数据、模型注册和向量状态 |
 | 模型管理 | `desktop/services/local-image-search/model-manager.mjs` | 内置模型下载、哈希校验、离线包和自定义模型生命周期 |
 | 推理与检索 | `engine.mjs`、`engine-worker.mjs` | 索引/查询/状态隔离进程、DirectML/CPU 调度、图像预处理、批量推理、素材分页、向量缓存和精确 Top-K |
+| TAPD 报表 | `integrations/tapd-report/src/`、`desktop/services/tapd-report-window.mjs` | TAPD 页面采集、周/月报汇总、日期快捷选择、Excel 导出与月报 Bug 图片嵌入 |
+| Bug 媒体 | `integrations/tapd-report/src/main/bug-media.ts`、`renderer/BugMediaBrowser.tsx`、`desktop/services/tapd-media-response.mjs` | 描述/评论/附件媒体提取、按单号索引、原图复制与视频按需播放 |
+| 扩展工作台 | `desktop/services/interface-finder-extension.mjs`、`finder-extension-worker.mjs`、`build/extensions.json` | 校验并导入快速找界面扩展 ZIP，隔离资料，复用宿主 Electron |
+| ArtHub 与系统工具 | `desktop/services/arthub-folders.mjs`、`keep-awake.mjs`、`auto-start.mjs` | ArtHub 只读目录查询、保活模式和当前用户启动项 |
 | 官网 | `website/` | 产品介绍、经过校验的安装包下载入口；不承载桌面端业务数据 |
 | 构建与发布 | `build/`、`scripts/`、`.github/workflows/` | 三版本打包、依赖检查、测试、凭据扫描、SBOM、哈希和 GitHub Release |
 
@@ -304,6 +308,14 @@ sequenceDiagram
 
 正式安装版通过 `electron-updater` 读取 GitHub Release 的 `latest.yml`。软件会在启动后延迟检查，并每 6 小时周期检查；发现更新后，由用户主动下载并确认安装。开发版、测试版和 portable 版不走正式自动更新渠道。
 
+### 6. TAPD 报表与 Bug 媒体
+
+`integrations/tapd-report` 将采集、汇总、导出和 React 界面分离，桌面主进程通过 `tapd-report-window.mjs` 提供受控入口。周报正文的 S 等级、日期和人天选项在共享报表格式层生成；月报 Excel 导出由 `exporter.ts` 使用 `exceljs`，可读取当前范围内已经提取的 Bug 图片并嵌入独立工作表。Bug 媒体提取从详情描述、评论和附件发现文件，最多并行读取 2 单、下载 4 项；按单号存储并记录失败项。媒体浏览页按需请求本地文件，视频通过受限响应流播放，避免一次性 IPC 传输整段视频。提取目录及已完成文件由用户选择和管理。
+
+### 7. 扩展与外部服务
+
+快速找界面扩展是独立交付的 ZIP。宿主先校验清单、载荷和哈希，再切换当前版本指针；扩展代码在受控工作台运行，资料位于宿主 `userData` 下独立目录。旧独立 EXE 不是当前扩展格式。ArtHub 查询只读；客户端定位协议尚未验证，不应把目录查询成功解释为可自动打开客户端。百度 CFC 翻译密钥仅存在服务端环境变量，桌面包仅保存公开 Endpoint。
+
 ## 本地数据与存储边界
 
 | 数据 | 存储位置 | 是否进入迁移备份 | 说明 |
@@ -317,6 +329,8 @@ sequenceDiagram
 | 源图片 | 用户选择的原目录 | 否 | 应始终只读 |
 | 本地诊断日志 | 应用 `userData` 目录 | 否 | 轮转保存版本、操作 ID、错误码、阶段和进程退出；禁止密钥、查询、正文与完整路径 |
 | 网络诊断目标与历史 | `%APPDATA%/.../network-diagnostics/` | 否 | 原子 JSON；最多 100 个自定义目标和最近 30 次脱敏运行，不保存响应正文、代理地址或密钥 |
+| TAPD 报表与 Bug 媒体 | 报表本机状态、用户选择的媒体导出目录 | 由对应功能管理 | 报表选项持久化；图片和视频由用户主动提取，月报只嵌入当前范围内已有图片 |
+| 快速找界面扩展 | `%APPDATA%/NGR/extensions/` 与宿主 `userData/extensions-data/` | 独立管理 | 安装目录、模型和项目资料不随宿主卸载清理 |
 
 ## 安全边界
 
@@ -348,7 +362,7 @@ sequenceDiagram
 1. **Renderer 模块化**：当前仍依赖多个按顺序加载的全局脚本和共享可变状态。新增功能会同时触及 HTML、CSS、状态、事件、持久化和测试，应逐步迁移到明确的 ES Module 和功能边界。
 2. **版本化数据迁移**：localStorage、IndexedDB、DPAPI、SQLite、模型文件和缩略图均有独立生命周期，需要统一的数据版本、迁移、容量和崩溃恢复策略。
 3. **迁移包兼容与容量**：桌面导出使用 fflate 分块流式 ZIP；导入必须持续保留路径、条目、哈希、总大小和事务回滚门禁，并对旧 v1/加密包做回归测试。
-4. **发布信任（证书待配置）**：v3.0.12 按发布决定提供未签名正式版，保留 HTTPS 下载、更新哈希和凭据扫描；仅本版本关闭 Authenticode 更新验证。`build/release-policy.cjs` 限定该版本使用离线翻译，不内置当前返回 401 的云翻译配置。后续版本恢复证书和受管服务要求。
+4. **发布信任（证书待配置）**：当前正式安装包仍需按版本核对签名策略、HTTPS 下载、更新哈希、凭据扫描和构建清单；不要将本地构建成功当作已安装或已公开发布。
 5. **诊断导出与崩溃恢复**：已有本地脱敏轮转日志和进程恢复，后续可增加由用户主动确认的诊断包；不得默认上传本地图片、查询或提示词。
 6. **官网边界清理**：官网应自动同步正式 Release 信息，并移除或隔离当前未使用的 D1、Auth 和示例脚手架，减少版本和依赖漂移。
 

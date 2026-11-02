@@ -65,7 +65,7 @@ const sourceFiles = [
   const target = path.join(projectRoot, relativePath);
   return fs.existsSync(target) ? walk(target) : [];
 }).filter((filePath) => !filePath.startsWith(`${generatedDirectory}${path.sep}`));
-for (const name of ["package.json", "package-lock.json", "README-DESKTOP.md", "LICENSE"]) {
+for (const name of ["package.json", "package-lock.json", "README.md", "LICENSE"]) {
   const target = path.join(projectRoot, name);
   if (fs.existsSync(target)) sourceFiles.push(target);
 }
