@@ -88,6 +88,10 @@ export function weekPeriod(today = todayShanghai()): Period {
   const start = addDays(today, -((day + 6) % 7));
   return { start, end: addDays(start, 6) };
 }
+export function previousWeekPeriod(today = todayShanghai()): Period {
+  const start = addDays(weekPeriod(today).start, -7);
+  return { start, end: addDays(start, 6) };
+}
 export const inPeriod = (d: string, p: Period) =>
   validDate(d) && d >= p.start && d <= p.end;
 export function captureCovers(

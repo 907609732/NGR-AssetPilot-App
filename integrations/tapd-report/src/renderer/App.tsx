@@ -9,6 +9,7 @@ import {
   defaultSettings,
   effortText,
   monthPeriod,
+  previousWeekPeriod,
   signature,
   todayShanghai,
   validDate,
@@ -396,12 +397,20 @@ export default function App() {
                   }
                 />
                 {mode === "week" && (
-                  <button
-                    disabled={busy || saving}
-                    onClick={() => setWeek(weekPeriod())}
-                  >
-                    本周
-                  </button>
+                  <>
+                    <button disabled={busy || saving} onClick={() => setWeek(weekPeriod())}>
+                      本周
+                    </button>
+                    <button disabled={busy || saving} onClick={() => setWeek(previousWeekPeriod())}>
+                      上周
+                    </button>
+                    <button disabled={busy || saving} onClick={() => {
+                      const today = todayShanghai();
+                      setWeek({ start: today, end: today });
+                    }}>
+                      今天
+                    </button>
+                  </>
                 )}
               </div>
             )}

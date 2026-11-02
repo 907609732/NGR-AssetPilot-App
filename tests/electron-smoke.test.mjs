@@ -150,6 +150,15 @@ test("Electron development app boots with the Dev identity and an isolated rende
     await tapdWindow.waitForFunction(() => Boolean(window.tapd?.load));
     await tapdWindow.getByRole("button", { name: "登录 TAPD" }).waitFor({ state: "visible" });
     assert.match(await tapdWindow.title(), /TAPD 周报／月报/);
+    const weekStart = tapdWindow.getByLabel("周报开始日期");
+    const weekEnd = tapdWindow.getByLabel("周报结束日期");
+    await tapdWindow.getByRole("button", { name: "本周", exact: true }).click();
+    const currentWeekStart = await weekStart.inputValue();
+    await tapdWindow.getByRole("button", { name: "上周", exact: true }).click();
+    assert.equal(await weekStart.inputValue(), new Date(Date.parse(`${currentWeekStart}T00:00:00Z`) - 7 * 86400000).toISOString().slice(0, 10));
+    assert.equal(await weekEnd.inputValue(), new Date(Date.parse(`${currentWeekStart}T00:00:00Z`) - 86400000).toISOString().slice(0, 10));
+    await tapdWindow.getByRole("button", { name: "今天", exact: true }).click();
+    assert.equal(await weekStart.inputValue(), await weekEnd.inputValue());
     assert.equal(await tapdWindow.getByRole("button", { name: "登录 TAPD" }).isVisible(), true);
     assert.equal(await tapdWindow.getByRole("button", { name: "抓取所选日期" }).isVisible(), true);
     const extractBugImages = tapdWindow.getByRole("button", { name: "提取 Bug 图片和视频" });

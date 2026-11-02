@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
+import * as reportDates from "../integrations/tapd-report/src/shared/report.ts";
 
 import { TapdReportWindowService } from "../desktop/services/tapd-report-window.mjs";
 import {
@@ -21,6 +22,15 @@ import {
 } from "../desktop/services/tapd-report-runtime.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+test("上周快捷日期按周一至周日计算并正确跨年", () => {
+  assert.deepEqual(reportDates.previousWeekPeriod?.("2026-11-02"), {
+    start: "2026-10-26", end: "2026-11-01",
+  });
+  assert.deepEqual(reportDates.previousWeekPeriod?.("2026-01-01"), {
+    start: "2025-12-22", end: "2025-12-28",
+  });
+});
 
 test("TAPD 月报集成产物和模板随主软件提供", async () => {
   const [html, renderer, styles, runtime, preload, template] = await Promise.all([

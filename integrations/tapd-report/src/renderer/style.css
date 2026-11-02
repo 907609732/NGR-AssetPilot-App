@@ -256,6 +256,7 @@ h1 {
 .week-inputs {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   color: var(--muted);
   font-size: 14px;
