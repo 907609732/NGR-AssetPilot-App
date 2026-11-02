@@ -21,6 +21,7 @@ export {
 } from "./src/main/bug-images";
 export {
   exportProblems,
+  selectReportBugImages,
   suggestedName,
   unusedPath,
   writeExport,

@@ -2227,8 +2227,9 @@ var TapdCollector = class {
 
 // integrations/tapd-report/src/main/exporter.ts
 import ExcelJS from "exceljs";
+import sharp3 from "sharp";
 import { existsSync as existsSync3 } from "node:fs";
-import { writeFile as writeFile2 } from "node:fs/promises";
+import { readFile, writeFile as writeFile2 } from "node:fs/promises";
 import { dirname as dirname2, extname, basename, join as join2 } from "node:path";
 var safeFilename = (text) => text.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").replace(/[. ]+$/, "").slice(0, 120) || "\u62A5\u8868";
 function suggestedName(kind, period, state, draft) {
@@ -2286,7 +2287,65 @@ function exportProblems(state, period) {
   if (!report.entries.length) issues.push("\u6240\u9009\u65E5\u671F\u6CA1\u6709\u7EB3\u5165\u7684\u4E8B\u9879");
   return issues;
 }
-async function writeExport(path3, kind, state, period, draft, template) {
+function selectReportBugImages(state, period, groups) {
+  const mediaByBug = new Map(groups.map((group) => [group.bugId, group]));
+  const rawByKey = new Map((state.capture?.items ?? []).map((item) => [item.key, item]));
+  const seen = /* @__PURE__ */ new Set();
+  const selected = [];
+  for (const entry of buildReport(state, period).entries) {
+    for (const key of entry.sourceKeys) {
+      const raw = rawByKey.get(key);
+      if (!raw || raw.type.toLowerCase() !== "bug" || seen.has(raw.shortId)) continue;
+      seen.add(raw.shortId);
+      const group = mediaByBug.get(raw.shortId);
+      for (const item of group?.items ?? []) {
+        if (item.kind !== "image") continue;
+        selected.push({
+          bugId: raw.shortId,
+          mediaId: item.id,
+          title: entry.title,
+          source: item.source,
+          fileName: item.fileName,
+          width: item.width,
+          height: item.height,
+          url: raw.url
+        });
+      }
+    }
+  }
+  return selected;
+}
+async function addBugImageAppendix(workbook, images) {
+  const sheet = workbook.addWorksheet("Bug\u56FE\u7247\u9644\u4EF6");
+  sheet.columns = [
+    { header: "Bug \u5355\u53F7", key: "bugId", width: 18 },
+    { header: "Bug \u6807\u9898", key: "title", width: 52 },
+    { header: "\u6765\u6E90", key: "source", width: 12 },
+    { header: "\u6587\u4EF6\u540D", key: "fileName", width: 40 },
+    { header: "\u56FE\u7247", key: "image", width: 50 }
+  ];
+  sheet.getRow(1).height = 28;
+  sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF285CE3" } };
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  for (const image of images) {
+    const row = sheet.addRow({ title: image.title, source: image.source, fileName: image.fileName });
+    row.height = 155;
+    row.alignment = { vertical: "middle", wrapText: true };
+    const label = `#${image.bugId}`;
+    row.getCell(1).value = /^https:\/\/tapd\.tencent\.com\/tapd_fe\/\d+\//.test(image.url) ? { text: label, hyperlink: image.url } : label;
+    const format = image.mimeType?.replace(/^image\//, "") || extname(image.absolutePath).slice(1).toLowerCase();
+    const extension = format === "jpg" ? "jpeg" : format;
+    const imageId = extension === "png" || extension === "jpeg" || extension === "gif" ? workbook.addImage({ filename: image.absolutePath, extension }) : workbook.addImage({ buffer: await sharp3(await readFile(image.absolutePath), { animated: false, limitInputPixels: 25e7 }).rotate().png().toBuffer(), extension: "png" });
+    const scale = Math.min(330 / Math.max(image.width, 1), 190 / Math.max(image.height, 1), 1);
+    sheet.addImage(imageId, {
+      tl: { col: 4.1, row: row.number - 1 + 0.08 },
+      ext: { width: Math.max(1, Math.round(image.width * scale)), height: Math.max(1, Math.round(image.height * scale)) },
+      editAs: "oneCell"
+    });
+  }
+}
+async function writeExport(path3, kind, state, period, draft, template, images = []) {
   const problems = exportProblems(state, period);
   if (kind !== "csv" && problems.length && !draft)
     throw new Error(
@@ -2357,6 +2416,7 @@ async function writeExport(path3, kind, state, period, draft, template) {
     });
   }
   sheet.pageSetup.printArea = `A1:L${Math.max(1, sheet.rowCount)}`;
+  if (images.length) await addBugImageAppendix(workbook, images);
   workbook.creator = "TAPD\u6708\u62A5\u5DE5\u5177";
   workbook.modified = /* @__PURE__ */ new Date();
   const buffer = await workbook.xlsx.writeBuffer();
@@ -2378,6 +2438,7 @@ export {
   readBugImagesDOM,
   sanitizePathPart,
   selectBugImageTickets,
+  selectReportBugImages,
   suggestedName,
   unusedBugImageDirectory,
   unusedPath,

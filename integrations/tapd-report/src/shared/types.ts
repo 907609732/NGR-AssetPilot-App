@@ -204,6 +204,7 @@ export interface Bridge {
     kind: ExportKind;
     period: Period;
     draft: boolean;
+    includeBugImages?: boolean;
   }): Promise<string | null>;
   copy(input: { period: Period; html: boolean; draft: boolean }): Promise<void>;
   openPath(path: string): Promise<void>;

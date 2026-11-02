@@ -383,6 +383,9 @@ h1 {
   cursor: pointer;
   white-space: nowrap;
 }
+.report-image-option {
+  margin-left: 4px;
+}
 .confirmation-toolbar {
   display: flex;
   align-items: center;

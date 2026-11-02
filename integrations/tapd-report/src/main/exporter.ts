@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
+import sharp from "sharp";
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, basename, join } from "node:path";
 import {
   buildReport,
@@ -12,7 +13,22 @@ import {
   weeklyMarkdown,
   weeklyText,
 } from "../shared/report";
-import type { ExportKind, LocalState, Period } from "../shared/types";
+import type { BugMediaGroup, ExportKind, LocalState, Period } from "../shared/types";
+
+export interface ReportBugImage {
+  bugId: string;
+  mediaId: string;
+  title: string;
+  source: string;
+  fileName: string;
+  width: number;
+  height: number;
+  url: string;
+}
+export interface EmbeddedBugImage extends Omit<ReportBugImage, "mediaId"> {
+  absolutePath: string;
+  mimeType?: string;
+}
 
 export const safeFilename = (text: string) =>
   text
@@ -91,6 +107,64 @@ export function exportProblems(state: LocalState, period: Period): string[] {
   if (!report.entries.length) issues.push("所选日期没有纳入的事项");
   return issues;
 }
+export function selectReportBugImages(state: LocalState, period: Period, groups: BugMediaGroup[]): ReportBugImage[] {
+  const mediaByBug = new Map(groups.map((group) => [group.bugId, group]));
+  const rawByKey = new Map((state.capture?.items ?? []).map((item) => [item.key, item]));
+  const seen = new Set<string>();
+  const selected: ReportBugImage[] = [];
+  for (const entry of buildReport(state, period).entries) {
+    for (const key of entry.sourceKeys) {
+      const raw = rawByKey.get(key);
+      if (!raw || raw.type.toLowerCase() !== "bug" || seen.has(raw.shortId)) continue;
+      seen.add(raw.shortId);
+      const group = mediaByBug.get(raw.shortId);
+      for (const item of group?.items ?? []) {
+        if (item.kind !== "image") continue;
+        selected.push({
+          bugId: raw.shortId, mediaId: item.id, title: entry.title,
+          source: item.source, fileName: item.fileName,
+          width: item.width, height: item.height, url: raw.url,
+        });
+      }
+    }
+  }
+  return selected;
+}
+
+async function addBugImageAppendix(workbook: ExcelJS.Workbook, images: EmbeddedBugImage[]) {
+  const sheet = workbook.addWorksheet("Bug图片附件");
+  sheet.columns = [
+    { header: "Bug 单号", key: "bugId", width: 18 },
+    { header: "Bug 标题", key: "title", width: 52 },
+    { header: "来源", key: "source", width: 12 },
+    { header: "文件名", key: "fileName", width: 40 },
+    { header: "图片", key: "image", width: 50 },
+  ];
+  sheet.getRow(1).height = 28;
+  sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF285CE3" } };
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  for (const image of images) {
+    const row = sheet.addRow({ title: image.title, source: image.source, fileName: image.fileName });
+    row.height = 155;
+    row.alignment = { vertical: "middle", wrapText: true };
+    const label = `#${image.bugId}`;
+    row.getCell(1).value = /^https:\/\/tapd\.tencent\.com\/tapd_fe\/\d+\//.test(image.url)
+      ? { text: label, hyperlink: image.url }
+      : label;
+    const format = image.mimeType?.replace(/^image\//, "") || extname(image.absolutePath).slice(1).toLowerCase();
+    const extension = format === "jpg" ? "jpeg" : format;
+    const imageId = extension === "png" || extension === "jpeg" || extension === "gif"
+      ? workbook.addImage({ filename: image.absolutePath, extension })
+      : workbook.addImage({ buffer: await sharp(await readFile(image.absolutePath), { animated: false, limitInputPixels: 250_000_000 }).rotate().png().toBuffer(), extension: "png" });
+    const scale = Math.min(330 / Math.max(image.width, 1), 190 / Math.max(image.height, 1), 1);
+    sheet.addImage(imageId, {
+      tl: { col: 4.1, row: row.number - 1 + 0.08 },
+      ext: { width: Math.max(1, Math.round(image.width * scale)), height: Math.max(1, Math.round(image.height * scale)) },
+      editAs: "oneCell",
+    });
+  }
+}
 export async function writeExport(
   path: string,
   kind: ExportKind,
@@ -98,6 +172,7 @@ export async function writeExport(
   period: Period,
   draft: boolean,
   template: string,
+  images: EmbeddedBugImage[] = [],
 ) {
   const problems = exportProblems(state, period);
   if (kind !== "csv" && problems.length && !draft)
@@ -171,6 +246,7 @@ export async function writeExport(
     });
   }
   sheet.pageSetup.printArea = `A1:L${Math.max(1, sheet.rowCount)}`;
+  if (images.length) await addBugImageAppendix(workbook, images);
   workbook.creator = "TAPD月报工具";
   workbook.modified = new Date();
   // Exclusive creation also guards a race after choosing a versioned filename.

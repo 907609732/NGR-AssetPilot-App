@@ -5,7 +5,9 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
+import ExcelJS from "exceljs";
 import * as reportDates from "../integrations/tapd-report/src/shared/report.ts";
+import * as reportRuntime from "../desktop/services/tapd-report-runtime.mjs";
 
 import { TapdReportWindowService } from "../desktop/services/tapd-report-window.mjs";
 import {
@@ -484,6 +486,58 @@ test("周报 TXT 和 Markdown 导出采用已保存的正文选项", async () =>
   }
 });
 
+test("月报附图只选本次报表纳入的 Bug 图片，跳过排除项和视频", () => {
+  const first = capturedItem();
+  const excluded = capturedItem({ key: "excluded", id: "1020416981164433542", shortId: "164433542" });
+  const state = capturedState([first, excluded], { excluded: { included: false } });
+  const media = [
+    { bugId: first.shortId, title: "第一单", items: [
+      { id: "image-1", kind: "image", source: "描述", fileName: "截图.png", width: 800, height: 600 },
+      { id: "video-1", kind: "video", source: "附件", fileName: "录屏.mp4", width: 800, height: 600 },
+    ] },
+    { bugId: excluded.shortId, title: "排除单", items: [
+      { id: "image-2", kind: "image", source: "描述", fileName: "排除.png", width: 800, height: 600 },
+    ] },
+  ];
+  const selected = reportRuntime.selectReportBugImages?.(state, { start: "2026-10-12", end: "2026-10-18" }, media);
+  assert.deepEqual(selected, [{
+    bugId: first.shortId, mediaId: "image-1", title: "示例问题", source: "描述",
+    fileName: "截图.png", width: 800, height: 600, url: first.url,
+  }]);
+});
+
+test("月报 Excel 可在独立工作表嵌入完整 Bug 图片并保留原表", async () => {
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ngr-monthly-images-"));
+  try {
+    const source = path.join(temporaryRoot, "截图.png");
+    const webpSource = path.join(temporaryRoot, "截图.webp");
+    const output = path.join(temporaryRoot, "月报.xlsx");
+    await sharp({ create: { width: 900, height: 600, channels: 3, background: "red" } }).png().toFile(source);
+    await sharp({ create: { width: 500, height: 800, channels: 3, background: "green" } }).webp().toFile(webpSource);
+    const state = capturedState([capturedItem()]);
+    await writeExport(output, "xlsx", state, { start: "2026-10-12", end: "2026-10-18" }, false,
+      path.join(projectRoot, "app/tapd-report/monthly-template.xlsx"), [
+        { bugId: "164433540", title: "示例问题", source: "描述", fileName: "截图.png", width: 900, height: 600,
+          url: "https://tapd.tencent.com/tapd_fe/20416981/bug/detail/1020416981164433540", absolutePath: source },
+        { bugId: "164433540", title: "示例问题", source: "附件", fileName: "截图.webp", width: 500, height: 800,
+          url: "https://tapd.tencent.com/tapd_fe/20416981/bug/detail/1020416981164433540", absolutePath: webpSource },
+      ]);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(output);
+    assert.equal(workbook.worksheets[0].getCell("A2").value.toString().includes("示例问题"), true);
+    const appendix = workbook.getWorksheet("Bug图片附件");
+    assert.ok(appendix);
+    assert.equal(appendix.getCell("A2").value.text, "#164433540");
+    assert.equal(appendix.getImages().length, 2);
+    const image = workbook.getImage(Number(appendix.getImages()[0].imageId));
+    assert.equal((await sharp(image.buffer).metadata()).width, 900);
+    assert.deepEqual(image.buffer, await readFile(source));
+    const converted = workbook.getImage(Number(appendix.getImages()[1].imageId));
+    assert.equal(converted.extension, "png");
+    assert.equal((await sharp(converted.buffer).metadata()).width, 500);
+  } finally { await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+});
+
 test("TAPD 子窗口只接受自身主框架请求并清理 IPC", async () => {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ngr-tapd-integration-"));
   const previousE2eRoot = process.env.NGR_E2E_USER_DATA;
@@ -540,6 +594,7 @@ test("TAPD 子窗口只接受自身主框架请求并清理 IPC", async () => {
     clipboard: { write() {}, writeText() {} },
     dialog: {
       async showMessageBox() { return { response: 1 }; },
+      async showSaveDialog() { return { canceled: false, filePath: path.join(temporaryRoot, "带图月报.xlsx") }; },
     },
     ipcMain,
     shell: {},
@@ -565,6 +620,25 @@ test("TAPD 子窗口只接受自身主框架请求并清理 IPC", async () => {
     assert.equal(cleared.capture, null);
     assert.deepEqual(cleared.history, []);
     assert.deepEqual(cleared.exports, []);
+    service.store.close();
+    const reportState = capturedState([capturedItem()]);
+    service.store = {
+      load: () => reportState,
+      recordExport: (filePath, kind, draft) => reportState.exports.push({ path: filePath, kind, draft, at: "2026-10-18" }),
+      close() {},
+    };
+    const exportRequest = { kind: "xlsx", period: { start: "2026-10-12", end: "2026-10-18" }, draft: false, includeBugImages: true };
+    await assert.rejects(() => handlers.get("tapd:export")(trustedEvent, exportRequest), /没有已提取的 Bug 图片/);
+    const mediaRoot = path.join(temporaryRoot, "TAPD-Bug媒体--2026-10-12至2026-10-18");
+    const ticketFolder = path.join(mediaRoot, "164433540-示例问题");
+    await mkdir(ticketFolder, { recursive: true });
+    await sharp({ create: { width: 900, height: 600, channels: 3, background: "blue" } }).png()
+      .toFile(path.join(ticketFolder, "01-描述-截图.png"));
+    reportState.exports.push({ path: mediaRoot, kind: "bug-media", draft: false, at: "2026-10-18" });
+    const exported = await handlers.get("tapd:export")(trustedEvent, exportRequest);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(exported);
+    assert.equal(workbook.getWorksheet("Bug图片附件").getImages().length, 1);
     await assert.rejects(
       () => handlers.get("tapd:load")({ sender: child.webContents, senderFrame: { routingId: 8, url: child.webContents.mainFrame.url } }),
       /不受信任/,

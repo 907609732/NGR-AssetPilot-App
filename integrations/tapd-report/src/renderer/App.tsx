@@ -84,6 +84,7 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [draft, setDraft] = useState(false);
+  const [includeBugImages, setIncludeBugImages] = useState(false);
   const [savedPath, setSavedPath] = useState("");
   const [openBugId, setOpenBugId] = useState("");
   const [mediaGroups, setMediaGroups] = useState<BugMediaGroup[]>([]);
@@ -233,18 +234,22 @@ export default function App() {
     }
   }
   async function output(kind: ExportKind) {
-    await run(async () => {
-      const path = await window.tapd.export({
-        kind,
-        period,
-        draft: kind === "csv" ? !state.capture?.complete || !covered : draft,
+    setSaving(true);
+    try {
+      await run(async () => {
+        const path = await window.tapd.export({
+          kind,
+          period,
+          draft: kind === "csv" ? !state.capture?.complete || !covered : draft,
+          includeBugImages: kind === "xlsx" && includeBugImages,
+        });
+        if (path) {
+          setSavedPath(path);
+          setState(await window.tapd.load());
+          setNotice(kind === "xlsx" && includeBugImages ? "月报已保存，含 Bug 图片附件" : "报表已保存");
+        }
       });
-      if (path) {
-        setSavedPath(path);
-        setState(await window.tapd.load());
-        setNotice("报表已保存");
-      }
-    });
+    } finally { setSaving(false); }
   }
   async function clearAllData() {
     setNotice("");
@@ -260,6 +265,7 @@ export default function App() {
     setWeek(currentWeek);
     setCustom(currentWeek);
     setDraft(false);
+    setIncludeBugImages(false);
     setProgress(null);
     setConfirmOpen(true);
     setShowAllLevels(false);
@@ -550,6 +556,15 @@ export default function App() {
           >
             下载月报 Excel
           </button>
+          <label className="checkline report-image-option" title="勾选后把当前报告范围内已提取的 Bug 图片放进 Excel；视频仍在 Bug 媒体页查看">
+            <input
+              type="checkbox"
+              checked={includeBugImages}
+              disabled={busy || saving}
+              onChange={(e) => setIncludeBugImages(e.target.checked)}
+            />
+            月报附带 Bug 图片
+          </label>
           <ActionMenu label="更多导出">
             <button
               disabled={exportDisabled}

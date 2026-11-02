@@ -215,6 +215,7 @@ export class TapdReportWindowService {
 
   async #export(input) {
     if (!input || !["xlsx", "txt", "md", "csv"].includes(input.kind)) throw new Error("不支持的格式");
+    if (input.includeBugImages && input.kind !== "xlsx") throw new Error("只有月报 Excel 支持附带 Bug 图片");
     const { runtime, store } = await this.#ensureReady();
     const state = store.load();
     const request = input.kind === "csv"
@@ -222,6 +223,16 @@ export class TapdReportWindowService {
       : input;
     if (request.kind !== "csv" && !request.draft && runtime.exportProblems(state, request.period).length) {
       throw new Error("仍有待确认项，请先完成整理或导出草稿");
+    }
+    let images = [];
+    if (request.includeBugImages) {
+      const groups = await this.mediaLibrary.list(state, request.period);
+      const selected = runtime.selectReportBugImages(state, request.period, groups);
+      if (!selected.length) throw new Error("当前报告范围没有已提取的 Bug 图片，请先点击“提取 Bug 图片和视频”");
+      images = await Promise.all(selected.map(async ({ mediaId, ...image }) => {
+        const file = await this.mediaLibrary.resolve(state, { period: request.period, bugId: image.bugId, mediaId });
+        return { ...image, absolutePath: file.absolutePath, mimeType: file.mimeType };
+      }));
     }
     const result = await this.dialog.showSaveDialog(this.window, {
       title: "保存报表",
@@ -233,7 +244,7 @@ export class TapdReportWindowService {
       ? result.filePath
       : `${result.filePath}.${request.kind}`;
     const outputPath = runtime.unusedPath(filename);
-    await runtime.writeExport(outputPath, request.kind, state, request.period, request.draft, this.templatePath);
+    await runtime.writeExport(outputPath, request.kind, state, request.period, request.draft, this.templatePath, images);
     store.recordExport(outputPath, request.kind, request.draft);
     return outputPath;
   }

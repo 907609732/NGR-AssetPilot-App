@@ -166,6 +166,11 @@ test("Electron development app boots with the Dev identity and an isolated rende
     assert.equal(await extractBugImages.isDisabled(), true);
     assert.match(await extractBugImages.getAttribute("title"), /先抓取所选日期/);
     assert.equal(await tapdWindow.getByRole("button", { name: "下载月报 Excel" }).isVisible(), true);
+    const includeBugImages = tapdWindow.getByRole("checkbox", { name: "月报附带 Bug 图片" });
+    assert.equal(await includeBugImages.isVisible(), true);
+    assert.equal(await includeBugImages.isChecked(), false);
+    await includeBugImages.check();
+    assert.equal(await includeBugImages.isChecked(), true);
     assert.equal(await tapdWindow.getByRole("button", { name: "清除所有数据" }).isVisible(), true);
     await tapdWindow.screenshot({ path: path.join(projectRoot, ".tmp", "tapd-report-integration.png"), fullPage: true });
     await tapdWindow.close();
