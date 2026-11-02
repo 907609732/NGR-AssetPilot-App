@@ -313,6 +313,8 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
       .filter(Boolean)
       .reverse();
   const unique = (values: string[]) => [...new Set(values.map(absolute).filter(Boolean))];
+  const imageLink = (value: string) =>
+    /(?:attach|download|file|capture)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg)(?:$|[?#])/i.test(value) ? value : "";
   const attachmentName = (element: Element | null) => {
     for (const selector of [".attachment-list__item-wrapper", ".attachment-item"]) {
       const label = element?.closest(selector)?.querySelector(".attachment-list__filename");
@@ -326,13 +328,10 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
     const img = image as HTMLImageElement;
     const link = img.closest("a[href]") as HTMLAnchorElement | null;
     const linkHref = link?.getAttribute("href") ?? "";
-    const originalLink = /(?:attach|download|file)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg|mp4|webm|mov|m4v|m3u8|mpd)(?:$|[?#])/i.test(
-      linkHref,
-    )
-      ? [linkHref]
-      : [];
     const urls = unique([
-      ...originalLink,
+      imageLink(img.getAttribute("href") ?? ""),
+      img.getAttribute("original_src") ?? "",
+      imageLink(linkHref),
       img.getAttribute("data-original") ?? "",
       img.getAttribute("data-origin") ?? "",
       img.getAttribute("data-src") ?? "",
@@ -439,7 +438,9 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
       const link = img.closest("a[href]");
       const href = link?.getAttribute("href") ?? "";
       const urls = unique([
-        /(?:attach|download|file|capture)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg)(?:$|[?#])/i.test(href) ? href : "",
+        imageLink(img.getAttribute("href") ?? ""),
+        img.getAttribute("original_src") ?? "",
+        imageLink(href),
         img.getAttribute("data-original") ?? "", img.getAttribute("data-origin") ?? "",
         img.getAttribute("data-src") ?? "", img.getAttribute("src") ?? "",
       ]);

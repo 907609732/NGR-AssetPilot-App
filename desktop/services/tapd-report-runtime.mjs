@@ -1367,6 +1367,7 @@ function readBugImagesDOM() {
   };
   const srcset = (value) => (value ?? "").split(",").map((part) => part.trim().split(/\s+/)[0]).filter(Boolean).reverse();
   const unique = (values) => [...new Set(values.map(absolute).filter(Boolean))];
+  const imageLink = (value) => /(?:attach|download|file|capture)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg)(?:$|[?#])/i.test(value) ? value : "";
   const attachmentName = (element) => {
     for (const selector of [".attachment-list__item-wrapper", ".attachment-item"]) {
       const label = element?.closest(selector)?.querySelector(".attachment-list__filename");
@@ -1379,11 +1380,10 @@ function readBugImagesDOM() {
     const img = image;
     const link = img.closest("a[href]");
     const linkHref = link?.getAttribute("href") ?? "";
-    const originalLink = /(?:attach|download|file)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg|mp4|webm|mov|m4v|m3u8|mpd)(?:$|[?#])/i.test(
-      linkHref
-    ) ? [linkHref] : [];
     const urls = unique([
-      ...originalLink,
+      imageLink(img.getAttribute("href") ?? ""),
+      img.getAttribute("original_src") ?? "",
+      imageLink(linkHref),
       img.getAttribute("data-original") ?? "",
       img.getAttribute("data-origin") ?? "",
       img.getAttribute("data-src") ?? "",
@@ -1488,7 +1488,9 @@ function readBugImagesDOM() {
       const link = img.closest("a[href]");
       const href = link?.getAttribute("href") ?? "";
       const urls = unique([
-        /(?:attach|download|file|capture)|\.(?:png|jpe?g|gif|webp|bmp|tiff?|avif|svg)(?:$|[?#])/i.test(href) ? href : "",
+        imageLink(img.getAttribute("href") ?? ""),
+        img.getAttribute("original_src") ?? "",
+        imageLink(href),
         img.getAttribute("data-original") ?? "",
         img.getAttribute("data-origin") ?? "",
         img.getAttribute("data-src") ?? "",

@@ -72,12 +72,24 @@ test("Electron Bug 媒体：旧目录、搜索、原图复制、视频播放拖�
     await report.waitForFunction(() => Boolean(window.tapd?.listBugMedia));
     await report.evaluate(() => {
       const host = document.createElement("richtext-preview");
-      host.setAttribute("value", '<video controls src="https://tapd.tencent.com/20416981/attachments/preview_attachments/11/bug_description" poster="https://tapd.tencent.com/poster/11"><source src="https://tapd.tencent.com/20416981/attachments/preview_attachments/11/bug_description"></video><video src="https://tapd.tencent.com/20416981/attachments/preview_attachments/22/bug_description"></video>');
+      host.setAttribute("value", '<img class="compress gallery" href="https://tapd.tencent.com/tfl/captures/rich-original.png" original_src="https://tapd.tencent.com/tfl/captures/rich-original.png" src="https://tapd.tencent.com/compress/compress_img/1400/rich-original.png"><video controls src="https://tapd.tencent.com/20416981/attachments/preview_attachments/11/bug_description" poster="https://tapd.tencent.com/poster/11"><source src="https://tapd.tencent.com/20416981/attachments/preview_attachments/11/bug_description"></video><video src="https://tapd.tencent.com/20416981/attachments/preview_attachments/22/bug_description"></video>');
       host.attachShadow({ mode: "open" });
       document.body.append(host);
+      const image = document.createElement("img");
+      image.className = "description compress gallery";
+      image.setAttribute("href", "https://tapd.tencent.com/tfl/captures/dom-original.png");
+      image.setAttribute("original_src", "https://tapd.tencent.com/tfl/captures/dom-original.png");
+      image.src = "https://tapd.tencent.com/compress/compress_img/1400/dom-original.png";
+      document.body.append(image);
     });
     const embedded = await report.evaluate(readBugImagesDOM);
     await report.locator("richtext-preview").evaluate((host) => host.remove());
+    await report.locator("img.description.compress.gallery").evaluate((image) => image.remove());
+    for (const name of ["rich-original.png", "dom-original.png"]) {
+      const original = `https://tapd.tencent.com/tfl/captures/${name}`;
+      const record = embedded.find((entry) => entry.urls.includes(original));
+      assert.equal(record?.urls[0], original, `TAPD ${name} must prefer the original URL over compress_img`);
+    }
     const embeddedVideos = normalizeBugImageCandidates(embedded, "https://tapd.tencent.com/tapd_fe/20416981/bug/detail/1")
       .filter((item) => item.mediaType === "video");
     assert.equal(embeddedVideos.length, 2, "unloaded richtext shadow content must yield both original videos");
