@@ -92,6 +92,13 @@ export default function App() {
   const [mediaError, setMediaError] = useState("");
   const [mediaRefresh, setMediaRefresh] = useState(0);
   const exportsKey = JSON.stringify(state.exports);
+  const capturedAt = state.capture?.capturedAt;
+  const captureTime = capturedAt && Number.isFinite(Date.parse(capturedAt))
+    ? new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      }).format(new Date(capturedAt))
+    : capturedAt ? "时间未知" : "尚未抓取";
   const period = useMemo(
     () =>
       mode === "month" ? monthPeriod(month) : mode === "week" ? week : custom,
@@ -472,6 +479,10 @@ export default function App() {
               </button>
             </ActionMenu>
         </div>
+        <p className="capture-snapshot">
+          上次抓取：{captureTime}
+          {state.capture && <span>（北京时间；重新抓取可更新修复分支的等级识别）</span>}
+        </p>
         {invalidPeriod && (
           <p className="warning">请选择有效日期，单次最多 370 天</p>
         )}
@@ -891,7 +902,7 @@ export default function App() {
         )}
       </div>
       <footer>
-        <span>v1.3.0</span>
+        <span>TAPD 报表 · 内置模块</span>
       </footer>
     </main>
   );

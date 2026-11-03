@@ -228,10 +228,24 @@ export class TapdCollector {
             const field = detailPage.locator(".entity-detail-right-col").filter({
               has: detailPage.locator(".entity-detail-right-col__key").getByText("修复分支", { exact: true }),
             }).first().locator(".entity-detail-right-col__value");
+            const deadline = Date.now() + 12000;
             await field.waitFor({ state: "attached", timeout: 12000 });
-            const value = field.locator("[field]").first();
-            item.fixBranch = ((await value.count()) ? await value.getAttribute("value") : "")?.trim()
-              || (await field.innerText()).trim();
+            // TAPD mounts the field before its asynchronous value arrives.
+            // Keep the wait bounded and allow cancel to stop before saving a late value.
+            while (!this.stopped && Date.now() < deadline) {
+              const value = field.locator("[field]").first();
+              const hasValue = (await value.count()) > 0;
+              if (this.stopped || Date.now() >= deadline) break;
+              let branch = (hasValue ? await value.getAttribute("value", { timeout: Math.max(1, deadline - Date.now()) }) : "")?.trim() || "";
+              if (this.stopped || Date.now() >= deadline) break;
+              if (!branch) branch = (await field.innerText({ timeout: Math.max(1, deadline - Date.now()) })).trim();
+              if (this.stopped || Date.now() >= deadline) break;
+              if (branch && !/^(?:加载中|正在加载|loading)[.\s…]*$/i.test(branch)) {
+                item.fixBranch = branch;
+                break;
+              }
+              await detailPage.waitForTimeout(100);
+            }
           } catch {
             // If the detail field is unavailable, the S level remains editable by hand.
           }

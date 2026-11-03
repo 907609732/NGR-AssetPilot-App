@@ -94,6 +94,91 @@ test("Bug 详情页无法打开时保留采集结果供人工确认等级", asyn
   assert.match(progress.at(-1).message, /0\/1；其余请人工选择/);
 });
 
+test("修复分支字段先挂载后异步填值时仍能补出 S 等级", { timeout: 20_000 }, async () => {
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  try {
+    const context = await browser.newContext();
+    await context.route("https://tapd.tencent.com/**", (route) => route.fulfill({
+      contentType: "text/html; charset=utf-8", body: `
+        <div class="entity-detail-right-col">
+          <div class="entity-detail-right-col__key">修复分支</div>
+          <div class="entity-detail-right-col__value"><span field="branch" value=""></span></div>
+        </div>
+        <script>setTimeout(() => { const field = document.querySelector('[field]'); field.setAttribute('value', 'Trunk_S2'); field.textContent = 'Trunk_S2'; }, 500);</script>`,
+    }));
+    const item = capturedItem({ title: "【运营活动】异步修复分支" });
+    const state = capturedState([item]);
+    const collector = new reportRuntime.TapdCollector("unused-test-profile", () => {});
+    collector.context = context;
+    await collector.enrichFixBranches(state.capture);
+    assert.equal(item.fixBranch, "Trunk_S2");
+    assert.equal(buildReport(state, state.capture.scope.period).items[0].level, "S2");
+  } finally { await browser.close(); }
+});
+
+test("修复分支显示加载占位时继续等待，取消后不补写等级且保留用户原页面", { timeout: 20_000 }, async () => {
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  try {
+    const context = await browser.newContext();
+    await context.route("https://tapd.tencent.com/**", (route) => route.fulfill({
+      contentType: "text/html; charset=utf-8", body: `
+        <div class="entity-detail-right-col">
+          <div class="entity-detail-right-col__key">修复分支</div>
+          <div class="entity-detail-right-col__value"><span field="branch">加载中…</span></div>
+        </div>
+        <script>setTimeout(() => { const field = document.querySelector('[field]'); field.setAttribute('value', 'Trunk_S3'); field.textContent = 'Trunk_S3'; }, 500);</script>`,
+    }));
+    const collector = new reportRuntime.TapdCollector("unused-test-profile", () => {});
+    collector.context = context;
+    const first = capturedItem({ title: "【运营活动】加载占位" });
+    await collector.enrichFixBranches(capturedState([first]).capture);
+    assert.equal(first.fixBranch, "Trunk_S3");
+
+    const userPage = await context.newPage();
+    const second = capturedItem({ title: "【运营活动】取消异步识别" });
+    const opened = context.waitForEvent("page");
+    const pending = collector.enrichFixBranches(capturedState([second]).capture);
+    const detail = await opened;
+    await detail.locator("[field]").waitFor({ state: "attached" });
+    collector.cancel();
+    await pending;
+    assert.equal(second.fixBranch, undefined);
+    assert.equal(detail.isClosed(), true);
+    assert.equal(userPage.isClosed(), false);
+  } finally { await browser.close(); }
+});
+
+test("在读取修复分支属性或文本的异步边界取消后不会补写等级", async () => {
+  for (const cancelAt of ["attribute", "text"]) {
+    const collector = new reportRuntime.TapdCollector("unused-test-profile", () => {});
+    let closed = false;
+    let readStarted = false;
+    const field = {
+      async waitFor() {},
+      locator: () => ({ first: () => ({
+        async count() { return 1; },
+        async getAttribute() {
+          readStarted = true;
+          if (cancelAt === "attribute") { collector.cancel(); return "Trunk_S2"; }
+          return "";
+        },
+      }) }),
+      async innerText() { collector.cancel(); return "Trunk_S2"; },
+    };
+    collector.context = { async newPage() { return {
+      async goto() {},
+      locator: () => ({ getByText: () => ({}), filter: () => ({ first: () => ({ locator: () => field }) }) }),
+      async waitForTimeout() {},
+      async close() { closed = true; },
+    }; } };
+    const item = capturedItem({ title: "【运营活动】异步边界取消" });
+    await collector.enrichFixBranches(capturedState([item]).capture);
+    assert.equal(readStarted, true);
+    assert.equal(item.fixBranch, undefined, cancelAt);
+    assert.equal(closed, true);
+  }
+});
+
 test("TAPD 月报集成产物和模板随主软件提供", async () => {
   const [html, renderer, styles, runtime, preload, template] = await Promise.all([
     readFile(path.join(projectRoot, "app/tapd-report/index.html")),

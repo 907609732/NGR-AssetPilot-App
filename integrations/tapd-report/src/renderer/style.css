@@ -180,6 +180,11 @@ h1 {
 .content {
   padding-top: 0;
 }
+.capture-snapshot {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
 .period-toolbar,
 .period-left,
 .capture-actions {

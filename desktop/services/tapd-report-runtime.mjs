@@ -2204,9 +2204,22 @@ var TapdCollector = class {
             const field = detailPage.locator(".entity-detail-right-col").filter({
               has: detailPage.locator(".entity-detail-right-col__key").getByText("\u4FEE\u590D\u5206\u652F", { exact: true })
             }).first().locator(".entity-detail-right-col__value");
+            const deadline = Date.now() + 12e3;
             await field.waitFor({ state: "attached", timeout: 12e3 });
-            const value = field.locator("[field]").first();
-            item.fixBranch = (await value.count() ? await value.getAttribute("value") : "")?.trim() || (await field.innerText()).trim();
+            while (!this.stopped && Date.now() < deadline) {
+              const value = field.locator("[field]").first();
+              const hasValue = await value.count() > 0;
+              if (this.stopped || Date.now() >= deadline) break;
+              let branch = (hasValue ? await value.getAttribute("value", { timeout: Math.max(1, deadline - Date.now()) }) : "")?.trim() || "";
+              if (this.stopped || Date.now() >= deadline) break;
+              if (!branch) branch = (await field.innerText({ timeout: Math.max(1, deadline - Date.now()) })).trim();
+              if (this.stopped || Date.now() >= deadline) break;
+              if (branch && !/^(?:加载中|正在加载|loading)[.\s…]*$/i.test(branch)) {
+                item.fixBranch = branch;
+                break;
+              }
+              await detailPage.waitForTimeout(100);
+            }
           } catch {
           }
           completed++;
