@@ -1,0 +1,2 @@
+# cmd.exe requires Windows line endings for reliable UTF-8 batch parsing.
+*.cmd text eol=crlf

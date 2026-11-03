@@ -1,6 +1,6 @@
 # NGR AssetPilot｜功能与使用
 
-NGR AssetPilot（AI资源领航）是面向游戏 UI 资源整理的 Windows 桌面工具。正式产品是 Electron 应用；根目录的 `点击启动服务.html` 仅供浏览器兼容使用，桌面专属功能以安装版为准。当前工程版本见 `package.json`。系统边界、模块位置和数据流见 [架构文档](docs/ARCHITECTURE.md)。
+NGR AssetPilot（AI资源领航）是面向游戏 UI 资源整理的 Windows 桌面工具。正式产品是 Electron 应用；根目录的 `点击启动服务.html` 仅供浏览器兼容使用，桌面专属功能需通过 Electron 源码开发版或安装版使用。当前工程版本见 `package.json`。系统边界、模块位置和数据流见 [架构文档](docs/ARCHITECTURE.md)。
 
 作者：五成（月财） · [项目仓库](https://github.com/907609732/NGR-AssetPilot-App) · [官网](https://ngr.lttlt.top)
 
@@ -35,16 +35,34 @@ NGR AssetPilot（AI资源领航）是面向游戏 UI 资源整理的 Windows 桌
 
 ## 开发、测试和构建
 
+### 日常修改：直接打开开发版，不打包
+
+双击根目录的 **`AI资源领航 开发版（打开或重启）.cmd`**，或同名桌面快捷方式，直接运行此工作树的最新源码。也可在项目目录运行 `npm.cmd start`。
+
+- 每次修改后再次双击：先准备最新源码，再打开开发版；已有同目录开发版（包括缩在托盘中的窗口）会先走原有保存和服务清理流程，再重启。点击前请完成当前采集、导出等操作。
+- TAPD 的 TypeScript/React 会先用现有 esbuild 编译为本地运行文件，这是源码准备，不生成安装包；编译失败不会请求重启旧实例。
+- 开发版仍显示 `DEV 开发版`，使用自己的资料目录；已安装正式版、正式版数据和自动更新流程不受影响。首次使用可能需要在开发版单独配置账号和模型。
+- 另一个工作树的开发版正在运行时，会提示两个源码目录；请从托盘退出旧开发版后再开，避免验证到旧代码。
+- 没有后台自动刷新或自动重启；只在明确点击入口时打开或重启。原有 `npm.cmd run dev` 继续可用，重复执行时保留原来的唤醒行为。
+
 要求 Windows、Node.js `>=22.13.0`。使用项目锁文件安装依赖：
 
 ```powershell
 npm.cmd ci
 npm.cmd run env:check
-npm.cmd run dev
+npm.cmd start
 npm.cmd test
 ```
 
-`npm.cmd run dev:test` 启动隔离的测试版。三种身份分别为正式版 `NGR AssetPilot`、开发版 `NGR AssetPilot Dev` 和测试版 `NGR AssetPilot Test`，各有独立应用 ID、用户资料和安装产物目录。构建命令：
+依赖只在首次准备环境、锁文件变化或依赖缺失时安装，不需要每次修改都执行 `npm.cmd ci`。启动入口不会自动联网安装或打包。
+
+`npm.cmd run dev:test` 启动隔离的测试版。三种身份分别为正式版 `NGR AssetPilot`、开发版 `NGR AssetPilot Dev` 和测试版 `NGR AssetPilot Test`，各有独立应用 ID、用户资料和安装产物目录。
+
+### 发布新版：构建并验证安装包
+
+日常流程：修改源码 → 双击开发入口验证 → 提交/推送 → GitHub 日常 CI 检查。只有准备发布新版时，才手动运行 GitHub 的 **Desktop Production Release** 工作流，下载构建产物并做本地安装、功能及更新验收；手动工作流不会公开发布。版本 tag 会触发公开 Release，应在明确发布时使用。
+
+需要本地打包时仍使用原有命令：
 
 ```powershell
 npm.cmd run build:prod

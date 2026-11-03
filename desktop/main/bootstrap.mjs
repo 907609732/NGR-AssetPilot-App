@@ -25,6 +25,7 @@ import { AutoStartService } from "../services/auto-start.mjs";
 import { DailyReportExportService } from "../services/daily-report-export.mjs";
 import { TapdReportWindowService } from "../services/tapd-report-window.mjs";
 import { QuitCoordinator } from "./lifecycle.mjs";
+import { createDevelopmentRestartHandler } from "./development-restart.mjs";
 import { TrayController } from "./tray-controller.mjs";
 import { installAppProtocol, registerAppScheme } from "./protocol.mjs";
 import { createSecureWindowOptions, hardenSession, hardenWindow } from "./security.mjs";
@@ -135,7 +136,11 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   }
   writeStartupLog(app, "bootstrap-start", { edition, migratedLocalSearchFrom, migrationError });
 
-  const hasSingleInstanceLock = app.requestSingleInstanceLock();
+  const sourceRoot = path.resolve(moduleDirectory, "../..");
+  const developmentRestartData = !app.isPackaged && edition === "dev"
+    && process.argv.includes("--ngr-restart-development")
+    ? { developmentRestartRoot: sourceRoot } : {};
+  const hasSingleInstanceLock = app.requestSingleInstanceLock(developmentRestartData);
   writeStartupLog(app, "single-instance", { acquired: hasSingleInstanceLock });
   if (!hasSingleInstanceLock) {
     app.quit();
@@ -144,7 +149,16 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
 
   let mainWindow = null;
   let trayController = null;
-  app.on("second-instance", () => {
+  let handleDevelopmentRestart = null;
+  let queuedDevelopmentRestart = null;
+  app.on("second-instance", (_event, _argv, _cwd, data) => {
+    if (!app.isPackaged && edition === "dev" && typeof data?.developmentRestartRoot === "string") {
+      if (!handleDevelopmentRestart) {
+        queuedDevelopmentRestart = data;
+        return;
+      }
+      if (handleDevelopmentRestart(data)) return;
+    }
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (trayController?.showMainWindow()) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -473,6 +487,19 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     void finderExtension.dispose();
     lifecycle.dispose();
   });
+  handleDevelopmentRestart = createDevelopmentRestartHandler({
+    app, edition, sourceRoot,
+    showConflict: ({ runningRoot, requestedRoot }) => {
+      dialog.showMessageBoxSync({
+        type: "warning",
+        title: "开发版源码目录不同",
+        message: "另一个源码目录的开发版正在运行，本次未切换代码。",
+        detail: `正在运行：${runningRoot}\n本次请求：${requestedRoot}\n\n请先从托盘退出开发版，再打开所需目录的开发入口。`,
+        buttons: ["知道了"], noLink: true,
+      });
+    },
+  });
+  if (queuedDevelopmentRestart) handleDevelopmentRestart(queuedDevelopmentRestart);
 }
 
 export function reportStartupFailure(error) {

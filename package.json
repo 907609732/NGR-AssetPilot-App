@@ -11,6 +11,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "start": "npm run dev -- --ngr-restart-development",
     "build:tapd-integration": "node scripts/build-tapd-integration.mjs",
     "predev": "npm run build:tapd-integration",
     "dev": "electron .",
