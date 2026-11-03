@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { _electron as electron } from "playwright";
+import { loadManagedProviderConfig } from "../desktop/services/managed-provider-config.mjs";
 
 test("设置页可隔离测试开始命名和切图检测并显示运行状态", { timeout: 90_000 }, async () => {
   const root = path.resolve(import.meta.dirname, "..");
+  const cloudConfigured = Boolean(await loadManagedProviderConfig(path.join(root, "build/generated/managed-provider-config.json")));
   fs.mkdirSync(path.join(root, ".tmp"), { recursive: true });
   const runRoot = fs.mkdtempSync(path.join(root, ".tmp", "feature-tests-"));
   const evidence = path.join(root, "artifacts", "feature-tests");
@@ -20,12 +22,12 @@ test("设置页可隔离测试开始命名和切图检测并显示运行状态",
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.waitForFunction(() => document.querySelector("#generalSettingsView .settings-tabs"));
-    await page.locator("#namingModeSelect").selectOption("translate:cfc", { force: true });
+    await page.locator("#namingModeSelect").selectOption(cloudConfigured ? "translate:cfc" : "translate:local", { force: true });
     await page.locator("#rulesEntry").click();
     await page.locator('#generalSettingsView [data-settings-view="featureTest"]').click();
     await page.waitForFunction(() => document.getElementById("featureTestView").classList.contains("active"));
     assert.match(await page.locator("#featureRuntimeEnvironment").innerText(), /Electron 桌面版运行中/);
-    assert.match(await page.locator("#featureRuntimeNaming").innerText(), /NGR 云翻译/);
+    assert.match(await page.locator("#featureRuntimeNaming").innerText(), cloudConfigured ? /NGR 云翻译/ : /内置离线 AI 翻译/);
     const before = await page.evaluate(() => ({ naming: assets.length, detection: detectionAssets.length }));
     await page.locator("#runAllFeatureTests").click();
     await page.waitForFunction(() => document.getElementById("featureTestSummary").textContent.includes("全部通过"));

@@ -4,9 +4,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { _electron as electron } from "playwright";
 import AdmZip from "adm-zip";
+import { loadManagedProviderConfig } from "../desktop/services/managed-provider-config.mjs";
 
 test("下载主按钮直接导出、设置记忆与 EXE 图标显示", { timeout: 120_000 }, async () => {
   const root = path.resolve(import.meta.dirname, "..");
+  const cloudConfigured = Boolean(await loadManagedProviderConfig(path.join(root, "build/generated/managed-provider-config.json")));
   fs.mkdirSync(path.join(root, ".tmp"), { recursive: true });
   const dir = fs.mkdtempSync(path.join(root, ".tmp", "download-icons-"));
   const userData = path.join(dir, "UserData");
@@ -32,9 +34,9 @@ test("下载主按钮直接导出、设置记忆与 EXE 图标显示", { timeout
     }
     await page.screenshot({ path: path.join(evidence, "application-icons.png") });
     await page.locator("#workEntry").click();
-    await page.locator("#namingModeSelect").selectOption("translate:cfc", { force: true });
+    await page.locator("#namingModeSelect").selectOption(cloudConfigured ? "translate:cfc" : "translate:local", { force: true });
     assert.equal(await page.locator(".naming-mode-field").count(), 0);
-    assert.match(await page.locator("#runSelectedNaming").innerText(), /NGR 云翻译/);
+    assert.match(await page.locator("#runSelectedNaming").innerText(), cloudConfigured ? /NGR 云翻译/ : /内置离线 AI 翻译/);
     await page.locator(".naming-service-settings-action").click();
     assert.equal(await page.locator("#namingModeMenu").getAttribute("open"), "");
     await page.locator("#namingModeSelect").selectOption("translate:local");
