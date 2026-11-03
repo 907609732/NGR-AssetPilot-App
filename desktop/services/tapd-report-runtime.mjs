@@ -1342,6 +1342,7 @@ function selectBugImageTickets(state, period) {
 }
 function readBugImagesDOM() {
   const records = [];
+  const globalHelperSelector = ".ai-helper-guide-wrapper,.ai-helper-btn__popover,.ai-helper-button";
   const absolute = (raw) => {
     if (!raw) return "";
     try {
@@ -1382,6 +1383,7 @@ function readBugImagesDOM() {
   };
   document.querySelectorAll("img").forEach((image) => {
     const img = image;
+    if (img.closest(globalHelperSelector)) return;
     const link = img.closest("a[href]");
     const linkHref = link?.getAttribute("href") ?? "";
     const urls = unique([
@@ -1414,6 +1416,7 @@ function readBugImagesDOM() {
   });
   document.querySelectorAll("video").forEach((element) => {
     const video = element;
+    if (video.closest(globalHelperSelector)) return;
     const rect = video.getBoundingClientRect();
     const urls = unique([
       video.currentSrc,
@@ -1436,6 +1439,7 @@ function readBugImagesDOM() {
   });
   document.querySelectorAll("a[href]").forEach((element) => {
     const link = element;
+    if (link.closest(globalHelperSelector)) return;
     if (link.querySelector("img")) return;
     const href = link.getAttribute("href") ?? "";
     const name = link.getAttribute("download") || attachmentName(link) || link.getAttribute("title") || link.textContent?.trim() || "\u56FE\u7247\u9644\u4EF6";
@@ -1462,6 +1466,7 @@ function readBugImagesDOM() {
     });
   });
   document.querySelectorAll("richtext-preview[value]").forEach((host) => {
+    if (host.closest(globalHelperSelector)) return;
     const markup = host.getAttribute("value");
     if (!markup || typeof DOMParser === "undefined") return;
     const content = new DOMParser().parseFromString(markup, "text/html");
@@ -1538,6 +1543,7 @@ function normalizeBugImageCandidates(records, pageUrl) {
   for (const record of records) {
     const own = record.ownHints.toLowerCase();
     const context = `${record.ownHints} ${record.ancestorHints}`.toLowerCase();
+    if (/(?:^|\s)ai-helper-(?:guide-wrapper|btn__popover|button)(?:[\s_-]|$)/i.test(record.ancestorHints)) continue;
     if (nonMediaFilename(record.fileName) || record.urls.some((url) => nonMediaFilename(url, true))) continue;
     if (/avatar|user[-_ ]?logo|user[-_ ]?photo|head[-_ ]?photo|头像/.test(context)) continue;
     const attachment = record.kind === "attachment" || /attach|attachment|download|file-list|file-item|附件|下载/.test(context);
@@ -1829,6 +1835,17 @@ async function extractBugImagesToDirectory(input) {
       checkLogin();
       throw error;
     }
+    checkLogin();
+    try {
+      await targetPage.waitForFunction(() => {
+        const description = document.querySelector(".detail-container-left richtext-preview[value],.bug-detail richtext-preview[value],.detail-container-content richtext-preview[value]");
+        return !description || Boolean(description.getAttribute("value")?.trim());
+      }, void 0, { timeout: 12e3, polling: 100 });
+    } catch (error) {
+      checkLogin();
+      if (!(error instanceof Error) || error.name !== "TimeoutError") throw error;
+    }
+    if (isStopped2()) return [];
     checkLogin();
     const records = await revealAllImageContent(targetPage, isStopped2);
     if (isStopped2()) return [];

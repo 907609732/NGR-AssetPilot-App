@@ -5,6 +5,7 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 import test from "node:test";
 import sharp from "sharp";
+import { chromium } from "playwright-core";
 import {
   extractBugImagesToDirectory,
   normalizeBugImageCandidates,
@@ -227,7 +228,7 @@ test("DOM 视频读取 src/source，不将 poster 当视频，并保留小视频
   const video = {
     tagName: "VIDEO", id: "", className: "description", parentElement: null, currentSrc: "",
     getAttribute: (key) => attributes[key] ?? null,
-    getBoundingClientRect: () => ({ width: 32, height: 32 }), closest: () => ({}),
+    getBoundingClientRect: () => ({ width: 32, height: 32 }), closest: selector => selector.includes("bug-detail") ? {} : null,
     querySelectorAll: (selector) => selector === "source" ? [{ getAttribute: () => "https://8.8.8.8/fallback.webm" }] : [],
   };
   const originals = { document: globalThis.document, location: globalThis.location };
@@ -257,7 +258,7 @@ test("真实 TAPD 空文字附件链接读取同组文件名，压缩包图标�
     tagName: "A", id: "", className: "attachment-preview", parentElement: null, textContent: "",
     getAttribute: (key) => key === "href" ? `https://tapd.tencent.com/preview_attachments/${id}` : null,
     closest: (selector) => selector === ".attachment-list__item-wrapper" ? wrapper(name)
-      : selector.includes("attachment-item") ? { querySelector: () => null } : {},
+      : selector.includes("attachment-item") ? { querySelector: () => null } : selector.includes("bug-detail") ? {} : null,
     querySelector: (selector) => selector === "img" && hasIcon ? {} : null,
     getBoundingClientRect: () => ({ width: 100, height: 60 }),
   });
@@ -268,7 +269,7 @@ test("真实 TAPD 空文字附件链接读取同组文件名，压缩包图标�
     tagName: "IMG", id: "", className: "attachment-icon", parentElement: null,
     currentSrc: "https://tapd.tencent.com/icons/zip.png", alt: "", naturalWidth: 60, naturalHeight: 60,
     getAttribute: () => null, getBoundingClientRect: () => ({ width: 60, height: 60 }),
-    closest: (selector) => selector === "a[href]" ? zipLink : {},
+    closest: (selector) => selector === "a[href]" ? zipLink : selector.includes("bug-detail") ? {} : null,
   };
   try {
     globalThis.location = { href: ticket(1).url };
@@ -295,6 +296,50 @@ test("真实 TAPD 空文字附件链接读取同组文件名，压缩包图标�
     if (originals.document === undefined) delete globalThis.document; else globalThis.document = originals.document;
     if (originals.location === undefined) delete globalThis.location; else globalThis.location = originals.location;
   }
+});
+
+test("TAPD 全局 AI 助手宣传图被排除，同地址在真实正文或附件中仍可提取", () => {
+  const url = "https://fe.tapd.tencent.com/img/enable-use-claude-guide.20e83657.png";
+  // Captured from the live TAPD DOM: the hidden popover has natural image dimensions.
+  const promotion = {
+    kind: "image", urls: [url], fileName: "图片", ownHints: "IMG  ",
+    ancestorHints: "DIV ai-helper-guide-wrapper__main-content DIV ai-helper-guide-wrapper DIV agi-popover__content-text DIV agi-popover__body DIV agi-popover__content DIV el-popover el-popper ai-helper-btn__popover tooltip SPAN agi-popover__reference DIV ai-helper-button",
+    inMain: false, visible: false, width: 1200, height: 706,
+  };
+  const description = { ...promotion, fileName: "业务说明图.png", ownHints: "IMG description",
+    ancestorHints: "DIV description richtext DIV bug-detail", inMain: true };
+  const attachment = { ...promotion, kind: "attachment", fileName: "手动上传的说明图.png",
+    ownHints: "attachment", ancestorHints: "DIV attachment-list DIV bug-detail", inMain: true };
+  assert.deepEqual(normalizeBugImageCandidates([promotion], ticket(1).url), []);
+  for (const bug of [ticket(1), ticket(2)]) {
+    const candidates = normalizeBugImageCandidates([promotion, description, attachment], bug.url);
+    assert.deepEqual(candidates.map(item => [item.source, item.fileName]), [
+      ["描述", "业务说明图.png"], ["附件", "手动上传的说明图.png"],
+    ]);
+    assert.ok(candidates.every(item => item.urls[0] === url));
+  }
+});
+
+test("详情外框已出现但正文异步加载时，不会提前结束为无图片", { timeout: 20_000 }, async (t) => {
+  const root = await temporaryRoot(t);
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  t.after(() => browser.close());
+  const browserContext = await browser.newContext();
+  await browserContext.route("https://tapd.tencent.com/**", route => route.fulfill({
+    contentType: "text/html; charset=utf-8", body: `
+      <div class="bug-detail"><div class="detail-container-left"><div class="detail-container-content" style="min-height:100px">
+        <richtext-preview value=""></richtext-preview>
+      </div></div></div>
+      <script>setTimeout(() => document.querySelector('richtext-preview').setAttribute('value',
+        '<p>业务截图</p><img src="https://8.8.8.8/delayed.png" width="100" height="80">'), 1800);</script>`,
+  }));
+  const page = await browserContext.newPage();
+  const result = await extractBugImagesToDirectory({ context: browserContext, page, tickets: [ticket(1)],
+    outputPath: path.join(root, "delayed-content"), stopped: () => false, progress() {},
+    downloadCandidate: async () => ({ body: png, url: "https://8.8.8.8/delayed.png", format: "png", contentType: "image/png", fileName: "" }),
+  });
+  assert.equal(result.imageCount, 1);
+  assert.equal(result.failedCount, 0);
 });
 
 test("opaque 下载端点保留，主机名不当后缀，响应声明 ZIP/代码附件在读流前跳过且不记失败", async (t) => {
@@ -332,6 +377,7 @@ test("详情读取先等真实内容与加载遮罩，再展开并等待内容�
   const page = {
     goto: async () => { calls.push("goto"); }, url: () => ticket(1).url,
     locator: (selector) => ({ first: () => ({ waitFor: async (options) => { calls.push({ selector, state: options.state }); } }) }),
+    waitForFunction: async () => { calls.push("description-ready"); },
     waitForTimeout: async () => { calls.push("stable-poll"); },
     evaluate: async (fn) => {
       if (fn.name === "readBugImagesDOM") { calls.push("read-media"); return []; }
@@ -351,8 +397,14 @@ test("详情读取先等真实内容与加载遮罩，再展开并等待内容�
   assert.match(waits[1].selector, /loading/);
   assert.equal(waits[1].state, "hidden");
   assert.ok(calls.indexOf(waits[1]) < calls.indexOf("expand"));
+  assert.ok(calls.indexOf(waits[1]) < calls.indexOf("description-ready"));
+  assert.ok(calls.indexOf("description-ready") < calls.indexOf("expand"));
   assert.ok(calls.filter((item) => item === "read-media").length > 1);
   assert.equal(calls.filter((item) => item === "stable-poll").length, 3);
+  page.waitForFunction = async () => { const error = new Error("empty description"); error.name = "TimeoutError"; throw error; };
+  const empty = await extractBugImagesToDirectory({ context: {}, page, tickets: [ticket(1)],
+    outputPath: path.join(root, "empty-description"), stopped: () => false, progress() {} });
+  assert.equal(empty.failedCount, 0, "a legitimately empty description must still allow attachment scanning");
 });
 
 test("详情左栏渐进滚动触发底部视频懒加载，合并保留已卸载的顶部图片并恢复滚动位置", async (t) => {
@@ -388,6 +440,7 @@ test("详情左栏渐进滚动触发底部视频懒加载，合并保留已卸�
     };
     const page = { goto: async () => {}, url: () => ticket(1).url,
       locator: () => ({ first: () => ({ waitFor: async () => {} }) }),
+      waitForFunction: async () => {},
       waitForTimeout: async () => { waited++; }, evaluate: async (fn) => fn(),
     };
     const result = await extractBugImagesToDirectory({ context: {}, page, tickets: [ticket(1)],

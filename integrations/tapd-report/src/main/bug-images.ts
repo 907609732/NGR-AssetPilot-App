@@ -277,6 +277,10 @@ export function selectBugImageTickets(state: LocalState, period: Period) {
 // are returned; ticket text is never copied into the parser output.
 export function readBugImagesDOM(): BugImageDOMRecord[] {
   const records: BugImageDOMRecord[] = [];
+  // Global TAPD helper popovers contain promotional media, not ticket content.
+  // Exclude them before revealAllImageContent folds records by URL, so they
+  // cannot overwrite a legitimate description image with the same address.
+  const globalHelperSelector = ".ai-helper-guide-wrapper,.ai-helper-btn__popover,.ai-helper-button";
   const absolute = (raw: string | null | undefined) => {
     if (!raw) return "";
     try {
@@ -326,6 +330,7 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
 
   document.querySelectorAll("img").forEach((image) => {
     const img = image as HTMLImageElement;
+    if (img.closest(globalHelperSelector)) return;
     const link = img.closest("a[href]") as HTMLAnchorElement | null;
     const linkHref = link?.getAttribute("href") ?? "";
     const urls = unique([
@@ -364,6 +369,7 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
 
   document.querySelectorAll("video").forEach((element) => {
     const video = element as HTMLVideoElement;
+    if (video.closest(globalHelperSelector)) return;
     const rect = video.getBoundingClientRect();
     const urls = unique([
       video.currentSrc,
@@ -380,6 +386,7 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
 
   document.querySelectorAll("a[href]").forEach((element) => {
     const link = element as HTMLAnchorElement;
+    if (link.closest(globalHelperSelector)) return;
     if (link.querySelector("img")) return;
     const href = link.getAttribute("href") ?? "";
     const name =
@@ -415,6 +422,7 @@ export function readBugImagesDOM(): BugImageDOMRecord[] {
   // Its value contains the original media URLs even when videos are not loaded
   // and the component has not mounted all of its shadow children yet.
   document.querySelectorAll("richtext-preview[value]").forEach((host) => {
+    if (host.closest(globalHelperSelector)) return;
     const markup = host.getAttribute("value");
     if (!markup || typeof DOMParser === "undefined") return;
     const content = new DOMParser().parseFromString(markup, "text/html");
@@ -474,6 +482,7 @@ export function normalizeBugImageCandidates(
   for (const record of records) {
     const own = record.ownHints.toLowerCase();
     const context = `${record.ownHints} ${record.ancestorHints}`.toLowerCase();
+    if (/(?:^|\s)ai-helper-(?:guide-wrapper|btn__popover|button)(?:[\s_-]|$)/i.test(record.ancestorHints)) continue;
     // TAPD attachment preview URLs have no suffix; use the visible filename before considering icon URLs.
     if (nonMediaFilename(record.fileName) || record.urls.some((url) => nonMediaFilename(url, true))) continue;
     if (/avatar|user[-_ ]?logo|user[-_ ]?photo|head[-_ ]?photo|头像/.test(context)) continue;
@@ -807,6 +816,20 @@ export async function extractBugImagesToDirectory(input: {
       await targetPage.locator(".bug-detail .el-loading-mask:visible,.bug-detail .el-loading-spinner:visible,.bug-detail [aria-busy='true']:visible,.detail-container-content .el-loading-mask:visible").first()
         .waitFor({ state: "hidden", timeout: 15000 });
     } catch (error) { checkLogin(); throw error; }
+    checkLogin();
+    try {
+      // The outer detail container can mount seconds before TAPD fills the
+      // description and attachment data. Do not treat that empty shell as stable.
+      await targetPage.waitForFunction(() => {
+        const description = document.querySelector(".detail-container-left richtext-preview[value],.bug-detail richtext-preview[value],.detail-container-content richtext-preview[value]");
+        return !description || Boolean(description.getAttribute("value")?.trim());
+      }, undefined, { timeout: 12000, polling: 100 });
+    } catch (error) {
+      checkLogin();
+      // A legitimately empty description may still have attachments to scan.
+      if (!(error instanceof Error) || error.name !== "TimeoutError") throw error;
+    }
+    if (isStopped()) return [];
     checkLogin();
     const records = await revealAllImageContent(targetPage, isStopped);
     if (isStopped()) return [];

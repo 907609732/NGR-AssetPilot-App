@@ -81,10 +81,20 @@ test("Electron Bug 媒体：旧目录、搜索、原图复制、视频播放拖�
       image.setAttribute("original_src", "https://tapd.tencent.com/tfl/captures/dom-original.png");
       image.src = "https://tapd.tencent.com/compress/compress_img/1400/dom-original.png";
       document.body.append(image);
+      const helper = document.createElement("div");
+      helper.className = "ai-helper-guide-wrapper";
+      helper.style.display = "none";
+      // The helper is later in DOM order and shares the business image's URLs.
+      // It must not enter the pre-normalization URL map and overwrite the description.
+      helper.append(image.cloneNode(true));
+      document.body.append(helper);
     });
     const embedded = await report.evaluate(readBugImagesDOM);
     await report.locator("richtext-preview").evaluate((host) => host.remove());
+    await report.locator(".ai-helper-guide-wrapper").evaluate((node) => node.remove());
     await report.locator("img.description.compress.gallery").evaluate((image) => image.remove());
+    assert.equal(embedded.filter(entry => entry.urls[0] === "https://tapd.tencent.com/tfl/captures/dom-original.png").length, 1,
+      "the global helper image must be excluded before URL aggregation");
     for (const name of ["rich-original.png", "dom-original.png"]) {
       const original = `https://tapd.tencent.com/tfl/captures/${name}`;
       const record = embedded.find((entry) => entry.urls.includes(original));
