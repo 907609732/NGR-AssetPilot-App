@@ -41,4 +41,3 @@
 - 真实 npm start 验收：主进程 PID 交接成功、localStorage 测试资料保留；桌面快捷方式实启通过。
 - Windows cmd UTF-8 文件需 CRLF，已真实启动验证并在 .gitattributes 固定。
 - 独立代码评审无 P1/P2 问题；未生成安装包、未安装或公开发布。
-
