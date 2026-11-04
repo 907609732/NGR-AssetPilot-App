@@ -52,14 +52,17 @@ async function hashFile(file, onBytes = () => {}) {
   return hash.digest("hex");
 }
 
-async function walk(root, current = root) {
+async function walk(root, current = root, fileInfo) {
   const result = [];
   for (const entry of await readdir(current, { withFileTypes: true })) {
     const file = path.join(current, entry.name);
     const info = await lstat(file);
     if (info.isSymbolicLink()) throw new Error("扩展目录不允许符号链接或目录联接");
-    if (info.isDirectory()) result.push(...await walk(root, file));
-    else if (info.isFile()) result.push(path.relative(root, file).split(path.sep).join("/"));
+    if (info.isDirectory()) result.push(...await walk(root, file, fileInfo));
+    else if (info.isFile()) {
+      const relative = path.relative(root, file).split(path.sep).join("/");
+      result.push(relative); fileInfo?.set(relative, info);
+    }
     else throw new Error("扩展包含不支持的文件类型");
   }
   return result;
@@ -76,7 +79,7 @@ export async function readFinderExtensionMetadata(root, { manifestHash } = {}) {
   const manifest = JSON.parse(raw.toString("utf8"));
   const files = checkManifest(manifest);
   // Constant-size checks for the trusted container roots, not a payload walk.
-  // Full directory, file, size and hash verification remains mandatory before open.
+  // Payload checks run in the worker before open; polling only reads metadata.
   const containers = ["resources", "resources/worker"];
   if (manifest.files.some(item => item.path.startsWith("resources/media-tools/"))) containers.push("resources/media-tools");
   for (const directory of containers) {
@@ -86,11 +89,33 @@ export async function readFinderExtensionMetadata(root, { manifestHash } = {}) {
   return { entry: { id: FINDER_ID, name: manifest.name, version: manifest.version, root, manifestHash: sha(raw), hostApi: manifest.hostApi }, files };
 }
 
-export async function inspectFinderExtension(root, { manifestHash, verifyHashes = true, onProgress = () => {} } = {}) {
-  onProgress({ phase: "verifying", stage: "检查已安装扩展", indeterminate: true });
+const fingerprint = info => [info.size, info.mtimeMs, info.ctimeMs, info.ino, info.dev];
+
+export async function inspectFinderExtension(root, { manifestHash, verifyHashes = true, cacheFile, onProgress = () => {} } = {}) {
+  onProgress({ phase: "checking", stage: "快速检查已安装文件", indeterminate: true });
   const { entry, files } = await readFinderExtensionMetadata(root, { manifestHash });
-  const actual = await walk(root);
+  const fileInfo = new Map(), actual = await walk(root, root, fileInfo);
   if (actual.length !== files.size + 1 || !actual.includes("extension.json")) throw new Error("扩展文件数量与清单不一致");
+  const stamps = {};
+  for (const relative of actual) {
+    if (relative === "extension.json") continue;
+    const item = files.get(relative.toLowerCase());
+    if (!item || relative !== item.path) throw new Error("扩展包含未登记或名称不一致的文件");
+    const info = fileInfo.get(relative);
+    if (!info.isFile() || info.isSymbolicLink() || info.size !== item.size) throw new Error(`扩展文件校验失败：${relative}`);
+    stamps[relative] = fingerprint(info);
+  }
+  const record = { format: 1, root, manifestHash: entry.manifestHash, stamps };
+  if (verifyHashes === "auto" && cacheFile) {
+    const cached = await (async () => {
+      const info = await lstat(cacheFile);
+      if (!info.isFile() || info.isSymbolicLink() || info.size > 8 * 1024 * 1024) return null;
+      return json(cacheFile);
+    })().catch(() => null);
+    if (cached?.format === 1 && cached.root === root && cached.manifestHash === entry.manifestHash &&
+        cached.stamps && Object.keys(cached.stamps).length === files.size &&
+        Object.entries(stamps).every(([file, stamp]) => JSON.stringify(cached.stamps[file]) === JSON.stringify(stamp))) return entry;
+  }
   const bytesTotal = [...files.values()].reduce((sum, item) => sum + item.size, 0);
   let done = 0, bytesDone = 0;
   for (const relative of actual) {
@@ -100,16 +125,24 @@ export async function inspectFinderExtension(root, { manifestHash, verifyHashes 
     const file = path.join(root, relative);
     const progress = () => onProgress({ phase: "verifying", stage: "校验已安装文件", done, total: files.size, bytesDone, bytesTotal, currentFile: relative, indeterminate: !verifyHashes });
     progress();
-    if ((await lstat(file)).size !== item.size || verifyHashes && await hashFile(file, count => { bytesDone += count; progress(); }) !== item.sha256) throw new Error(`扩展文件校验失败：${relative}`);
+    if (verifyHashes && await hashFile(file, count => { bytesDone += count; progress(); }) !== item.sha256) throw new Error(`扩展文件校验失败：${relative}`);
+    if (JSON.stringify(fingerprint(await lstat(file))) !== JSON.stringify(stamps[relative])) throw new Error(`扩展文件在校验过程中发生变化：${relative}`);
     done++;
     if (!verifyHashes) bytesDone += item.size;
     progress();
+  }
+  if (verifyHashes && cacheFile) {
+    const temporary = `${cacheFile}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, JSON.stringify(record), { flag: "wx" });
+      await rename(temporary, cacheFile);
+    } finally { await rm(temporary, { force: true }); }
   }
   return entry;
 }
 
 // Executes only in a Node worker during imports. It never publishes current.json.
-export async function installFinderArchive({ archivePath, installRoot, staging }, onProgress = () => {}) {
+export async function installFinderArchive({ archivePath, installRoot, staging, cacheFile }, onProgress = () => {}) {
   const archiveStat = await stat(archivePath);
   if (!archiveStat.isFile() || archiveStat.size > MAX_ARCHIVE || archiveStat.size === 0) throw new Error("扩展 ZIP 无效或超过 1 GB 限制");
   onProgress({ phase: "reading", stage: "读取扩展包", currentFile: path.basename(archivePath), bytesTotal: archiveStat.size, indeterminate: true });
@@ -162,7 +195,8 @@ export async function installFinderArchive({ archivePath, installRoot, staging }
   }
   const manifestHash = sha(raw), destinationName = `v${manifest.version}-${manifestHash.slice(0, 16)}`, destination = path.join(installRoot, destinationName);
   const existing = await lstat(destination).catch(failure => { if (failure.code === "ENOENT") return null; throw failure; });
-  if (existing) await inspectFinderExtension(destination, { manifestHash, onProgress });
+  if (existing) await inspectFinderExtension(destination, { manifestHash, cacheFile, onProgress });
   else await rename(staging, destination);
+  if (cacheFile && !existing) await inspectFinderExtension(destination, { manifestHash, cacheFile, onProgress });
   return { entry: { id: FINDER_ID, name: manifest.name, version: manifest.version, root: destination, manifestHash, hostApi: manifest.hostApi }, directory: destinationName, done, total: indexed.size, bytesDone, bytesTotal: totalBytes };
 }

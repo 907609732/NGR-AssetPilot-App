@@ -16,9 +16,11 @@ export class InterfaceFinderExtension {
     Object.assign(this, { appDataPath, userDataPath, dialog, getWindow, sessionFactory, loadRuntime, platform, arch });
     this.installRoot = path.join(appDataPath, "NGR", "extensions", FINDER_ID);
     this.bindingFile = path.join(this.installRoot, "current.json");
+    this.verificationFile = path.join(this.installRoot, "verification.json");
     this.runtime = null;
     this.pendingInstall = null;
     this.pendingOpen = null;
+    this.pendingCheck = null;
     this.disposed = false;
     this.worker = null;
     this.progress = null;
@@ -52,7 +54,7 @@ export class InterfaceFinderExtension {
     const binding = await json(this.bindingFile).catch(() => null);
     if (!binding) return null;
     if (binding.format !== 1 || binding.id !== FINDER_ID || !/^v\d+\.\d+\.\d+(?:-[\w.-]+)?-[a-f0-9]{16}$/.test(binding.directory || "") || !/^[a-f0-9]{64}$/.test(binding.manifestHash || "")) throw new Error("扩展安装记录损坏，请重新导入");
-    const payload = { root: path.join(this.installRoot, binding.directory), options: { manifestHash: binding.manifestHash, verifyHashes } };
+    const payload = { root: path.join(this.installRoot, binding.directory), options: { manifestHash: binding.manifestHash, verifyHashes, cacheFile: this.verificationFile } };
     return verifyHashes ? this.runWorker("inspect", payload) : (await readFinderExtensionMetadata(payload.root, payload.options)).entry;
   }
 
@@ -69,11 +71,27 @@ export class InterfaceFinderExtension {
 
   async status() {
     // Polling a busy job must be a memory-only read, not 1,700 filesystem stats per tick.
-    if (!this.pendingInstall && !this.pendingOpen) await this.refreshBound();
+    if (!this.pendingInstall && !this.pendingOpen && !this.pendingCheck) await this.refreshBound();
     return this.snapshot();
   }
 
-  async detect() { return this.status(); }
+  async detect() {
+    this.checkActive();
+    if (this.pendingCheck) return this.pendingCheck;
+    if (this.pendingInstall || this.pendingOpen) throw new Error("扩展正在处理，请稍后再检查");
+    this.startProgress("verify", "verifying", "准备完整检查已安装扩展");
+    this.pendingCheck = (async () => {
+      this.cachedBound = await this.current({ verifyHashes: true });
+      this.checkActive(); this.cachedError = "";
+      this.updateProgress({ phase: "complete", stage: this.cachedBound ? "扩展完整检查通过" : "尚未安装扩展", state: "complete" });
+      return this.snapshot();
+    })().catch(error => {
+      if (error.code !== "FINDER_CANCELLED") { this.cachedBound = null; this.cachedError = error.message; }
+      this.updateProgress({ phase: error.code === "FINDER_CANCELLED" ? "cancelled" : "error", stage: "扩展检查未完成", error: error.message });
+      throw error;
+    }).finally(() => { this.pendingCheck = null; });
+    return this.pendingCheck;
+  }
 
   runWorker(kind, payload) {
     this.checkActive();
@@ -103,6 +121,7 @@ export class InterfaceFinderExtension {
     if (this.disposed) throw new Error("扩展管理已关闭");
     if (this.pendingInstall) return this.pendingInstall;
     if (this.pendingOpen) throw new Error("扩展正在打开，请稍后再导入");
+    if (this.pendingCheck) throw new Error("扩展正在检查，请稍后再导入");
     this.startProgress("install", "selecting", "选择扩展包");
     this.pendingInstall = this.chooseAndInstall().catch(error => {
       this.updateProgress({ phase: error.code === "FINDER_CANCELLED" ? "cancelled" : "error", stage: error.code === "FINDER_CANCELLED" ? "扩展处理已停止" : "导入未完成", error: error.message });
@@ -125,7 +144,7 @@ export class InterfaceFinderExtension {
     let temporary;
     try {
       this.updateProgress({ phase: "reading", stage: "准备读取扩展包", currentFile: path.basename(selected.filePaths[0]), indeterminate: true });
-      const installed = await this.runWorker("install", { archivePath: selected.filePaths[0], installRoot: this.installRoot, staging });
+      const installed = await this.runWorker("install", { archivePath: selected.filePaths[0], installRoot: this.installRoot, staging, cacheFile: this.verificationFile });
       this.checkActive();
       this.updateProgress({ phase: "publishing", stage: "完成校验，启用新版本", indeterminate: true });
       temporary = path.join(this.installRoot, `.current-${randomUUID()}.tmp`);
@@ -144,6 +163,7 @@ export class InterfaceFinderExtension {
   async open() {
     if (this.disposed) throw new Error("扩展管理已关闭");
     if (this.pendingInstall) throw new Error("扩展正在安装，请等待完成");
+    if (this.pendingCheck) throw new Error("扩展正在检查，请等待完成");
     if (this.pendingOpen) return this.pendingOpen;
     this.startProgress("open", "verifying", "准备检查已安装扩展");
     this.pendingOpen = this.openInstalled().catch(error => {
@@ -166,7 +186,7 @@ export class InterfaceFinderExtension {
     }
     await this.refreshBound(); this.checkActive();
     if (!this.cachedBound) { this.progress = null; return { ...this.snapshot(), launched: false }; }
-    const entry = await this.current({ verifyHashes: true });
+    const entry = await this.current({ verifyHashes: "auto" });
     this.checkActive();
     this.updateProgress({ phase: "loading", stage: "加载工作台", indeterminate: true });
     const module = await this.loadRuntime(path.join(entry.root, ...FINDER_ENTRY.split("/")));
@@ -193,6 +213,7 @@ export class InterfaceFinderExtension {
       await worker?.terminate();
       if (waitInstall) await this.pendingInstall?.catch(() => {});
       await this.pendingOpen?.catch(() => {});
+      await this.pendingCheck?.catch(() => {});
       const runtime = this.runtime; this.runtime = null;
       await runtime?.dispose();
     })();

@@ -27,16 +27,17 @@ function fixture() {
   }
   const nodes = new Map(), clock = { now: 100000 }, timers = new Map(); let timerId = 0;
   const el = name => { const id = name.startsWith("more") ? name : "finderExtension" + name; if (!nodes.has(id)) nodes.set(id, new Element(id)); return nodes.get(id); };
-  const counters = { status: 0, choose: 0, open: 0 };
+  const counters = { status: 0, choose: 0, open: 0, detect: 0 };
   let backend = { state: "not-found", message: "尚未安装扩展", bound: null }, choose = deferred(), open = deferred();
   const api = { status: async () => { counters.status++; return backend; }, choose: async () => { counters.choose++; return choose.promise; }, open: async () => { counters.open++; return open.promise; } };
+  const detect = deferred(); api.detect = async () => { counters.detect++; return detect.promise; };
   const events = new Map();
   class ClockDate extends Date { constructor(...args) { super(...(args.length ? args : [clock.now])); } static now() { return clock.now; } }
   const document = { getElementById: id => { if (!nodes.has(id)) nodes.set(id, new Element(id)); return nodes.get(id); }, createElement: () => new Element() };
   vm.runInNewContext(source, { document, window: { ngrDesktop: { finderExtension: api }, addEventListener: (name, fn) => events.set(name, fn) }, Date: ClockDate, console, setTimeout: (fn, ms) => { timers.set(++timerId, { fn, ms }); return timerId; }, clearTimeout: id => timers.delete(id) });
   const progress = (phase, extras = {}) => ({ operation: "install", phase, stage: phase, state: "running", active: true, done: null, total: null, bytesDone: null, bytesTotal: null, percent: null, indeterminate: true, startedAt: 100000, updatedAt: clock.now, revision: 1, currentFile: "", ...extras });
   return {
-    el, counters, clock, timers, progress,
+    el, counters, clock, timers, progress, detect,
     set backend(value) { backend = value; }, get backend() { return backend; },
     get choose() { return choose; }, resetChoose() { choose = deferred(); return choose; }, get open() { return open; },
     async drive() { const next = timers.entries().next().value; if (!next) return false; timers.delete(next[0]); clock.now += next[1].ms; await next[1].fn(); await settle(); return true; },
@@ -58,6 +59,18 @@ test("import shows indeterminate then measured progress; close and reopen does n
   f.backend = { installed: true, bound: { version: "0.7.0", root: "C:/fixture" }, message: "已安装", progress: f.progress("complete", { state: "complete", active: false, updatedAt: f.clock.now, revision: 3 }) }; f.choose.resolve(f.backend); await f.flush();
   assert.equal(f.el("ProgressBar").value, 100); assert.equal(f.el("Choose").disabled, false); assert.equal(f.el("Launch").disabled, false); assert.equal(f.el("Download").hidden, true); assert.equal(f.el("Download").disabled, true);
   const before = f.counters.status; await f.drive(); assert.equal(f.counters.status, before); assert.equal(f.timers.size, 0); f.stop();
+});
+
+test("manual recheck invokes full verification while opening the manager only reads status", async () => {
+  const f = fixture(); f.backend = { bound: { version: "0.7.0" } };
+  f.el("Manage").fire("click"); await f.flush(); assert.equal(f.counters.detect, 0);
+  f.el("Detect").fire("click"); await f.flush();
+  assert.equal(f.counters.detect, 1); assert.equal(f.el("Detect").disabled, true);
+  assert.deepEqual(f.el("ProgressSteps").children.map(item => item.textContent), ["完整检查扩展", "检查完成"]);
+  f.backend = { ...f.backend, progress: f.progress("complete", { operation: "verify", state: "complete", active: false, revision: 2, updatedAt: f.clock.now + 1 }) };
+  f.detect.resolve(f.backend); await f.flush();
+  assert.equal(f.el("Dialog").open, true); assert.equal(f.el("Detect").disabled, false);
+  assert.equal(f.counters.open, 0); f.stop();
 });
 
 test("manager recovers a backend operation, error unlocks retry, and retry resets old progress", async () => {

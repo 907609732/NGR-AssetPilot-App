@@ -83,12 +83,102 @@ test("拒绝额外文件、大小写重复、多个根目录和符号链接", as
   for (const change of changes) { await f.make({ change }); await assert.rejects(() => s.choose(), /数量|重复|目录|符号/); }
 });
 
-test("打开前再次校验哈希，包被篡改时不加载任何代码", async (t) => {
+test("打开时发现文件变化后校验哈希，包被篡改时不加载任何代码", async (t) => {
   const f = await fixture(t); await f.make(); let loads = 0;
   const s = f.service({ loadRuntime: () => { loads++; } }); const installed = (await s.choose()).bound;
   const file = path.join(installed.root, "resources/app.asar");
   const data = await fs.readFile(file); data[0] ^= 1; await fs.writeFile(file, data);
   await assert.rejects(() => s.open(), /校验失败/); assert.equal(loads, 0);
+});
+
+function launchable(f) {
+  return f.service({ loadRuntime: () => ({ createFinderRuntime: options => ({
+    start: async () => {}, show: async () => {}, dispose: async () => options.onClosed(),
+    getWindow: () => ({ isDestroyed: () => false }),
+  }) }) });
+}
+
+function hashedStages(service) {
+  const stages = [], update = service.updateProgress.bind(service);
+  service.updateProgress = value => { stages.push(value.stage); update(value); };
+  return stages;
+}
+
+test("导入校验记录跨重启复用，关闭重开不再次读取全部文件内容", async t => {
+  const f = await fixture(t); await f.make();
+  const s = launchable(f); await s.choose(); const stages = hashedStages(s);
+  await s.open(); await s.runtime.dispose(); await s.open();
+  assert.equal(stages.includes("校验已安装文件"), false);
+  await s.dispose();
+  const restarted = launchable(f), reopenedStages = hashedStages(restarted);
+  await restarted.open();
+  assert.equal(reopenedStages.includes("校验已安装文件"), false);
+  await restarted.dispose();
+});
+
+test("重新检查强制校验所有文件，即使工作台已经打开", async t => {
+  const f = await fixture(t); await f.make(); const s = launchable(f);
+  await s.choose(); await s.open(); const stages = hashedStages(s);
+  await s.detect();
+  assert.ok(stages.includes("校验已安装文件"));
+  assert.equal(s.snapshot().progress.operation, "verify");
+  assert.equal(s.snapshot().progress.state, "complete");
+  await s.dispose();
+});
+
+test("同大小变动即使恢复修改时间也不会复用缓存；手动检查也拒绝损坏文件", async t => {
+  const f = await fixture(t); await f.make(); const s = launchable(f);
+  const installed = (await s.choose()).bound;
+  const file = path.join(installed.root, "resources/app.asar"), before = await fs.stat(file);
+  const bytes = await fs.readFile(file); bytes[0] ^= 1;
+  await new Promise(resolve => setTimeout(resolve, 20));
+  await fs.writeFile(file, bytes); await fs.utimes(file, before.atime, before.mtime);
+  await assert.rejects(() => s.open(), /校验失败/);
+  await assert.rejects(() => s.detect(), /校验失败/);
+  assert.equal(s.runtime, null);
+});
+
+test("旧安装或损坏缓存只补一次完整校验，下一次打开复用新记录", async t => {
+  const f = await fixture(t); await f.make(); const s = launchable(f); await s.choose();
+  const cache = path.join(s.installRoot, "verification.json");
+  await fs.writeFile(cache, "broken-cache");
+  const stages = hashedStages(s); await s.open();
+  assert.ok(stages.includes("校验已安装文件"));
+  await s.runtime.dispose(); stages.length = 0; await s.open();
+  assert.equal(stages.includes("校验已安装文件"), false);
+  await s.dispose(); await fs.rm(cache);
+  const old = launchable(f), oldStages = hashedStages(old); await old.open();
+  assert.ok(oldStages.includes("校验已安装文件")); await old.dispose();
+});
+
+test("缓存命中仍拒绝额外文件和缺失文件", async t => {
+  const f = await fixture(t); await f.make(); const s = launchable(f);
+  const installed = (await s.choose()).bound, extra = path.join(installed.root, "resources/worker/extra.dll");
+  await fs.writeFile(extra, "extra"); await assert.rejects(() => s.open(), /数量|登记/);
+  await fs.rm(extra); await fs.rm(path.join(installed.root, "resources/worker/python.exe"));
+  await assert.rejects(() => s.open(), /数量|缺少/);
+});
+
+test("合法文件元信息变化后补全量校验并刷新记录", async t => {
+  const f = await fixture(t); await f.make(); const s = launchable(f);
+  const installed = (await s.choose()).bound, file = path.join(installed.root, "resources/app.asar");
+  const now = new Date(Date.now() + 10000); await fs.utimes(file, now, now);
+  const stages = hashedStages(s); await s.open(); assert.ok(stages.includes("校验已安装文件"));
+  await s.runtime.dispose(); stages.length = 0; await s.open();
+  assert.equal(stages.includes("校验已安装文件"), false); await s.dispose();
+});
+
+test("手动检查期间不重复启动任务，退出可终止校验线程", async t => {
+  const f = await fixture(t); await f.make({ files: { "resources/worker/large.dll": Buffer.alloc(24 * 1024 * 1024, 51) } });
+  const s = launchable(f); await s.choose();
+  const pending = s.detect(), rejected = assert.rejects(pending, /停止|关闭/);
+  for (let attempt = 0; !s.worker && attempt < 200; attempt++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.ok(s.worker); const worker = s.worker;
+  await assert.rejects(() => s.open(), /正在检查/);
+  await assert.rejects(() => s.choose(), /正在检查/);
+  assert.equal((await s.status()).progress.operation, "verify");
+  await s.dispose(); await rejected;
+  assert.equal(worker.threadId, -1); assert.equal(s.progress.state, "cancelled");
 });
 
 test("宿主工厂打开一次、连续点击复用窗口、隔离配置，关闭和退出释放运行时", async (t) => {
@@ -198,7 +288,8 @@ test("关闭管理器终止正在导入的 worker，旧版本指针保持完整"
 test("打开工作台的全包哈希校验也报告真实进度，加载阶段使用等待状态", async (t) => {
   const f = await fixture(t); await f.make({ files: { "resources/worker/large.dll": Buffer.alloc(8 * 1024 * 1024, 64) } });
   const s = f.service({ loadRuntime: () => ({ createFinderRuntime: () => ({ start: async () => {}, show: async () => {}, dispose: async () => {}, getWindow: () => ({ isDestroyed: () => false }) }) }) });
-  await s.choose(); const changes = [], update = s.updateProgress.bind(s);
+  await s.choose(); await fs.rm(path.join(s.installRoot, "verification.json"));
+  const changes = [], update = s.updateProgress.bind(s);
   s.updateProgress = value => { update(value); changes.push({ ...s.progress }); };
   const result = await s.open();
   assert.equal(result.launched, true); assert.equal(result.progress.operation, "open");

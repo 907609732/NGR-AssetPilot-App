@@ -27,9 +27,9 @@
     if (!p) return;
     const running = active(p), resultState = running ? "running" : p.state || p.phase;
     panel.dataset.state = resultState; panel.dataset.phase = p.phase || "";
-    const isOpen = p.operation === "open";
-    const steps = isOpen ? ["校验已有扩展", "加载工作台", "准备完成"] : ["读取扩展包", "检查清单", "解压并校验", "完成安装"];
-    const position = isOpen ? { verifying: 0, reading: 0, manifest: 0, loading: 1, complete: 2 } : { selecting: 0, reading: 0, manifest: 1, extracting: 2, verifying: 2, publishing: 3, activating: 3, loading: 3, complete: 3 };
+    const isOpen = p.operation === "open", isVerify = p.operation === "verify";
+    const steps = isVerify ? ["完整检查扩展", "检查完成"] : isOpen ? ["检查已有扩展", "加载工作台", "准备完成"] : ["读取扩展包", "检查清单", "解压并校验", "完成安装"];
+    const position = isVerify ? { checking: 0, verifying: 0, complete: 1 } : isOpen ? { checking: 0, verifying: 0, reading: 0, manifest: 0, loading: 1, complete: 2 } : { selecting: 0, reading: 0, manifest: 1, extracting: 2, checking: 2, verifying: 2, publishing: 3, activating: 3, loading: 3, complete: 3 };
     if (p.operation !== previousOperation) { previousStep = 0; previousOperation = p.operation; }
     const step = position[p.phase] ?? previousStep; previousStep = step;
     el("ProgressSteps").replaceChildren();
@@ -102,7 +102,7 @@
     if (busy()) { show(); render(); schedulePoll(); return; }
     actionBusy = true; refreshError = ""; previousStep = 0; previousOperation = operation;
     fallbackRevision = state?.progress?.revision;
-    fallback = { operation, phase: operation === "install" ? "selecting" : "verifying", stage: operation === "install" ? "等待选择扩展包" : "正在准备工作台", state: "running", active: true, indeterminate: true, startedAt: Date.now(), updatedAt: Date.now() };
+    fallback = { operation, phase: operation === "install" ? "selecting" : "verifying", stage: operation === "install" ? "等待选择扩展包" : operation === "verify" ? "正在完整检查扩展" : "正在准备工作台", state: "running", active: true, indeterminate: true, startedAt: Date.now(), updatedAt: Date.now() };
     show(); render(); schedulePoll();
     try {
       if (!api) throw new Error("请在 AI资源领航桌面版中使用扩展工作台");
@@ -126,7 +126,7 @@
   el("Close").addEventListener("click", () => dialog.close());
   dialog.addEventListener("close", () => document.getElementById("moreFeaturesEntry").focus({ preventScroll: true }));
   el("Launch").addEventListener("click", open);
-  el("Detect").addEventListener("click", () => { void refresh(); });
+  el("Detect").addEventListener("click", () => { void run("verify", () => api.detect()); });
   el("Choose").addEventListener("click", () => { void run("install", () => api.choose()); });
   window.addEventListener("beforeunload", () => { destroyed = true; clearTimeout(pollTimer); });
 })();
