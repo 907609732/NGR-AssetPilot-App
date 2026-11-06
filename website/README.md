@@ -1,28 +1,57 @@
-# NGR AssetPilot 官方网站
+# NGR AssetPilot 官网
 
-官网用于介绍 NGR AssetPilot Windows 桌面应用，并提供通过下载配置校验的正式版安装器入口。当前正式产品的安装方式与功能见 [项目首页](../README.md)，下载见 [GitHub Releases](https://github.com/907609732/NGR-AssetPilot-App/releases/latest)。官网本身不是资源处理应用，用户应安装桌面版。
+官网：<https://ngr.lttlt.top/>
 
-本目录是独立的网站工程，具有自己的依赖与构建流程。本次只更新文档，没有部署官网或变更线上下载配置；开发对应 v3.0.24 的官网时，请先获取 [该标签源码](https://github.com/907609732/NGR-AssetPilot-App/tree/v3.0.24/website)。
+应用仓库：<https://github.com/907609732/NGR-AssetPilot-App>
 
-## 下载安全门
+正式下载：<https://github.com/907609732/NGR-AssetPilot-App/releases/latest>
 
-安装包完成凭据扫描、上传并验证 HTTPS 直链后，按 `.env.example` 配置：
+本目录是 Windows 桌面应用的产品介绍与下载网站，使用 Vinext、React 和 Cloudflare Worker。它不是应用本体，也不在浏览器中处理用户的资源文件。
 
-- `NGR_RELEASE_EXE_URL`：官方 GitHub Release 的 Setup EXE 地址。
-- `NGR_RELEASE_VERSION`：标准版本号，例如 `3.0.24`，并须出现在文件名和 Release 标签中。
-- `NGR_RELEASE_SHA256`：已验收安装包的 64 位 SHA-256。
-- `NGR_RELEASE_VERIFIED=1`：确认远程文件和本地验收包一致。
-- `NGR_RELEASE_CREDENTIAL_SCAN_PASSED=1`：确认安装包不含内置平台凭据。
+## 本地开发与验证
 
-全部留空时网站显示“Windows 版准备中”。部分配置或校验失败会直接中止构建。官网 canonical 为 `https://ngr.lttlt.top`。
+要求 Node.js 22.13.0 或更高版本。进入本目录后运行：
 
-## 本地命令
-
-```powershell
+```sh
 npm ci
 npm run dev
-npm run lint
+```
+
+```sh
 npm test
 ```
 
-官网依赖与输出仅位于 `website/`，不会进入桌面安装包。
+`npm test` 构建网站，并验证 Release 元数据、失败兜底和服务端渲染的产品说明及下载入口。仅构建时运行 `npm run build`。生成文件位于 `dist/`，不提交到源码仓库。
+
+## 下载版本如何同步
+
+`lib/desktop-release.mjs` 在服务端读取官方仓库的公开 GitHub Releases API：
+
+```text
+https://api.github.com/repos/907609732/NGR-AssetPilot-App/releases/latest
+```
+
+只有正式发布且非预发布的 `vMAJOR.MINOR.PATCH` 版本可以成为下载入口。安装器须为同版本的 `NGR-AssetPilot-MAJOR.MINOR.PATCH-Setup-x64.exe`，同时核对官方仓库地址、已上传状态、文件大小、GitHub 提供的 SHA-256 摘要与校验文件附件。
+
+成功结果在单个服务实例中缓存 5 分钟；请求失败时保留最近一次有效结果，并在 30 秒后允许重试。请求与 JSON 读取总超时为 3 秒。没有历史结果时使用已核对的 v3.0.24 安装器，页面会标注备用下载信息。API 暂时不可用不会移除下载按钮。
+
+不需要 GitHub Token，也不再使用 `NGR_RELEASE_*` 环境变量。API 获取的是发行元数据，安装器和校验文件由用户直接从 GitHub 下载。
+
+## 新版本发布后
+
+1. 按应用仓库的发行流程发布正式 Release、Setup x64 安装器和 `SHA256SUMS.txt`。
+2. 官网下载版本会在重新获取成功后更新；确认下载文件、文件名、版本号与哈希对应。
+3. 新功能介绍、安装步骤和更新摘要仍需按已发布版本人工核实，不能仅靠版本号自动生成。同步 `app/page.tsx`、`app/layout.tsx` 以及必要的图片。
+4. 定期把 `FALLBACK_RELEASE` 更新为已经核验的稳定版本，同时保留测试。失败兜底不代表能在无法访问 GitHub 时得知最新发行。
+5. 运行构建与测试，再发布网站，并核对正式域名。仅推送应用仓库中的 `website/` 代码不等于官网已经部署。
+
+## 网站维护范围
+
+- `app/page.tsx`：产品介绍、安装说明、功能边界、更新摘要和下载入口。
+- `app/layout.tsx`：中文页面元数据与分享信息。
+- `app/globals.css`：自适应页面样式。
+- `public/`：图标及分享图片。
+- `.openai/hosting.json`：现有官网身份；维护时保留其 `project_id`。
+- `tests/`：发行数据与页面输出验证。
+
+官网不需要登录、数据库或用户上传功能。页面中的桌面窗口为界面示意，实际使用请安装客户端。代码与依赖许可继续以各自现行许可证为准；官网内容更新不改变应用的许可。
