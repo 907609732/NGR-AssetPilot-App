@@ -1,5 +1,7 @@
 # NGR AssetPilot 百度翻译 CFC
 
+> 源码版本说明：以下部署参数对应 `main` 中保留的 v3.0.11 实现，不是普通用户的桌面配置教程。v3.0.24 的受管云翻译与此旧部署方式有差异；部署新版请先获取 [v3.0.24 CFC 源码](https://github.com/907609732/NGR-AssetPilot-App/tree/v3.0.24/infra/cfc/baidu-translation)，并参照 [该版本开发说明](https://github.com/907609732/NGR-AssetPilot-App/blob/v3.0.24/README.md)。桌面用户在 [设置 → API](../../../app/API配置文件/README.md) 选择命名服务即可。
+
 该函数把百度翻译 APPID/密钥保存在 CFC 环境变量中，桌面安装包只访问 CFC HTTP 触发器，不包含百度翻译密钥。
 
 ## CFC 配置

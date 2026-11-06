@@ -1,5 +1,7 @@
 # Third-party notices
 
+本文对应默认分支当前保留的 v3.0.11 源码依赖。v3.0.24 发布产品另有 [对应标签的第三方声明](https://github.com/907609732/NGR-AssetPilot-App/blob/v3.0.24/THIRD-PARTY-NOTICES.md)；安装包中实际依赖版本以 [v3.0.24 SBOM](https://github.com/907609732/NGR-AssetPilot-App/releases/download/v3.0.24/NGR-AssetPilot-3.0.24-sbom.cdx.json) 为准。
+
 NGR AssetPilot 的“本地 AI 搜图”模块使用以下开源运行时。完整许可证文本随各 npm 软件包提供，并记录在发布 SBOM 中。
 
 - `@huggingface/transformers` 4.2.0 — Apache License 2.0
