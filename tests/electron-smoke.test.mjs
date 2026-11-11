@@ -123,7 +123,7 @@ test("Electron development app boots with the Dev identity and an isolated rende
     await window.screenshot({ path: path.join(projectRoot, ".tmp", "home-tapd-entry.png"), fullPage: true });
 
     await window.locator("#moreFeaturesEntry").click();
-    assert.equal(await window.locator("#moreFeaturesPopover .more-feature-item").count(), 4);
+    assert.equal(await window.locator("#moreFeaturesPopover .more-feature-item").count(), 5);
     await window.screenshot({ path: path.join(projectRoot, ".tmp", "home-more-features.png"), fullPage: true });
     await window.locator("#figmaVariantsEntry").click();
     assert.equal(await window.locator("#moreFeaturesPopover").isVisible(), false);

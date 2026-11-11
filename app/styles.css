@@ -4763,6 +4763,20 @@ button:disabled {
 .utility-dialog > header button { min-width: 44px; min-height: 44px; }
 .utility-dialog.figma-variants-dialog { width: min(640px, calc(100vw - 32px)); }
 .utility-dialog.finder-extension-dialog { width: min(720px, calc(100vw - 32px)); }
+.utility-dialog.figma-plugin-health-dialog { width: min(760px, calc(100vw - 32px)); }
+.figma-plugin-health-note { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.figma-plugin-health-warning { padding: 12px 14px; border: 1px solid #f3c9c4; border-radius: 9px; background: #fff0ee; color: var(--danger); font-weight: 700; line-height: 1.7; }
+.figma-plugin-health-results { display: grid; gap: 8px; padding: 0; margin: 16px 0; list-style: none; }
+.figma-plugin-health-results li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; }
+.figma-plugin-health-results li > div { display: grid; gap: 5px; min-width: 0; }
+.figma-plugin-health-results small { color: var(--muted); overflow-wrap: anywhere; }
+.figma-plugin-health-result { justify-items: end; text-align: right; }
+.figma-plugin-health-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+.figma-plugin-health-footer p { margin: 0; color: var(--muted); font-size: 13px; }
+@media (max-width: 560px) {
+  .figma-plugin-health-results li { align-items: flex-start; flex-direction: column; }
+  .figma-plugin-health-result { justify-items: start; text-align: left; }
+}
 .arthub-folder-dialog [data-close] { min-width: 44px; min-height: 44px; }
 .arthub-folder-dialog form { display: grid; gap: 12px; margin-bottom: 18px; }
 .arthub-folder-dialog form[hidden] { display: none; }

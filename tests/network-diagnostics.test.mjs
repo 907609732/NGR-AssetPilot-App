@@ -137,6 +137,37 @@ test("HTTP 状态、代理和直连对比均返回脱敏的可达结论", async 
   });
 });
 
+test("Figma 插件健康检测包含五个固定地址，本机检测绕过代理和 DNS", async () => {
+  await withTempDirectory(async (userDataPath) => {
+    const systemSession = createSession();
+    const directSession = createSession({ route: "direct" });
+    systemSession.resolveProxy = async () => { throw new Error("proxy unavailable"); };
+    directSession.resolveHost = async () => { throw new Error("DNS unavailable"); };
+    const { service } = createService(userDataPath, { systemSession, directSession });
+    const catalog = await service.listCatalog();
+    for (const [id, url] of [
+      ["arthub-public", "https://service.arthub.qq.com/"],
+      ["arthub-internal", "https://service.arthub.woa.com/"],
+      ["arthub-local", "http://localhost:31700/"],
+      ["figma-rest", "https://api.figma.com/v1/me"],
+      ["figma-web", "https://www.figma.com/"],
+    ]) {
+      assert.equal(catalog.targets.find((target) => target.id === id)?.displayUrl, url);
+    }
+    const run = await service.run({ requestId: "figma_local_test", targetIds: ["arthub-local"], routeMode: "system" }, 12);
+    assert.equal(run.results[0].reachable, true);
+    assert.equal(run.results[0].proxy, "DIRECT");
+    assert.equal(run.results[0].dnsMs, 0);
+    assert.equal(systemSession.calls.length, 0);
+    assert.equal(directSession.calls[0].url, "http://localhost:31700/");
+    directSession.fetch = async () => { throw new Error("net::ERR_CONNECTION_REFUSED https://secret.invalid/?token=hidden"); };
+    const failed = await service.run({ requestId: "figma_error_test", targetIds: ["arthub-local"] }, 12);
+    assert.equal(failed.results[0].errorCode, "ERR_CONNECTION_REFUSED");
+    assert.doesNotMatch(JSON.stringify(failed), /secret\.invalid|hidden/);
+    await service.dispose();
+  });
+});
+
 test("DNS Rebinding 在发出 HTTP 前被阻止", async () => {
   await withTempDirectory(async (userDataPath) => {
     const systemSession = createSession({ resolvedAddress: "10.0.0.5" });

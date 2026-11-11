@@ -27,6 +27,10 @@ const CLOUD_METADATA_HOSTS = new Set([
 
 const BUILTIN_TARGETS = Object.freeze([
   { id: "figma-rest", name: "Figma REST API", category: "设计服务", url: "https://api.figma.com/v1/me", method: "GET", expectedContent: "json" },
+  { id: "arthub-public", name: "ArtHub 公网服务", category: "Figma 插件", url: "https://service.arthub.qq.com/", method: "HEAD" },
+  { id: "arthub-internal", name: "ArtHub 内网服务", category: "Figma 插件", url: "https://service.arthub.woa.com/", method: "HEAD" },
+  { id: "arthub-local", name: "ArtHub 本机服务", category: "Figma 插件", url: "http://localhost:31700/", method: "HEAD" },
+  { id: "figma-web", name: "Figma 官网", category: "Figma 插件", url: "https://www.figma.com/", method: "HEAD" },
   { id: "openai-api", name: "OpenAI API", category: "AI 服务", url: "https://api.openai.com/v1/models", method: "GET", expectedContent: "json" },
   { id: "moonshot-api", name: "Moonshot / Kimi API", category: "AI 服务", url: "https://api.moonshot.cn/v1/models", method: "GET", expectedContent: "json" },
   { id: "dashscope-api", name: "通义千问 DashScope", category: "AI 服务", url: "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation", method: "HEAD", expectedContent: "json" },
@@ -303,6 +307,7 @@ function safeHistoryResult(target, route, result) {
     totalMs: result.totalMs ?? result.latencyMs ?? null,
     dnsMs: result.dnsMs ?? null,
     failureStage: result.failureStage || "",
+    errorCode: result.errorCode || "",
     proxy: result.proxy || "",
     contentType: result.contentType || "",
     redirectOrigins: Array.isArray(result.redirectOrigins) ? result.redirectOrigins.map(safeOrigin).filter(Boolean).slice(0, MAX_REDIRECTS) : [],
@@ -524,11 +529,13 @@ export class NetworkDiagnosticsService {
   }
 
   async #probe(target, route, runSignal) {
-    const session = route === "direct" ? this.directSession : this.defaultSession;
     const parsed = new URL(target.url);
+    const loopback = isLoopbackHostname(parsed.hostname);
+    const direct = route === "direct" || loopback;
+    const session = direct ? this.directSession : this.defaultSession;
     const started = Date.now();
     let timedOut = false;
-    let proxy = route === "direct" ? "DIRECT" : "UNKNOWN";
+    let proxy = direct ? "DIRECT" : "UNKNOWN";
     let dnsMs = null;
     let firstByteMs = null;
     let failureStage = route === "system" ? "proxy" : "dns";
@@ -538,19 +545,22 @@ export class NetworkDiagnosticsService {
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, target.timeoutMs || DEFAULT_TIMEOUT_MS);
     timer.unref?.();
     try {
-      if (route === "system") {
+      if (!direct) {
         proxy = summarizeProxy(await waitForAbortable(this.defaultSession.resolveProxy(parsed.href), controller.signal));
       }
       failureStage = "dns";
-      const dnsStarted = Date.now();
-      const resolved = await waitForAbortable(
-        session.resolveHost
-          ? session.resolveHost(parsed.hostname, { cacheUsage: "disallowed" })
-          : this.net.resolveHost(parsed.hostname, { cacheUsage: "disallowed" }),
-        controller.signal,
-      );
-      dnsMs = Date.now() - dnsStarted;
-      assertResolvedAddresses(target, normalizeResolvedAddresses(resolved));
+      dnsMs = 0;
+      if (!loopback) {
+        const dnsStarted = Date.now();
+        const resolved = await waitForAbortable(
+          session.resolveHost
+            ? session.resolveHost(parsed.hostname, { cacheUsage: "disallowed" })
+            : this.net.resolveHost(parsed.hostname, { cacheUsage: "disallowed" }),
+          controller.signal,
+        );
+        dnsMs = Date.now() - dnsStarted;
+        assertResolvedAddresses(target, normalizeResolvedAddresses(resolved));
+      }
       let current = parsed;
       const redirectOrigins = [];
       for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
@@ -620,6 +630,7 @@ export class NetworkDiagnosticsService {
       return {
         reachable: false,
         resultCode: failureCode(error, timedOut, runSignal.aborted),
+        errorCode: `${error?.code || ""} ${error?.message || ""}`.match(/\b(ERR_[A-Z0-9_]{1,64}|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH)\b/)?.[1] || "",
         status: null,
         latencyMs: Date.now() - started,
         firstByteMs,
