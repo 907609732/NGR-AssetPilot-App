@@ -61,6 +61,16 @@ const extraResources = [
     filter: ["**/*"],
   },
 ];
+const finderLockPath = path.join(projectRoot, "build", "finder-builtin.lock.json");
+if (fs.existsSync(finderLockPath)) {
+  const finderAsar = path.join(projectRoot, "build", "generated", "finder-builtin", "resources", "app.asar");
+  const lock = require(finderLockPath);
+  const digest = require("node:crypto").createHash("sha256").update(fs.readFileSync(finderAsar)).digest("hex");
+  if (digest !== lock.sha256 || fs.statSync(finderAsar).size !== lock.bytes) {
+    throw new Error("内置快速找界面产物与固定版本不一致");
+  }
+  extraResources.push({ from: finderAsar, to: "finder-builtin/resources/app.asar" });
+}
 const managedProviderConfigPath = path.join(projectRoot, "build", "generated", "managed-provider-config.json");
 if (!releasePolicy.offlineTranslationOnly && fs.existsSync(managedProviderConfigPath)) {
   extraResources.push({
@@ -75,6 +85,11 @@ module.exports = {
   executableName: productName,
   electronVersion: "43.4.1",
   electronDist: fs.existsSync(installedElectronDist) ? installedElectronDist : undefined,
+  afterPack: ({ appOutDir, electronPlatformName }) => {
+    if (electronPlatformName === "win32") {
+      fs.rmSync(path.join(appOutDir, "resources", "default_app.asar"), { force: true });
+    }
+  },
   asar: true,
   asarUnpack: [
     "node_modules/onnxruntime-node/bin/**/*",
@@ -100,6 +115,7 @@ module.exports = {
   },
   files: [
     "desktop/**/*",
+    "build/finder-builtin.lock.json",
     "app/**/*",
     "package.json",
     "LICENSE",

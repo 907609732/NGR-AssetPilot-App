@@ -12,8 +12,8 @@ const childOf = (root, file) => file === root || file.startsWith(`${root}${path.
 const cancelled = () => Object.assign(new Error("扩展处理已停止"), { code: "FINDER_CANCELLED" });
 
 export class InterfaceFinderExtension {
-  constructor({ appDataPath, userDataPath = appDataPath, dialog, getWindow, sessionFactory, loadRuntime = entry => require(entry), platform = process.platform, arch = process.arch }) {
-    Object.assign(this, { appDataPath, userDataPath, dialog, getWindow, sessionFactory, loadRuntime, platform, arch });
+  constructor({ appDataPath, userDataPath = appDataPath, dialog, getWindow, sessionFactory, bundledFinder, loadRuntime = entry => require(entry), platform = process.platform, arch = process.arch }) {
+    Object.assign(this, { appDataPath, userDataPath, dialog, getWindow, sessionFactory, bundledFinder, loadRuntime, platform, arch });
     this.installRoot = path.join(appDataPath, "NGR", "extensions", FINDER_ID);
     this.bindingFile = path.join(this.installRoot, "current.json");
     this.verificationFile = path.join(this.installRoot, "verification.json");
@@ -59,14 +59,14 @@ export class InterfaceFinderExtension {
   }
 
   async refreshBound() {
-    try { this.cachedBound = await this.current(); this.cachedError = ""; }
+    try { this.cachedBound = await this.bundledFinder?.() ?? await this.current(); this.cachedError = ""; }
     catch (failure) { this.cachedBound = null; this.cachedError = failure.message; }
   }
 
   snapshot() {
     const bound = this.cachedBound, error = this.cachedError;
     const running = Boolean(this.runtime?.getWindow() && !this.runtime.getWindow().isDestroyed());
-    return { id: FINDER_ID, downloadUrl: FINDER_DOWNLOAD, state: bound ? "ready" : error ? "invalid" : "not-found", bound, candidates: [], running, progress: this.progress ? { ...this.progress } : null, message: error || (bound ? `已安装 ${bound.version}，复用 AI资源领航运行环境` : "尚未安装扩展。下载扩展 ZIP 后在这里导入，无需独立 EXE 或服务端。") };
+    return { id: FINDER_ID, downloadUrl: FINDER_DOWNLOAD, state: bound ? "ready" : error ? "invalid" : "not-found", bound, candidates: [], running, progress: this.progress ? { ...this.progress } : null, message: error || (bound?.builtin ? `内置 ${bound.version}` : bound ? `已安装 ${bound.version}，复用 AI资源领航运行环境` : "尚未安装扩展。下载扩展 ZIP 后在这里导入，无需独立 EXE 或服务端。") };
   }
 
   async status() {
@@ -81,7 +81,7 @@ export class InterfaceFinderExtension {
     if (this.pendingInstall || this.pendingOpen) throw new Error("扩展正在处理，请稍后再检查");
     this.startProgress("verify", "verifying", "准备完整检查已安装扩展");
     this.pendingCheck = (async () => {
-      this.cachedBound = await this.current({ verifyHashes: true });
+      this.cachedBound = await this.bundledFinder?.({ verify: true }) ?? await this.current({ verifyHashes: true });
       this.checkActive(); this.cachedError = "";
       this.updateProgress({ phase: "complete", stage: this.cachedBound ? "扩展完整检查通过" : "尚未安装扩展", state: "complete" });
       return this.snapshot();
@@ -186,7 +186,7 @@ export class InterfaceFinderExtension {
     }
     await this.refreshBound(); this.checkActive();
     if (!this.cachedBound) { this.progress = null; return { ...this.snapshot(), launched: false }; }
-    const entry = await this.current({ verifyHashes: "auto" });
+    const entry = await this.bundledFinder?.({ verify: true }) ?? await this.current({ verifyHashes: "auto" });
     this.checkActive();
     this.updateProgress({ phase: "loading", stage: "加载工作台", indeterminate: true });
     const module = await this.loadRuntime(path.join(entry.root, ...FINDER_ENTRY.split("/")));

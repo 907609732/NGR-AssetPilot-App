@@ -42,7 +42,10 @@ function checkManifest(manifest) {
     if (total > MAX_EXPANDED) throw new Error("扩展解压大小超过限制");
     files.set(item.path.toLowerCase(), item);
   }
-  if (!files.has("resources/app.asar") || !files.has("resources/worker/python.exe")) throw new Error("扩展缺少业务程序或推理运行环境");
+  if (!files.has("resources/app.asar") || (manifest.base !== true && !files.has("resources/worker/python.exe"))) throw new Error("扩展缺少业务程序或推理运行环境");
+  if (manifest.base === true && [...files.keys()].some(file => file.startsWith("resources/worker/") || file.startsWith("resources/media-tools/"))) {
+    throw new Error("基础扩展包包含可选组件");
+  }
   return files;
 }
 

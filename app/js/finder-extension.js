@@ -16,6 +16,7 @@
   const busy = () => actionBusy || active(visibleProgress());
   function syncButtons() {
     const locked = busy() || checking;
+    el("Choose").hidden = Boolean(state?.bound?.builtin);
     el("Choose").disabled = locked; el("Detect").disabled = locked; el("Launch").disabled = locked || !state?.bound;
     // Keep these available to reopen the modal without starting a second operation.
     entry.disabled = false; el("Manage").disabled = false; el("Close").disabled = false;

@@ -10,6 +10,7 @@ import { CredentialStore } from "../services/credential-store.mjs";
 import { DirectoryTokenStore } from "../services/directory-tokens.mjs";
 import { ExternalAppRegistry } from "../services/external-app-registry.mjs";
 import { InterfaceFinderExtension } from "../services/interface-finder-extension.mjs";
+import { createBundledFinder } from "../services/finder-builtin.mjs";
 import { ArtHubFolders } from "../services/arthub-folders.mjs";
 import { NetworkClient } from "../services/network-client.mjs";
 import { NetworkDiagnosticsService } from "../services/network-diagnostics-service.mjs";
@@ -221,7 +222,16 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     getWindow: () => mainWindow,
   });
   await externalApps.initialize();
+  const bundledFinderRoot = app.isPackaged
+    ? path.join(process.resourcesPath, "finder-builtin")
+    : path.join(app.getAppPath(), "build", "generated", "finder-builtin");
+  const bundledFinderLock = await import("../../build/finder-builtin.lock.json", { with: { type: "json" } })
+    .then(module => module.default)
+    .catch(error => { if (error.code !== "ERR_MODULE_NOT_FOUND") throw error; });
   const finderExtension = new InterfaceFinderExtension({
+    bundledFinder: app.isPackaged || existsSync(path.join(bundledFinderRoot, "resources", "app.asar"))
+      ? createBundledFinder(bundledFinderRoot, bundledFinderLock)
+      : undefined,
     appDataPath: e2eUserDataPath ? path.join(userDataPath, "extension-test-appdata") : app.getPath("appData"),
     userDataPath,
     dialog,
