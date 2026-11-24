@@ -17,7 +17,7 @@ export const CONTENT_SECURITY_POLICY = [
   "connect-src 'none'",
   "worker-src 'self' blob:",
   "child-src 'none'",
-  "frame-src 'none'",
+  "frame-src https://player.bilibili.com/player.html",
 ].join("; ");
 
 export const MAX_NETWORK_RESPONSE_BYTES = 2 * 1024 * 1024;

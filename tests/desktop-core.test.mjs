@@ -145,7 +145,11 @@ test("custom scheme resolves only app-hosted resources and adds a strict CSP", a
     await installAppProtocol({ protocol: fakeProtocol, appRoot });
     const response = await handler({ method: "GET", url: "ngr-assetpilot://app/" });
     assert.equal(response.status, 200);
-    assert.match(response.headers.get("content-security-policy"), /connect-src 'none'/);
+    const csp = response.headers.get("content-security-policy");
+    assert.match(csp, /connect-src 'none'/);
+    assert.match(csp, /frame-src https:\/\/player\.bilibili\.com\/player\.html(?:;|$)/);
+    assert.doesNotMatch(csp, /frame-src[^;]*https:\/\/\*\.bilibili\.com/);
+    assert.doesNotMatch(csp, /frame-src 'none'/);
     assert.match(await response.text(), /NGR/);
     const missing = await handler({ method: "GET", url: "ngr-assetpilot://app/missing.js" });
     assert.equal(missing.status, 404);
@@ -165,6 +169,12 @@ test("window settings and navigation helpers enforce the renderer boundary", () 
   assert.equal(isAllowedExternalUrl("https://ngr.lttlt.top/help"), true);
   assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1jxHK6KEs4/"), true);
   assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1kmn865Eio/"), true);
+  assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1mAxg63En7/"), true);
+  assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1vyn96eELU/"), true);
+  assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1mAxg63En7"), false);
+  assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1mAxg63En7/?p=2"), false);
+  assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1mAxg63En70/"), false);
+  assert.equal(isAllowedExternalUrl("https://player.bilibili.com/player.html?bvid=BV1mAxg63En7&page=1&autoplay=1"), false);
   assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/a-different-video/"), false);
   assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1jxHK6KEs4/?redirect=other"), false);
   assert.equal(isAllowedExternalUrl("http://www.bilibili.com/video/BV1jxHK6KEs4/"), false);

@@ -1,5 +1,11 @@
 (() => {
-  const TUTORIAL_RELEASE = "3.0.16";
+  const APP_VERSION_PATTERN = /^\d+(?:\.\d+){1,3}$/;
+  function releaseFromVersion(value) {
+    const candidate = String(value ?? "").trim().replace(/^v/i, "");
+    return APP_VERSION_PATTERN.test(candidate) ? candidate : "";
+  }
+  let tutorialRelease = releaseFromVersion(typeof APP_VERSION === "string" ? APP_VERSION : "");
+  const releaseLabel = () => (tutorialRelease ? `V${tutorialRelease}` : "当前版本");
   const modules = [
     {
       id: "quick-start",
@@ -33,6 +39,7 @@
       ],
       tips: ["最终名称只填图片本身含义，前缀、工程名和界面名由软件自动拼接。", "修改会自动保存到当前命名记录。"],
       action: { label: "打开开始命名", view: "work" },
+      video: { bvid: "BV1mAxg63En7", title: "开始命名视频教程" },
       keywords: "图片 改名 AI 视觉 推荐词 最终名称 重名 前缀 工程名 界面名",
     },
     {
@@ -82,6 +89,7 @@
       ],
       tips: ["扩展名是 .png 但实际内容是 JPEG 的伪装文件也会被识别。"],
       action: { label: "打开 UI 切图检测", view: "detect" },
+      video: { bvid: "BV1vyn96eELU", title: "UI切图检测视频教程", poster: "assets/tutorials/detection/slide-03.png" },
       secondaryAction: { label: "查看 10 页图文教程", type: "detection-slides" },
       keywords: "切图 检测 PNG 分辨率 大图 图集 问题图片 文件夹 规则",
     },
@@ -209,6 +217,7 @@
   }
 
   function renderNav() {
+    stopVideo();
     const query = normalized(search.value);
     const visible = modules.filter((module) => matches(module, query));
     nav.replaceChildren();
@@ -249,8 +258,9 @@
     content.innerHTML = `
       <div class="tutorial-module-head">
         <span class="tutorial-module-icon">${module.icon}</span>
-        <div><span class="tutorial-module-version">V${TUTORIAL_RELEASE} 最新教程</span><h3>${module.title}</h3><p>${module.summary}</p></div>
+        <div><span class="tutorial-module-version" data-tutorial-release>${releaseLabel()} 最新教程</span><h3>${module.title}</h3><p>${module.summary}</p></div>
       </div>
+      ${videoSection(module)}
       <section class="tutorial-purpose"><strong>这个功能是干什么的？</strong><p>${module.purpose}</p></section>
       <section class="tutorial-steps"><h4>照着下面做</h4><ol>${module.steps.map(([title, text]) => `<li><span></span><div><strong>${title}</strong><p>${text}</p></div></li>`).join("")}</ol></section>
       <section class="tutorial-tips"><h4>使用时注意</h4><ul>${module.tips.map((tip) => `<li>${tip}</li>`).join("")}</ul></section>
@@ -258,7 +268,36 @@
     const actions = content.querySelector(".tutorial-module-actions");
     if (module.action) actions.append(createAction(module.action, "primary-action"));
     if (module.secondaryAction) actions.append(createAction(module.secondaryAction, "ghost-action"));
+    if (module.video) {
+      content.querySelector(".tutorial-video-poster")?.addEventListener("click", () => {
+        const frame = document.createElement("iframe");
+        const playerUrl = new URL("https://player.bilibili.com/player.html");
+        playerUrl.searchParams.set("bvid", module.video.bvid);
+        playerUrl.searchParams.set("page", "1");
+        playerUrl.searchParams.set("autoplay", "1");
+        frame.src = playerUrl.href;
+        frame.title = module.video.title;
+        frame.allow = "autoplay; fullscreen; picture-in-picture";
+        frame.allowFullscreen = true;
+        frame.referrerPolicy = "no-referrer";
+        frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-presentation");
+        content.querySelector(".tutorial-video-player")?.replaceChildren(frame);
+      });
+    }
     content.scrollTop = 0;
+  }
+
+  function videoSection(module) {
+    if (!module.video) return "";
+    const video = module.video;
+    const cover = video.poster
+      ? `<img src="${video.poster}" alt="${video.title}封面" />`
+      : `<span class="tutorial-video-cover"><small>NGR ASSETPILOT</small><strong>${video.title}</strong><span>${module.summary}</span></span>`;
+    return `<section class="tutorial-video" aria-label="${module.title}视频教程"><header><div><img src="tutorials/figma/icons/bilibili.svg" alt="哔哩哔哩" /><div><h4>视频教程</h4><p>${video.title}</p></div></div><a class="tutorial-video-external" href="https://www.bilibili.com/video/${video.bvid}/" target="_blank" rel="noopener noreferrer" data-tutorial-external>在哔哩哔哩观看 ↗</a></header><div class="tutorial-video-player"><button class="tutorial-video-poster" type="button" aria-label="播放${video.title}">${cover}<span class="tutorial-video-play" aria-hidden="true">▶</span><span class="tutorial-video-poster-label">播放 ${video.title}</span></button></div><footer class="tutorial-video-note">无法播放时，可点击“在哔哩哔哩观看”。</footer></section>`;
+  }
+
+  function stopVideo() {
+    content.querySelectorAll("iframe").forEach((frame) => frame.remove());
   }
 
   function createAction(action, className) {
@@ -282,15 +321,45 @@
   }
 
   function close() {
+    stopVideo();
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
     entry.focus();
+  }
+
+  function syncVersionLabel() {
+    version.textContent = `适用于 ${releaseLabel()}`;
+    content.querySelectorAll("[data-tutorial-release]").forEach((label) => {
+      label.textContent = `${releaseLabel()} 最新教程`;
+    });
+  }
+
+  async function refineReleaseFromDesktop() {
+    try {
+      const info = await window.NgrDesktopBridge?.getInfo?.();
+      const detected = releaseFromVersion(info?.version);
+      if (!detected || detected === tutorialRelease) return;
+      tutorialRelease = detected;
+      syncVersionLabel();
+    } catch {
+      // 桌面环境信息不可用时保留内置版本号。
+    }
   }
 
   entry.addEventListener("click", open);
   closeButton.addEventListener("click", close);
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) close();
+  });
+  content.addEventListener("click", async (event) => {
+    const link = event.target.closest("[data-tutorial-external]");
+    if (!link || !window.NgrDesktopBridge?.openExternal) return;
+    event.preventDefault();
+    try {
+      await window.NgrDesktopBridge.openExternal(link.href);
+    } catch (error) {
+      window.alert(`打开视频失败：${error?.message || error}`);
+    }
   });
   search.addEventListener("input", renderNav);
   quickTour.addEventListener("click", () => {
@@ -303,6 +372,7 @@
     close();
   }, true);
 
-  version.textContent = `适用于 V${TUTORIAL_RELEASE}`;
+  syncVersionLabel();
+  void refineReleaseFromDesktop();
   window.NgrTutorialCenter = { open, close, modules };
 })();
