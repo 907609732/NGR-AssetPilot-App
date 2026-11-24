@@ -27,6 +27,7 @@ module.exports = Object.freeze({
   diagnosticsListHistory: "ngr:diagnostics:list-history",
   diagnosticsExportHistory: "ngr:diagnostics:export-history",
   diagnosticsClearHistory: "ngr:diagnostics:clear-history",
+  offlineTranslationInstall: "ngr:offline-translation:install",
   offlineTranslationGetStatus: "ngr:offline-translation:get-status",
   offlineTranslationTranslate: "ngr:offline-translation:translate",
   filesSelectExportDirectory: "ngr:files:select-export-directory",

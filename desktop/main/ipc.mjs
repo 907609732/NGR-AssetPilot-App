@@ -60,6 +60,7 @@ export function registerDesktopIpc({
   networkClient,
   networkDiagnostics,
   offlineTranslation,
+  onnxComponent,
   directoryTokens,
   backupService,
   updater,
@@ -135,8 +136,88 @@ export function registerDesktopIpc({
   handle(channels.diagnosticsListHistory, async (_event, payload) => networkDiagnostics.listHistory(payload));
   handle(channels.diagnosticsExportHistory, async (_event, payload) => networkDiagnostics.exportHistory(payload));
   handle(channels.diagnosticsClearHistory, async () => networkDiagnostics.clearHistory());
-  handle(channels.offlineTranslationGetStatus, async () => offlineTranslation.getStatus());
-  handle(channels.offlineTranslationTranslate, async (_event, payload) => offlineTranslation.translate(payload));
+  function requireOnnx() {
+    if (onnxComponent && !onnxComponent.ready()) {
+      throw new DesktopError("ONNX_COMPONENT_REQUIRED", "请在安装模型或建立索引时安装本地推理组件");
+    }
+  }
+
+  async function prepareOnnx(mode) {
+    if (!onnxComponent || onnxComponent.ready()) return;
+    const window = getWindow();
+    let choice = mode;
+    if (choice === undefined) {
+      const picked = await dialog.showMessageBox(window, {
+        type: "question",
+        message: "安装本地推理组件",
+        detail: "在线下载约 108 MiB，也可导入官方组件包。",
+        buttons: ["在线下载", "导入组件包", "取消"],
+        defaultId: 0,
+        cancelId: 2,
+      });
+      choice = picked.response;
+    }
+    if (choice === 2) return requireOnnx();
+    let archive;
+    if (choice === 1) {
+      const picked = await dialog.showOpenDialog(window, {
+        title: "选择 onnxruntime-node-1.30.0.tgz",
+        properties: ["openFile"],
+        filters: [{ name: "TGZ", extensions: ["tgz"] }],
+      });
+      if (picked.canceled) return requireOnnx();
+      archive = picked.filePaths[0];
+    }
+    try {
+      await onnxComponent.install(archive);
+    } catch {
+      throw new DesktopError("ONNX_COMPONENT_INSTALL_FAILED", "本地推理组件安装失败，请重试或重新导入官方组件包");
+    }
+  }
+
+  function translationStatus() {
+    const status = offlineTranslation.getStatus();
+    return { ...status, ready: status.ready && (!onnxComponent || onnxComponent.ready()) };
+  }
+
+  handle(channels.offlineTranslationInstall, async () => {
+    const window = getWindow();
+    if (translationStatus().ready) return translationStatus();
+    const choice = await dialog.showMessageBox(window, {
+      type: "question",
+      message: "安装离线翻译模型",
+      detail: onnxComponent && !onnxComponent.ready()
+        ? "首次下载翻译模型和推理组件约 225 MiB，也可离线导入。"
+        : "在线下载约 117 MiB，也可选择已有模型文件夹。",
+      buttons: ["在线下载", "导入文件夹", "取消"],
+      defaultId: 0,
+      cancelId: 2,
+    });
+    if (choice.response === 2) return translationStatus();
+    let directory;
+    if (choice.response === 1) {
+      const picked = await dialog.showOpenDialog(window, {
+        title: "选择包含 config.json 的离线翻译模型文件夹",
+        properties: ["openDirectory"],
+      });
+      if (picked.canceled) return translationStatus();
+      directory = picked.filePaths[0];
+    }
+    await prepareOnnx(choice.response);
+    try {
+      await offlineTranslation.installModel(directory);
+    } catch {
+      throw new DesktopError("OFFLINE_TRANSLATION_INSTALL_FAILED", directory
+        ? "导入失败，请选择完整的离线翻译模型文件夹"
+        : "离线翻译模型下载或校验失败，请重试");
+    }
+    return translationStatus();
+  });
+  handle(channels.offlineTranslationGetStatus, async () => translationStatus());
+  handle(channels.offlineTranslationTranslate, async (_event, payload) => {
+    requireOnnx();
+    return offlineTranslation.translate(payload);
+  });
 
   handle(channels.filesSelectExportDirectory, async (event) => {
     const window = getWindow();
@@ -203,24 +284,45 @@ export function registerDesktopIpc({
 
   handle(channels.localImageSearchGetModelStatus, async (_event, payload) => localImageSearch.getModelStatus(payload));
   handle(channels.localImageSearchListModels, async () => localImageSearch.listModels());
-  handle(channels.localImageSearchValidateModel, async (_event, payload) => localImageSearch.validateModel(payload));
-  handle(channels.localImageSearchDownloadModel, async (_event, payload) => localImageSearch.downloadModel(payload));
+  handle(channels.localImageSearchValidateModel, async (_event, payload) => {
+    await prepareOnnx();
+    return localImageSearch.validateModel(payload);
+  });
+  handle(channels.localImageSearchDownloadModel, async (_event, payload) => {
+    await prepareOnnx();
+    return localImageSearch.downloadModel(payload);
+  });
   handle(channels.localImageSearchCancelModelDownload, async (_event, payload) => localImageSearch.cancelModelDownload(payload));
-  handle(channels.localImageSearchImportModel, async (_event, payload) => localImageSearch.importModel(payload));
+  handle(channels.localImageSearchImportModel, async (_event, payload) => {
+    await prepareOnnx();
+    return localImageSearch.importModel(payload);
+  });
   handle(channels.localImageSearchExportModel, async (_event, payload) => localImageSearch.exportModel(payload));
   handle(channels.localImageSearchRemoveModel, async (_event, payload) => localImageSearch.removeModel(payload));
   handle(channels.localImageSearchSetActiveModel, async (_event, payload) => localImageSearch.setActiveModel(payload));
-  handle(channels.localImageSearchGetEngineStatus, async (_event, payload) => localImageSearch.getEngineStatus(payload));
+  handle(channels.localImageSearchGetEngineStatus, async (_event, payload) => {
+    requireOnnx();
+    return localImageSearch.getEngineStatus(payload);
+  });
   handle(channels.localImageSearchListLibraries, async () => localImageSearch.listLibraries());
   handle(channels.localImageSearchListAssetFolders, async (_event, payload) => localImageSearch.listAssetFolders(payload));
   handle(channels.localImageSearchListAssets, async (_event, payload) => localImageSearch.listAssets(payload));
   handle(channels.localImageSearchCreateLibrary, async () => localImageSearch.createLibrary());
   handle(channels.localImageSearchRemoveLibrary, async (_event, payload) => localImageSearch.removeLibrary(payload));
-  handle(channels.localImageSearchStartIndex, async (_event, payload) => localImageSearch.startIndex(payload));
+  handle(channels.localImageSearchStartIndex, async (_event, payload) => {
+    await prepareOnnx();
+    return localImageSearch.startIndex(payload);
+  });
   handle(channels.localImageSearchGetJobStatus, async (_event, payload) => localImageSearch.getJobStatus(payload));
   handle(channels.localImageSearchCancelJob, async (_event, payload) => localImageSearch.cancelJob(payload));
-  handle(channels.localImageSearchSearchByImage, async (_event, payload) => localImageSearch.searchByImage(payload));
-  handle(channels.localImageSearchSearchByText, async (_event, payload) => localImageSearch.searchByText(payload));
+  handle(channels.localImageSearchSearchByImage, async (_event, payload) => {
+    requireOnnx();
+    return localImageSearch.searchByImage(payload);
+  });
+  handle(channels.localImageSearchSearchByText, async (_event, payload) => {
+    requireOnnx();
+    return localImageSearch.searchByText(payload);
+  });
   handle(channels.localImageSearchGetThumbnail, async (_event, payload) => localImageSearch.getThumbnail(payload));
   handle(channels.localImageSearchOpenResult, async (_event, payload) => localImageSearch.openResult(payload));
   handle(channels.localImageSearchRevealResult, async (_event, payload) => localImageSearch.revealResult(payload));

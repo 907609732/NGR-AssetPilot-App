@@ -144,14 +144,14 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
     const cloudExpected = fs.existsSync(path.join(projectRoot, "build/generated/managed-provider-config.json"));
     assert.equal(Boolean(cloudResource), cloudExpected);
     assert.equal(config.extraResources.length, cloudExpected ? 3 : 2);
+    assert.ok(config.extraResources.some(({ to }) => to === "finder-builtin/resources/app.asar"));
     const trayIcon = config.extraResources.find(({ to }) => to === "tray-icon.ico");
     assert.match(trayIcon.from, /build[\\/]icon\.ico$/);
-    const offlineTranslation = config.extraResources.find(({ to }) => to === "offline-translation");
-    assert.match(offlineTranslation.from, /build[\\/]generated[\\/]offline-translation$/);
+    assert.equal(config.extraResources.some(({ to }) => to === "offline-translation"), false);
     assert.ok(config.files.includes("!build/generated/**/*"));
     assert.ok(config.files.includes("!app/API配置文件/**/*"));
     assert.ok(config.files.includes("!desktop/services/test-secrets.mjs"));
-    assert.ok(config.asarUnpack.some((pattern) => pattern.includes("onnxruntime-node/bin")));
+    assert.ok(config.files.includes("!node_modules/onnxruntime-node/bin/**/*"));
   }
   assert.deepEqual(prod.publish, [{
     provider: "github",

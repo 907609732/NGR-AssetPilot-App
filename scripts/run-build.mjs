@@ -5,7 +5,6 @@ import { generateReleaseMetadata } from "./generate-release-metadata.mjs";
 import { createProjectEnvironment, projectPaths, projectRoot } from "./project-env.mjs";
 import { scanArtifacts } from "./scan-package-secrets.mjs";
 import { prepareManagedProviderConfig } from "./prepare-managed-provider-config.mjs";
-import { prepareOfflineTranslationModel } from "./prepare-offline-translation-model.mjs";
 import { verifyWindowsSignatures } from "./verify-windows-signature.mjs";
 import releasePolicyFor from "../build/release-policy.cjs";
 import { writeExtensionReport } from "./check-extensions.mjs";
@@ -81,7 +80,6 @@ try {
     return null;
   });
   requireProductionSigningEnvironment(process.env);
-  await prepareOfflineTranslationModel();
   if (!releasePolicy.offlineTranslationOnly) prepareManagedProviderConfig({ required: edition === "prod" });
   safelyResetOutput(artifactDirectory);
   if (extensionReport) {

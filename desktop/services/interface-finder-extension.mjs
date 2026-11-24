@@ -12,8 +12,8 @@ const childOf = (root, file) => file === root || file.startsWith(`${root}${path.
 const cancelled = () => Object.assign(new Error("扩展处理已停止"), { code: "FINDER_CANCELLED" });
 
 export class InterfaceFinderExtension {
-  constructor({ appDataPath, userDataPath = appDataPath, dialog, getWindow, sessionFactory, bundledFinder, loadRuntime = entry => require(entry), platform = process.platform, arch = process.arch }) {
-    Object.assign(this, { appDataPath, userDataPath, dialog, getWindow, sessionFactory, bundledFinder, loadRuntime, platform, arch });
+  constructor({ appDataPath, userDataPath = appDataPath, dialog, getWindow, sessionFactory, componentRoot, bundledFinder, loadRuntime = entry => require(entry), platform = process.platform, arch = process.arch }) {
+    Object.assign(this, { appDataPath, userDataPath, dialog, getWindow, sessionFactory, componentRoot, bundledFinder, loadRuntime, platform, arch });
     this.installRoot = path.join(appDataPath, "NGR", "extensions", FINDER_ID);
     this.bindingFile = path.join(this.installRoot, "current.json");
     this.verificationFile = path.join(this.installRoot, "verification.json");
@@ -193,7 +193,7 @@ export class InterfaceFinderExtension {
     this.checkActive();
     if (typeof module?.createFinderRuntime !== "function") throw new Error("扩展未提供兼容的工作台接口，请重新导入正式扩展包");
     let runtime;
-    runtime = await module.createFinderRuntime({ hosted: true, root: path.join(entry.root, "resources", "app.asar"), resourcesRoot: path.join(entry.root, "resources"), profileRoot: path.join(this.userDataPath, "extensions-data", FINDER_ID), cacheRoot: path.join(this.userDataPath, "extensions-cache", FINDER_ID), inheritSettingsFile: path.join(this.appDataPath, "QuickInterfaceFinder", "settings.json"), session: this.sessionFactory?.(), version: entry.version, parentWindow: this.getWindow(), onClosed: () => { if (this.runtime === runtime) this.runtime = null; } });
+    runtime = await module.createFinderRuntime({ hosted: true, componentRoot: this.componentRoot, root: path.join(entry.root, "resources", "app.asar"), resourcesRoot: path.join(entry.root, "resources"), profileRoot: path.join(this.userDataPath, "extensions-data", FINDER_ID), cacheRoot: path.join(this.userDataPath, "extensions-cache", FINDER_ID), inheritSettingsFile: path.join(this.appDataPath, "QuickInterfaceFinder", "settings.json"), session: this.sessionFactory?.(), version: entry.version, parentWindow: this.getWindow(), onClosed: () => { if (this.runtime === runtime) this.runtime = null; } });
     if (!runtime || !["start", "show", "dispose", "getWindow"].every(key => typeof runtime[key] === "function")) throw new Error("扩展工作台接口不完整");
     this.runtime = runtime;
     try { this.checkActive(); await runtime.start(); this.checkActive(); }

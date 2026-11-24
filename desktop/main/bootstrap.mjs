@@ -15,6 +15,8 @@ import { ArtHubFolders } from "../services/arthub-folders.mjs";
 import { NetworkClient } from "../services/network-client.mjs";
 import { NetworkDiagnosticsService } from "../services/network-diagnostics-service.mjs";
 import { OfflineTranslationService } from "../services/offline-translation/service.mjs";
+import { createOnnxInstaller } from "../services/onnx-installer.mjs";
+import { createTranslationInstaller } from "../services/offline-translation/installer.mjs";
 import { ProviderRegistry } from "../services/provider-registry.mjs";
 import { RuntimeLogger } from "../services/runtime-logger.mjs";
 import { UpdaterController } from "../services/updater-controller.mjs";
@@ -229,6 +231,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     .then(module => module.default)
     .catch(error => { if (error.code !== "ERR_MODULE_NOT_FOUND") throw error; });
   const finderExtension = new InterfaceFinderExtension({
+    componentRoot: e2eUserDataPath ? path.join(userDataPath, "finder-component-test") : undefined,
     bundledFinder: app.isPackaged || existsSync(path.join(bundledFinderRoot, "resources", "app.asar"))
       ? createBundledFinder(bundledFinderRoot, bundledFinderLock)
       : undefined,
@@ -270,11 +273,20 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     },
   });
   await networkDiagnostics.initialize();
+  const onnxComponent = app.isPackaged ? createOnnxInstaller(
+    path.join(userDataPath, "components", "onnxruntime"),
+    net.fetch.bind(net),
+  ) : undefined;
+  if (onnxComponent) process.env.NGR_ONNX_COMPONENT_DIRECTORY = onnxComponent.directory;
+  else delete process.env.NGR_ONNX_COMPONENT_DIRECTORY;
+  const offlineTranslationInstaller = createTranslationInstaller(
+    path.join(userDataPath, "components", "offline-translation"),
+    { fetcher: net.fetch.bind(net) },
+  );
   const offlineTranslation = new OfflineTranslationService({
-    modelLibraryRoot: app.isPackaged
-      ? path.join(process.resourcesPath, "offline-translation")
-      : path.resolve(moduleDirectory, "../../build/generated/offline-translation"),
+    modelLibraryRoot: offlineTranslationInstaller.library,
   });
+  offlineTranslation.installModel = offlineTranslationInstaller.install;
   const lifecycle = new QuitCoordinator({ app, channel: channels.appBeforeQuit });
   lifecycle.addFinalizer("finder-extension", () => finderExtension.dispose());
   const keepAwake = new KeepAwakeService({ userDataPath, powerSaveBlocker: electron.powerSaveBlocker, powerMonitor: electron.powerMonitor });
@@ -398,6 +410,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     networkClient,
     networkDiagnostics,
     offlineTranslation,
+    onnxComponent,
     directoryTokens,
     backupService,
     updater,

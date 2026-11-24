@@ -1,5 +1,7 @@
-import * as ort from "onnxruntime-node";
-import { AutoTokenizer, env } from "@huggingface/transformers";
+import "../onnx-binding.mjs";
+
+const ort = await import("onnxruntime-node");
+const { AutoTokenizer, env } = await import("@huggingface/transformers");
 
 env.allowLocalModels = true;
 env.allowRemoteModels = false;

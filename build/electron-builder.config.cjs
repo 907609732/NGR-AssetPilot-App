@@ -55,11 +55,6 @@ const extraResources = [
     from: path.join(projectRoot, "build", "icon.ico"),
     to: "tray-icon.ico",
   },
-  {
-    from: path.join(projectRoot, "build", "generated", "offline-translation"),
-    to: "offline-translation",
-    filter: ["**/*"],
-  },
 ];
 const finderLockPath = path.join(projectRoot, "build", "finder-builtin.lock.json");
 if (fs.existsSync(finderLockPath)) {
@@ -92,7 +87,6 @@ module.exports = {
   },
   asar: true,
   asarUnpack: [
-    "node_modules/onnxruntime-node/bin/**/*",
     "node_modules/sharp/**/*",
     "node_modules/@img/**/*",
     "node_modules/playwright-core/**/*",
@@ -124,9 +118,7 @@ module.exports = {
     "!build/generated/**/*",
     "!desktop/services/test-secrets.mjs",
     "!node_modules/onnxruntime-web/**/*",
-    "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**/*",
-    "!node_modules/onnxruntime-node/bin/napi-v6/linux/**/*",
-    "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**/*",
+    "!node_modules/onnxruntime-node/bin/**/*",
     // TAPD uses the Node WASM entry; omit browser/ASM/worker/debug builds and ZIP archives.
     "!node_modules/sql.js/dist/!(sql-wasm.js|sql-wasm.wasm)",
     "!**/*.map",

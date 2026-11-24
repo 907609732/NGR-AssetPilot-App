@@ -56,7 +56,7 @@ export class OfflineTranslationService {
       throw new DesktopError("OFFLINE_TRANSLATION_DIRECTION_UNSUPPORTED", "当前离线模型仅支持中文翻译为英文");
     }
     if (!this.getStatus().ready) {
-      throw new DesktopError("OFFLINE_TRANSLATION_MODEL_MISSING", "内置离线翻译模型不完整，请重新安装软件");
+      throw new DesktopError("OFFLINE_TRANSLATION_MODEL_MISSING", "请先安装离线翻译模型");
     }
     const task = this.queue.then(() => {
       if (this.disposed) {

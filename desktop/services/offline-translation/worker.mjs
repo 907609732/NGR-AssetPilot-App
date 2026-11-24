@@ -1,6 +1,8 @@
+import "../onnx-binding.mjs";
 import path from "node:path";
 import { parentPort, workerData } from "node:worker_threads";
-import { env, pipeline } from "@huggingface/transformers";
+
+const { env, pipeline } = await import("@huggingface/transformers");
 
 if (!parentPort) throw new Error("OFFLINE_TRANSLATION_WORKER_REQUIRED");
 

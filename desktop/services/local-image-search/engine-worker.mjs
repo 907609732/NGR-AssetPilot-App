@@ -1,3 +1,4 @@
+import "../onnx-binding.mjs";
 import { parentPort as threadParentPort, workerData as threadWorkerData } from "node:worker_threads";
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
@@ -8,8 +9,6 @@ import { performance } from "node:perf_hooks";
 import process from "node:process";
 import path from "node:path";
 import sharp from "sharp";
-import * as ort from "onnxruntime-node";
-import { AutoTokenizer, env } from "@huggingface/transformers";
 import {
   DEFAULT_RESULT_LIMIT,
   EMBEDDING_DIMENSIONS,
@@ -19,6 +18,9 @@ import {
 import { exactTopK } from "./vector-search.mjs";
 import { BUILTIN_MODEL_FINGERPRINT } from "./model-manager.mjs";
 import { createIndexExecutionProfile } from "./execution-profile.mjs";
+
+const ort = await import("onnxruntime-node");
+const { AutoTokenizer, env } = await import("@huggingface/transformers");
 
 env.allowRemoteModels = false;
 env.allowLocalModels = true;

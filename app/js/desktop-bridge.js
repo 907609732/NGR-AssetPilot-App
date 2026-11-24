@@ -322,6 +322,7 @@
   });
 
   const offlineTranslation = Object.freeze({
+    install: () => invoke("offlineTranslation.install"),
     isAvailable: () => hasCapability("offlineTranslation.translate"),
     getStatus: () => invoke("offlineTranslation.getStatus"),
     translate: (request) => invoke("offlineTranslation.translate", request),

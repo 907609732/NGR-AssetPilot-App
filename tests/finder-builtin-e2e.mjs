@@ -38,14 +38,16 @@ try {
     const require = process.getBuiltinModule('node:module').createRequire(path.join(app.getAppPath(),'package.json'));
     const sharp = require('sharp');
     const pixels = await sharp({create:{width:1,height:1,channels:3,background:'white'}}).raw().toBuffer();
-    const onnx = require('onnxruntime-node');
-    return {sqliteValue, sharpBytes:pixels.length, onnx:onnx.env.versions,
+    const fs = process.getBuiltinModule('node:fs');
+    const onnxBundled = fs.existsSync(path.join(path.dirname(require.resolve('onnxruntime-node')), '../bin/napi-v6/win32/x64/onnxruntime_binding.node'));
+    return {sqliteValue, sharpBytes:pixels.length, onnxBundled,
 
     packaged: app.isPackaged, arch: process.arch, electron: process.versions.electron,
     node: process.versions.node, modules: process.versions.modules, napi: process.versions.napi};
   });
   assert.equal(versions.packaged, Boolean(packagedExe));
   assert.equal(versions.sqliteValue, 42);
+  if (packagedExe) assert.equal(versions.onnxBundled, false);
   assert.equal(versions.sharpBytes, 3);
   console.log(versions);
 } finally {

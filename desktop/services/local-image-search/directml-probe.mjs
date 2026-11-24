@@ -1,6 +1,8 @@
+import "../onnx-binding.mjs";
 import { performance } from "node:perf_hooks";
 import path from "node:path";
-import * as ort from "onnxruntime-node";
+
+const ort = await import("onnxruntime-node");
 
 const [, , visionPath, rawDeviceId, rawProbeSpec] = process.argv;
 const deviceId = Number(rawDeviceId);

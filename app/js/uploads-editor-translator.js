@@ -313,7 +313,12 @@ async function ensureTranslationProviderReady(options = {}) {
       }
       const status = await window.NgrDesktopBridge.offlineTranslation.getStatus();
       if (status?.ready) return true;
-      throw new Error("内置离线翻译模型不完整，请重新安装软件");
+      if (options.offerConfiguration) {
+        els.translatorOutput.textContent = "正在准备离线翻译模型…";
+        const installed = await window.NgrDesktopBridge.offlineTranslation.install();
+        if (installed?.ready) return true;
+      }
+      throw new Error("请安装离线翻译模型后重试");
     } catch (error) {
       if (options.revealSettings) revealTranslatorSettings();
       els.translatorOutput.textContent = error?.message || "内置离线翻译模型不可用";
