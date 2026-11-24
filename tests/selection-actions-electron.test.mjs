@@ -88,6 +88,7 @@ test("长列表可在底部勾选删除，记录热区与开机启动系统接�
     await namingRows.nth(22).locator('input[type="checkbox"]').check();
     await namingRows.nth(23).locator('input[type="checkbox"]').check();
     await page.locator("#floatingRemoveSelected").waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.querySelector("#floatingSelectionActions")?.textContent.includes("已选 2 张"));
     assert.match(await page.locator("#floatingSelectionActions").innerText(), /已选 2 张/);
     await page.locator('[data-batch-kind="project"]').fill("BatchProject");
     await page.locator('[data-batch-kind="project"]').press("Enter");
