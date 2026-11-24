@@ -145,6 +145,26 @@ test("顶部教程合并为按版本和模块分类的软件内教程中心", { 
     await page.screenshot({ path: path.join(evidence, "tutorial-center-small.png") });
     await page.keyboard.press("Escape");
     assert.equal(await page.locator("#tutorialCenterOverlay").isHidden(), true);
+
+    for (const [view, bvid] of [["work", "BV1mAxg63En7"], ["detect", "BV1vyn96eELU"]]) {
+      await page.evaluate((name) => window.NgrTutorialActions.showView(name), view);
+      await page.locator("#tutorialCenterEntry").click();
+      assert.equal(await page.locator("[data-tutorial-external]").getAttribute("href"), `https://www.bilibili.com/video/${bvid}/`);
+      assert.equal(await page.locator("#tutorialCenterNav").isVisible(), false);
+      assert.equal(await page.locator(".tutorial-center-nav-item").count(), 0);
+      assert.equal(await page.locator(".tutorial-center-toolbar").isVisible(), false);
+      assert.equal(await page.locator("#tutorialCenterContent h3").innerText(), view === "work" ? "图片命名" : "UI 切图检测");
+      await page.screenshot({ path: path.join(evidence, `${view}-scoped.png`) });
+      await page.locator("#tutorialCenterClose").click();
+      await page.locator("#tutorialCenterEntry").click();
+      assert.equal(await page.locator("#tutorialCenterSearch").inputValue(), "");
+      assert.equal(await page.locator("[data-tutorial-external]").getAttribute("href"), `https://www.bilibili.com/video/${bvid}/`);
+      await page.locator("#tutorialCenterClose").click();
+    }
+    await page.evaluate(() => window.NgrTutorialActions.showView("home"));
+    await page.locator("#tutorialCenterEntry").click();
+    assert.equal(await page.locator("#tutorialCenterNav").isVisible(), true);
+    assert.equal(await page.locator(".tutorial-center-nav-item").count(), 11);
   } finally {
     await app.close();
   }

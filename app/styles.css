@@ -2719,6 +2719,9 @@ button:disabled {
 .tutorial-center-nav-item strong { font-size: 13px; }
 .tutorial-center-nav-item small { margin-top: 4px; color: var(--muted); font-size: 11px; }
 .tutorial-center-content { min-width: 0; overflow-y: auto; padding: 24px clamp(20px, 4vw, 48px) 34px; outline: 0; }
+.tutorial-center-scoped .tutorial-center-toolbar,
+.tutorial-center-scoped .tutorial-center-nav { display: none; }
+.tutorial-center-scoped .tutorial-center-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .tutorial-module-head { display: flex; align-items: center; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .tutorial-module-icon { flex: 0 0 54px; width: 54px; height: 54px; font-size: 20px; }
 .tutorial-module-head h3 { margin: 5px 0 3px; font-size: 24px; }

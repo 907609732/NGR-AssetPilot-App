@@ -205,6 +205,7 @@
   const version = document.querySelector("#tutorialCenterVersion");
   const quickTour = document.querySelector("#tutorialCenterQuickTour");
   let activeId = modules[0].id;
+  let scopedModuleId = null;
 
   function normalized(value) {
     return String(value || "").toLocaleLowerCase("zh-CN").replace(/\s+/g, "");
@@ -218,6 +219,13 @@
 
   function renderNav() {
     stopVideo();
+    if (scopedModuleId) {
+      nav.replaceChildren();
+      const module = modules.find((item) => item.id === scopedModuleId);
+      status.textContent = `${module.title}使用教程`;
+      renderModule(module);
+      return;
+    }
     const query = normalized(search.value);
     const visible = modules.filter((module) => matches(module, query));
     nav.replaceChildren();
@@ -314,10 +322,22 @@
   }
 
   function open() {
+    const viewId = document.querySelector(".view.active")?.id;
+    scopedModuleId = {
+      workView: "naming", detectView: "detection", detectionSettingsView: "detection",
+      localImageSearchView: "local-search", localImageSearchSettingsView: "local-search",
+      rulesView: "rules", apiSettingsView: "api", generalSettingsView: "settings-data",
+    }[viewId] || null;
+    activeId = scopedModuleId || modules[0].id;
+    search.value = "";
+    overlay.classList.toggle("tutorial-center-scoped", Boolean(scopedModuleId));
+    const module = modules.find((item) => item.id === scopedModuleId);
+    document.querySelector("#tutorialCenterTitle").textContent = module ? `${module.title}使用教程` : "NGR AssetPilot 使用教程";
+    document.querySelector(".tutorial-center-head p").textContent = module ? (module.video ? "观看视频或跟着步骤操作。" : "跟着步骤操作即可。") : "选择你要使用的功能，跟着步骤操作即可。";
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
     renderNav();
-    window.setTimeout(() => search.focus(), 0);
+    window.setTimeout(() => (scopedModuleId ? content : search).focus(), 0);
   }
 
   function close() {
