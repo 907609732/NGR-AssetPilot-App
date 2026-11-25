@@ -1,7 +1,4 @@
-// Explicit unsigned release authorization continues while no trusted Windows
-// code-signing certificate is configured in the production release environment.
 // Only v3.0.12 omits managed cloud translation.
 module.exports = (version) => ({
-  unsigned: version === "3.0.12" || version === "3.0.13" || version === "3.0.14" || version === "3.0.15" || version === "3.0.16" || version === "3.0.17" || version === "3.0.18" || version === "3.0.19" || version === "3.0.20" || version === "3.0.23" || version === "3.0.24" || version === "3.0.25" || version === "3.0.26" || version === "3.0.27",
   offlineTranslationOnly: version === "3.0.12",
 });

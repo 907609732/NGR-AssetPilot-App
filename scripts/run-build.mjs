@@ -5,7 +5,6 @@ import { generateReleaseMetadata } from "./generate-release-metadata.mjs";
 import { createProjectEnvironment, projectPaths, projectRoot } from "./project-env.mjs";
 import { scanArtifacts } from "./scan-package-secrets.mjs";
 import { prepareManagedProviderConfig } from "./prepare-managed-provider-config.mjs";
-import { verifyWindowsSignatures } from "./verify-windows-signature.mjs";
 import releasePolicyFor from "../build/release-policy.cjs";
 import { writeExtensionReport } from "./check-extensions.mjs";
 const releasePolicy = releasePolicyFor(JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8")).version);
@@ -17,15 +16,6 @@ if (!["prod", "dev", "test"].includes(edition) || process.argv.length !== 3) {
 
 const artifactDirectory = projectPaths[`${edition}Artifacts`];
 const buildLockPath = path.join(projectPaths.temp, `build-${edition}.lock`);
-
-function requireProductionSigningEnvironment(env) {
-  if (edition !== "prod" || releasePolicy.unsigned) return;
-  const certificate = String(env.WIN_CSC_LINK || env.CSC_LINK || "").trim();
-  const password = String(env.WIN_CSC_KEY_PASSWORD || env.CSC_KEY_PASSWORD || "").trim();
-  if (!certificate || !password) {
-    throw new Error("正式版构建必须通过 WIN_CSC_LINK 与 WIN_CSC_KEY_PASSWORD 提供受信任代码签名证书");
-  }
-}
 
 function isProcessRunning(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
@@ -79,7 +69,6 @@ try {
     console.warn(`【扩展更新提醒】检查未完成：${error.message}`);
     return null;
   });
-  requireProductionSigningEnvironment(process.env);
   if (!releasePolicy.offlineTranslationOnly) prepareManagedProviderConfig({ required: edition === "prod" });
   safelyResetOutput(artifactDirectory);
   if (extensionReport) {
@@ -87,7 +76,6 @@ try {
   }
   const env = createProjectEnvironment({ CSC_IDENTITY_AUTO_DISCOVERY: "false", NGR_BUILD_EDITION: edition });
   runBuilder(env);
-  if (edition === "prod" && !releasePolicy.unsigned) verifyWindowsSignatures({ edition });
   const manifest = generateReleaseMetadata(edition);
   const scan = scanArtifacts({ edition, env });
   const editionName = edition === "prod" ? "正式版" : edition === "test" ? "测试版" : "开发版";

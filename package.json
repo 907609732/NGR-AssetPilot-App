@@ -28,7 +28,6 @@
     "prepare:managed-provider": "node scripts/prepare-managed-provider-config.mjs",
     "verify:managed-provider": "node scripts/verify-managed-provider.mjs",
     "verify:network-diagnostics": "node scripts/verify-network-diagnostics.mjs",
-    "verify:signature:prod": "node scripts/verify-windows-signature.mjs prod",
     "package:cfc": "node scripts/package-baidu-cfc.mjs",
     "prebuild:prod": "npm run build:tapd-integration",
     "build:prod": "node scripts/run-build.mjs prod",

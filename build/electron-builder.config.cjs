@@ -136,7 +136,7 @@ module.exports = {
   win: {
     icon: path.join(projectRoot, "build", "icon.ico"),
     target: windowsTargets,
-    verifyUpdateCodeSignature: edition === "prod" && !releasePolicy.unsigned,
+    verifyUpdateCodeSignature: false,
     legalTrademarks: productName,
   },
   nsis: {

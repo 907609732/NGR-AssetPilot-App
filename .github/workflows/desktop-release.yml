@@ -25,8 +25,6 @@ jobs:
       TMP: ${{ github.workspace }}\.tmp
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       NGR_BAIDU_CFC_ENDPOINT: ${{ vars.NGR_BAIDU_CFC_ENDPOINT }}
-      WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-      WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
