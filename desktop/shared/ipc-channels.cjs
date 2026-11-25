@@ -86,6 +86,8 @@ module.exports = Object.freeze({
   localImageSearchGetThumbnail: "ngr:local-image-search:get-thumbnail",
   localImageSearchOpenResult: "ngr:local-image-search:open-result",
   localImageSearchRevealResult: "ngr:local-image-search:reveal-result",
+  localToolsAction: "ngr:local-tools:action",
+  localAssetReply: "ngr:local-asset:reply",
   appBeforeQuit: "ngr:app:before-quit",
   appReadyToQuit: "ngr:app:ready-to-quit",
 });

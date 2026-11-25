@@ -79,6 +79,7 @@
         providerId: String(providerId || ""),
         operation: String(operation || ""),
         body,
+        ...(options.expectedProviderBaseUrl ? { expectedProviderBaseUrl: options.expectedProviderBaseUrl } : {}),
         timeoutMs: Number(options.timeoutMs || 0) || undefined,
       });
       return createDesktopResponse(result);

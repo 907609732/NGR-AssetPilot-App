@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>AI资源领航</title>
+  <link rel="stylesheet" href="/local-web.css">
+  <script type="module" src="/local-web.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div><strong>AI资源领航</strong><span>NGR AssetPilot</span></div>
+    </div>
+    <nav id="navigation" aria-label="功能导航" hidden>
+      <a href="#finder" data-route="finder">快速找界面</a>
+      <a href="#naming" data-route="naming">AI 自动命名</a>
+      <a href="#slice" data-route="slice">UI 切图检测</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="connection" class="connection" aria-live="polite">
+      <h1 id="connection-title">正在连接 AI资源领航</h1>
+      <p id="connection-message">请稍候。</p>
+      <button id="retry-connection" type="button" hidden>重试连接</button>
+    </section>
+
+    <section id="finder-page" class="finder-page" aria-label="快速找界面" hidden>
+      <iframe id="finder-frame" title="快速找界面" referrerpolicy="no-referrer"></iframe>
+    </section>
+
+    <section id="asset-page" class="asset-page" aria-labelledby="page-title" hidden>
+      <div class="page-heading">
+        <h1 id="page-title"></h1>
+        <p id="page-description"></p>
+      </div>
+      <div class="workspace">
+        <section class="panel source-panel" aria-labelledby="source-title">
+          <h2 id="source-title">待处理文件</h2>
+          <div class="actions source-actions">
+            <button id="grant-files" type="button">选择文件</button>
+            <button id="grant-directory" type="button">选择文件夹</button>
+          </div>
+          <div id="source-contents" hidden>
+            <label class="field" for="source-select">文件来源</label>
+            <select id="source-select"></select>
+
+            <div class="source-selection">
+              <label class="check-label"><input id="select-all" type="checkbox"> 全选</label>
+              <span id="selection-count"></span>
+            </div>
+            <ul id="file-list" class="file-list" aria-label="待选文件"></ul>
+            <div id="pagination" class="pagination" hidden>
+              <button id="previous-files" type="button">上一页</button>
+              <span id="page-count"></span>
+              <button id="next-files" type="button">下一页</button>
+            </div>
+          </div>
+          <p id="source-status" class="status-text" role="status"></p>
+          <button id="retry-sources" type="button" hidden>重新读取文件</button>
+
+          <div class="task-controls">
+            <div id="naming-mode-field">
+              <label class="field" for="naming-mode">命名方式</label>
+              <select id="naming-mode">
+                <option value="ai">AI 视觉命名</option>
+                <option value="local">本地知识库命名</option>
+              </select>
+            </div>
+            <button id="start-job" class="primary" type="button" disabled></button>
+          </div>
+        </section>
+
+        <section class="panel results-panel" aria-labelledby="results-title">
+          <div class="results-heading">
+            <h2 id="results-title"></h2>
+            <button id="export-copies" type="button" hidden>导出命名副本</button>
+          </div>
+          <div id="job-progress" class="job-progress" hidden>
+            <div class="progress-details">
+              <span id="job-status"></span>
+              <span id="job-count"></span>
+            </div>
+            <progress id="progress-bar" aria-label="任务进度"></progress>
+            <p id="job-profile" class="status-text"></p>
+            <div class="actions">
+              <button id="cancel-job" class="danger" type="button" hidden>取消任务</button>
+              <button id="retry-job" type="button" hidden>刷新任务</button>
+            </div>
+          </div>
+          <p id="job-message" class="status-text" role="status"></p>
+          <div id="result-filters" class="actions filters" role="group" aria-label="筛选检测结果" hidden>
+            <button type="button" data-filter="all" aria-pressed="true"></button>
+            <button type="button" data-filter="issue" aria-pressed="false"></button>
+            <button type="button" data-filter="warning" aria-pressed="false"></button>
+            <button type="button" data-filter="pass" aria-pressed="false"></button>
+          </div>
+          <p id="empty-results" class="empty-results"></p>
+          <div id="result-table" class="result-table" hidden>
+            <table>
+              <thead id="result-head"></thead>
+              <tbody id="result-body"></tbody>
+            </table>
+          </div>
+          <p id="export-status" class="status-text" role="status"></p>
+          <ul id="export-errors" class="export-errors" hidden></ul>
+        </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

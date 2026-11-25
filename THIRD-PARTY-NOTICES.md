@@ -11,6 +11,8 @@ NGR AssetPilot 的“本地 AI 搜图”模块使用以下开源运行时。完�
 - `fflate` 0.8.3 — MIT License（工作区备份 ZIP 与有界分块处理）
 - `electron-log` 5.4.4 — MIT License（仅主进程本地轮转诊断日志，不上传日志）
 
+本机 MCP 接入使用 `@modelcontextprotocol/sdk` 1.32.2 和 `ajv` 8.17.1，均采用 MIT License。完整许可证随 npm 软件包提供。
+
 “TAPD 周报／月报”集成功能还使用以下开源组件；TAPD 登录状态、采集快照和人工调整仅保存在本机：
 
 - `playwright-core` 1.64.0 — Apache License 2.0（驱动用户本机已安装的专用 Chrome）

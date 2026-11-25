@@ -161,26 +161,54 @@ export class InterfaceFinderExtension {
   }
 
   async open() {
+    return this.openWorkspace({ visible: true });
+  }
+
+  async getLocalRuntime() {
+    if (!this.localAccess) throw new Error("快速找界面本机服务未开启");
+    const result = await this.openWorkspace({ visible: false });
+    if (!this.localAccess) throw new Error("快速找界面本机服务已关闭");
+    if (!result.launched || !this.runtime?.getLocalTools) throw new Error("快速找界面组件尚未就绪");
+    return this.runtime;
+  }
+
+  async setLocalAccess(enabled) {
+    this.localAccess = enabled;
+    if (!enabled) await this.pendingOpen?.catch(() => {});
+    if (!this.localAccess && this.runtime?.getWindow()?.isVisible?.() === false) {
+      const runtime = this.runtime;
+      this.runtime = null;
+      await runtime.dispose();
+    }
+  }
+
+  async openWorkspace({ visible }) {
     if (this.disposed) throw new Error("扩展管理已关闭");
     if (this.pendingInstall) throw new Error("扩展正在安装，请等待完成");
     if (this.pendingCheck) throw new Error("扩展正在检查，请等待完成");
-    if (this.pendingOpen) return this.pendingOpen;
+    if (this.pendingOpen) {
+      const alreadyVisible = this.pendingOpenVisible;
+      const result = await this.pendingOpen;
+      if (visible && !alreadyVisible && result.launched) await this.runtime?.show();
+      return result;
+    }
     this.startProgress("open", "verifying", "准备检查已安装扩展");
-    this.pendingOpen = this.openInstalled().catch(error => {
+    this.pendingOpenVisible = visible;
+    this.pendingOpen = this.openInstalled({ visible }).catch(error => {
       this.updateProgress({ phase: error.code === "FINDER_CANCELLED" ? "cancelled" : "error", stage: "工作台未打开", error: error.message });
       throw error;
     }).finally(() => { this.pendingOpen = null; });
     return this.pendingOpen;
   }
 
-  async openInstalled() {
+  async openInstalled({ visible = true } = {}) {
     const previous = this.runtime;
     if (previous && (!previous.getWindow() || previous.getWindow().isDestroyed())) {
       await previous.dispose();
       if (this.runtime === previous) this.runtime = null;
     }
     if (this.runtime) {
-      await this.runtime.show();
+      if (visible) await this.runtime.show();
       this.updateProgress({ phase: "complete", stage: "已打开工作台", state: "complete" });
       return { ...this.snapshot(), launched: true };
     }
@@ -192,8 +220,9 @@ export class InterfaceFinderExtension {
     const module = await this.loadRuntime(path.join(entry.root, ...FINDER_ENTRY.split("/")));
     this.checkActive();
     if (typeof module?.createFinderRuntime !== "function") throw new Error("扩展未提供兼容的工作台接口，请重新导入正式扩展包");
+    if (!visible && module.localAccessVersion !== 1) throw new Error("请更新快速找界面组件");
     let runtime;
-    runtime = await module.createFinderRuntime({ hosted: true, componentRoot: this.componentRoot, root: path.join(entry.root, "resources", "app.asar"), resourcesRoot: path.join(entry.root, "resources"), profileRoot: path.join(this.userDataPath, "extensions-data", FINDER_ID), cacheRoot: path.join(this.userDataPath, "extensions-cache", FINDER_ID), inheritSettingsFile: path.join(this.appDataPath, "QuickInterfaceFinder", "settings.json"), session: this.sessionFactory?.(), version: entry.version, parentWindow: this.getWindow(), onClosed: () => { if (this.runtime === runtime) this.runtime = null; } });
+    runtime = await module.createFinderRuntime({ hosted: true, background: !visible, keepAliveOnClose: () => Boolean(this.localAccess), componentRoot: this.componentRoot, root: path.join(entry.root, "resources", "app.asar"), resourcesRoot: path.join(entry.root, "resources"), profileRoot: path.join(this.userDataPath, "extensions-data", FINDER_ID), cacheRoot: path.join(this.userDataPath, "extensions-cache", FINDER_ID), inheritSettingsFile: path.join(this.appDataPath, "QuickInterfaceFinder", "settings.json"), session: this.sessionFactory?.(), version: entry.version, parentWindow: this.getWindow(), onClosed: () => { if (this.runtime === runtime) this.runtime = null; } });
     if (!runtime || !["start", "show", "dispose", "getWindow"].every(key => typeof runtime[key] === "function")) throw new Error("扩展工作台接口不完整");
     this.runtime = runtime;
     try { this.checkActive(); await runtime.start(); this.checkActive(); }

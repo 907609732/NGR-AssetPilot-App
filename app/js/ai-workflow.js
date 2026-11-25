@@ -277,16 +277,20 @@ function stopNaming() {
   showToast("正在终止命名");
 }
 
-async function requestAiRecommendations(asset, localRecommendations, signal) {
+async function requestAiRecommendations(asset, localRecommendations, signal, options = {}) {
   const cutImageUrl = await imageFileToDataUrl(asset.file, 768);
-  const referenceImageUrl = referenceFile && isRasterImage(referenceFile) ? await imageFileToDataUrl(referenceFile, 960) : "";
-  const prompt = buildAiPrompt(asset, localRecommendations);
-  const apiFormat = aiSettings.apiFormat || "responses";
+  const reference = Object.hasOwn(options, "reference") ? options.reference : referenceFile;
+  const referenceImageUrl = reference && isRasterImage(reference) ? await imageFileToDataUrl(reference, 960) : "";
+  const prompt = options.prompt ?? buildAiPrompt(asset, localRecommendations);
+  const providerSettings = options.providerSettings ?? aiSettings;
+  const { expectedProviderBaseUrl, strictNames } = options;
+  const apiFormat = providerSettings.apiFormat || "responses";
+  const model = providerSettings.model.trim() || "gpt-4.1-mini";
   const body = apiFormat === "chat"
-    ? buildChatPayload(prompt, cutImageUrl, referenceImageUrl)
-    : buildResponsesPayload(prompt, cutImageUrl, referenceImageUrl);
+    ? buildChatPayload(prompt, cutImageUrl, referenceImageUrl, model)
+    : buildResponsesPayload(prompt, cutImageUrl, referenceImageUrl, model);
   const response = window.NgrDesktopBridge?.isDesktopRuntime()
-    ? await window.NgrDesktopBridge.requestProvider(aiSettings.providerId, apiFormat, body, { signal })
+    ? await window.NgrDesktopBridge.requestProvider(providerSettings.providerId, apiFormat, body, { signal, expectedProviderBaseUrl })
     : await ngrFetch(buildAiEndpoint(apiFormat), {
         service: "ai",
         method: "POST",
@@ -303,10 +307,12 @@ async function requestAiRecommendations(asset, localRecommendations, signal) {
   }
   const data = await response.json();
   const text = extractResponseText(data);
-  return normalizeAiNames(parseAiNames(text), localRecommendations);
+  const names = normalizeAiNames(parseAiNames(text), strictNames ? [] : localRecommendations);
+  if (strictNames && !names.length) throw new Error("AI returned no usable names");
+  return names;
 }
 
-function buildResponsesPayload(prompt, cutImageUrl, referenceImageUrl) {
+function buildResponsesPayload(prompt, cutImageUrl, referenceImageUrl, model = aiSettings.model.trim() || "gpt-4.1-mini") {
   const content = [
     {
       type: "input_text",
@@ -326,7 +332,7 @@ function buildResponsesPayload(prompt, cutImageUrl, referenceImageUrl) {
     });
   }
   return {
-    model: aiSettings.model.trim() || "gpt-4.1-mini",
+    model,
     input: [
       {
         role: "user",
@@ -336,7 +342,7 @@ function buildResponsesPayload(prompt, cutImageUrl, referenceImageUrl) {
   };
 }
 
-function buildChatPayload(prompt, cutImageUrl, referenceImageUrl) {
+function buildChatPayload(prompt, cutImageUrl, referenceImageUrl, model = aiSettings.model.trim() || "gpt-4.1-mini") {
   const content = [
     {
       type: "text",
@@ -354,7 +360,7 @@ function buildChatPayload(prompt, cutImageUrl, referenceImageUrl) {
     });
   }
   return {
-    model: aiSettings.model.trim() || "gpt-4.1-mini",
+    model,
     messages: [
       {
         role: "user",

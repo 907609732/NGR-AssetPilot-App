@@ -4,12 +4,15 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, renameSync, rmSync, stat
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_URL } from "../shared/constants.mjs";
-import { errorCodeOnly } from "../shared/core.mjs";
+import { DesktopError, errorCodeOnly } from "../shared/core.mjs";
 import { BackupFileService } from "../services/backup-files.mjs";
 import { CredentialStore } from "../services/credential-store.mjs";
 import { DirectoryTokenStore } from "../services/directory-tokens.mjs";
 import { ExternalAppRegistry } from "../services/external-app-registry.mjs";
 import { InterfaceFinderExtension } from "../services/interface-finder-extension.mjs";
+import { LocalToolsServer } from "../services/local-tools-server.mjs";
+import { createLocalAssetTools } from "../services/local-asset-tools.mjs";
+import { createLocalAssetRendererRpc } from "../services/local-asset-renderer-rpc.mjs";
 import { createBundledFinder } from "../services/finder-builtin.mjs";
 import { ArtHubFolders } from "../services/arthub-folders.mjs";
 import { NetworkClient } from "../services/network-client.mjs";
@@ -288,7 +291,46 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   });
   offlineTranslation.installModel = offlineTranslationInstaller.install;
   const lifecycle = new QuitCoordinator({ app, channel: channels.appBeforeQuit });
-  lifecycle.addFinalizer("finder-extension", () => finderExtension.dispose());
+  const localAssetRpc = createLocalAssetRendererRpc({ getWindow: () => mainWindow });
+  const localAssets = createLocalAssetTools({ dialog, getWindow: () => mainWindow, runRenderer: localAssetRpc.run });
+  const localTools = new LocalToolsServer({
+    webRoot: path.join(appRoot, "local-web"),
+    assets: localAssets,
+    getFinder: () => finderExtension.getLocalRuntime(),
+    onAccessChanged: async state => {
+      const enabled = state.webEnabled || state.mcpEnabled;
+      if (!enabled) localAssets.reset?.();
+      await finderExtension.setLocalAccess(enabled);
+    },
+  });
+  const localToolsAction = async (request = {}) => {
+    try {
+      switch (request?.action) {
+        case "status": return localTools.status();
+        case "set": return await localTools.setEnabled(request.feature, request.enabled);
+        case "openBrowser": await shell.openExternal(localTools.browserLink()); break;
+        case "copyUrl": clipboard.writeText(localTools.status().mcpUrl); break;
+        case "copyToken": clipboard.writeText(localTools.getToken()); break;
+        case "rotateToken": localTools.rotateToken(); break;
+        case "grantSource": {
+          const state = localTools.status();
+          if (!state.mcpEnabled && !state.webEnabled) throw new DesktopError("LOCAL_TOOLS_DISABLED", "请先开启本机服务");
+          const grant = await localAssets.invoke("grant_sources", { kind: request.kind });
+          return { ...localTools.status(), granted: !grant.canceled };
+        }
+        default: throw new DesktopError("LOCAL_TOOLS_ACTION_INVALID", "未知的本机服务操作");
+      }
+      return localTools.status();
+    } catch (error) {
+      if (error.status) throw new DesktopError("LOCAL_TOOLS_ACTION_FAILED", error.message);
+      throw error;
+    }
+  };
+  lifecycle.addFinalizer("local-tools-and-finder", async () => {
+    await localTools.dispose();
+    localAssetRpc.dispose();
+    await Promise.allSettled([localAssets.dispose(), finderExtension.dispose()]);
+  });
   const keepAwake = new KeepAwakeService({ userDataPath, powerSaveBlocker: electron.powerSaveBlocker, powerMonitor: electron.powerMonitor });
   keepAwake.initialize();
   const autoStart = new AutoStartService({ app });
@@ -424,6 +466,8 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     dailyReport,
     tapdReport,
     finderExtension,
+    localToolsAction,
+    localAssetRpc,
     runtimeLogger,
   });
 

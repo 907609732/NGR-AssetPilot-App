@@ -664,6 +664,9 @@ export class ProviderRegistry {
     const providerId = String(input.providerId || "");
     const provider = this.providers.get(providerId);
     if (!provider) throw new DesktopError("PROVIDER_NOT_FOUND", "模型服务未配置或未获授权");
+    if (input.expectedProviderBaseUrl !== undefined && input.expectedProviderBaseUrl !== provider.baseUrl) {
+      throw new DesktopError("PROVIDER_ENDPOINT_CHANGED", "模型服务地址已修改，请重新确认发送");
+    }
     if (provider.managed && provider.id === BAIDU_CFC_ID) {
       if (input.operation !== "translate") {
         throw new DesktopError("PROVIDER_OPERATION_NOT_ALLOWED", "模型服务操作未获授权");

@@ -91,6 +91,10 @@ const channels = Object.freeze({
   localImageSearchGetThumbnail: "ngr:local-image-search:get-thumbnail",
   localImageSearchOpenResult: "ngr:local-image-search:open-result",
   localImageSearchRevealResult: "ngr:local-image-search:reveal-result",
+  localToolsAction: "ngr:local-tools:action",
+  localAssetReply: "ngr:local-asset:reply",
+  localAssetRequest: "ngr:local-asset:request",
+  localAssetCancel: "ngr:local-asset:cancel",
   appBeforeQuit: "ngr:app:before-quit",
   appReadyToQuit: "ngr:app:ready-to-quit",
 });
@@ -105,7 +109,22 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
+function subscribe(channel, callback) {
+  if (typeof callback !== "function") throw new TypeError("callback must be a function");
+  const listener = (_event, payload) => callback(payload);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
+
 const api = deepFreeze({
+  localTools: {
+    action: request => invoke(channels.localToolsAction, request),
+  },
+  localAssets: {
+    onRequest: callback => subscribe(channels.localAssetRequest, callback),
+    onCancel: callback => subscribe(channels.localAssetCancel, callback),
+    reply: result => invoke(channels.localAssetReply, result),
+  },
   finderExtension: {
     status: () => invoke(channels.finderExtensionStatus),
     detect: () => invoke(channels.finderExtensionDetect),

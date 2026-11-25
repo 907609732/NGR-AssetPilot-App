@@ -50,6 +50,10 @@
 
       <main>
         <section class="home-view view active" id="homeView">
+          <div class="local-tools-announcement" id="localToolsAnnouncement" hidden>
+            <span>现已支持MCP，让AI一句话调用软件内置功能</span>
+            <button type="button" id="localToolsHelp" aria-label="MCP 使用说明" title="MCP 使用说明">!</button>
+          </div>
           <button class="entry-button primary" id="workEntry" type="button">
             <span>开始命名</span>
             <small>上传切图和参考图，批量生成并导出名称</small>
@@ -1760,6 +1764,37 @@
       <p>扩展 0.7.0 当前单独分发，请导入收到的扩展 ZIP；旧独立版安装包不能导入。</p>
     </dialog>
 
+    <dialog id="localToolsDialog" class="utility-dialog local-tools-dialog" aria-labelledby="localToolsTitle">
+      <header>
+        <h2 id="localToolsTitle">连接 AI 或打开本机网页</h2>
+        <button type="button" class="ghost-action" id="localToolsClose" aria-label="关闭">×</button>
+      </header>
+      <section>
+        <label><input type="checkbox" id="localToolsMcp" /> 启用 MCP</label>
+        <div id="localToolsMcpConnect" hidden>
+          <code id="localToolsMcpUrl"></code>
+          <div class="local-tools-buttons">
+            <button type="button" class="ghost-action" id="localToolsCopyUrl">复制地址</button>
+            <button type="button" class="ghost-action" id="localToolsCopyToken">复制令牌</button>
+            <button type="button" class="ghost-action" id="localToolsRotate">重置令牌</button>
+          </div>
+        </div>
+        <ol>
+          <li>在同一台电脑的 AI 客户端添加 MCP 服务，选择 Streamable HTTP。</li>
+          <li>粘贴地址和 Bearer 令牌。</li>
+          <li>试一句「查背包系统的 Figma 链接」。也可以让 AI 命名或检测已授权的图片。</li>
+        </ol>
+        <div class="local-tools-buttons" id="localToolsGrant" hidden>
+          <button type="button" class="ghost-action" id="localToolsGrantFiles">授权图片文件</button>
+          <button type="button" class="ghost-action" id="localToolsGrantDirectory">授权图片文件夹</button>
+        </div>
+      </section>
+      <section>
+        <label><input type="checkbox" id="localToolsWeb" /> 启用本机网页</label>
+        <button type="button" class="primary-action" id="localToolsBrowser" disabled>在浏览器打开</button>
+      </section>
+      <p id="localToolsNotice" role="status"></p>
+    </dialog>
     <script src="vendor/fflate-0.8.3.min.js?v=V3.0.26"></script>
     <script src="historical-knowledge.js?v=V3.0.26"></script>
     <script src="js/config.js?v=V3.0.26"></script>
@@ -1797,5 +1832,7 @@
     <script src="js/figma-plugin-health.js?v=V3.0.26"></script>
     <script src="js/figma-guide.js?v=V3.0.26"></script>
     <script src="js/finder-extension.js?v=V3.0.26"></script>
+    <script src="js/local-asset-renderer.js?v=V3.0.26"></script>
+    <script src="js/local-tools.js?v=V3.0.26"></script>
   </body>
 </html>

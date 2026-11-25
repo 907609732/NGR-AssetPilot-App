@@ -74,6 +74,8 @@ export function registerDesktopIpc({
   dailyReport,
   tapdReport,
   finderExtension,
+  localToolsAction,
+  localAssetRpc,
   runtimeLogger = null,
 }) {
   const registered = [];
@@ -116,6 +118,8 @@ export function registerDesktopIpc({
   }
 
   handle(channels.environmentGetInfo, async () => environmentInfo());
+  if (localToolsAction) handle(channels.localToolsAction, async (_event, payload) => localToolsAction(payload));
+  if (localAssetRpc) handle(channels.localAssetReply, async (event, payload) => localAssetRpc.reply(payload, event.sender));
   handle(channels.keepAwakeGet, async () => keepAwake.getState());
   handle(channels.autoStartGet, async () => autoStart.getState());
   handle(channels.autoStartSet, async (_event, request) => autoStart.setSettings(request));

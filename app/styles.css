@@ -299,6 +299,32 @@ main {
   display: grid;
 }
 
+.local-tools-announcement {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 650;
+}
+.local-tools-announcement[hidden] { display: none; }
+.local-tools-announcement button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  color: var(--primary);
+  background: var(--surface);
+}
+.local-tools-dialog section { margin-top: 18px; }
+.local-tools-dialog section > label { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; }
+.local-tools-dialog ol { padding-inline-start: 22px; color: var(--muted); }
+.local-tools-dialog code { display: block; margin: 8px 0; overflow-wrap: anywhere; }
+.local-tools-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.local-tools-dialog #localToolsBrowser { margin-inline-start: 12px; }
+
 .entry-button {
   min-height: 176px;
   border: 1px solid var(--line);

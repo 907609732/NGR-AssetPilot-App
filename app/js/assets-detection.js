@@ -786,20 +786,25 @@ async function imageFileToFingerprint(file) {
 }
 
 function updateSimilarResourceWarnings() {
-  const duplicateConfig = getDuplicateSensitivityConfig(getActiveDetectionProfile().duplicateSensitivity);
-  clearSimilarResourceWarnings();
-  if (duplicateConfig.disabled) {
-    return;
-  }
-  if (detectionAssets.length > MAX_DUPLICATE_SCAN_ASSETS) {
+  if (!applySimilarResourceWarnings(detectionAssets, getActiveDetectionProfile())) {
     showToast("图片数量超过 " + MAX_DUPLICATE_SCAN_ASSETS + " 张，已跳过重复资源检测以避免卡死");
-    return;
   }
-  for (let index = 0; index < detectionAssets.length; index += 1) {
-    const current = detectionAssets[index];
+}
+
+function applySimilarResourceWarnings(assetList, profile) {
+  const duplicateConfig = getDuplicateSensitivityConfig(profile.duplicateSensitivity);
+  clearSimilarResourceWarnings(assetList);
+  if (duplicateConfig.disabled) {
+    return true;
+  }
+  if (assetList.length > MAX_DUPLICATE_SCAN_ASSETS) {
+    return false;
+  }
+  for (let index = 0; index < assetList.length; index += 1) {
+    const current = assetList[index];
     if (!current.fingerprint) continue;
-    for (let nextIndex = index + 1; nextIndex < detectionAssets.length; nextIndex += 1) {
-      const next = detectionAssets[nextIndex];
+    for (let nextIndex = index + 1; nextIndex < assetList.length; nextIndex += 1) {
+      const next = assetList[nextIndex];
       if (!next.fingerprint) continue;
       if (!shouldCompareDuplicateAssets(current, next, duplicateConfig)) continue;
       const similarity = getFingerprintSimilarity(current.fingerprint, next.fingerprint);
@@ -809,16 +814,17 @@ function updateSimilarResourceWarnings() {
       }
     }
   }
-  detectionAssets.forEach((asset) => {
+  assetList.forEach((asset) => {
     const baseWarnings = (asset.warnings || []).filter((message) => !message.startsWith("疑似重复资源"));
     const similarWarnings = (asset.similarNames || []).slice(0, 3).map((name) => "疑似重复资源：" + name);
     asset.warnings = [...baseWarnings, ...similarWarnings];
     asset.hasWarning = Boolean(asset.warnings.length);
   });
+  return true;
 }
 
-function clearSimilarResourceWarnings() {
-  detectionAssets.forEach((asset) => {
+function clearSimilarResourceWarnings(assetList = detectionAssets) {
+  assetList.forEach((asset) => {
     asset.similarNames = [];
     const baseWarnings = (asset.warnings || []).filter((message) => !message.startsWith("疑似重复资源"));
     asset.warnings = baseWarnings;

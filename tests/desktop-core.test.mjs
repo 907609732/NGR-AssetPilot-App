@@ -12,6 +12,7 @@ import vm from "node:vm";
 import { CredentialStore } from "../desktop/services/credential-store.mjs";
 import { DirectoryTokenStore, validateRelativeExportPath } from "../desktop/services/directory-tokens.mjs";
 import { ExternalAppRegistry } from "../desktop/services/external-app-registry.mjs";
+import { LOCAL_ASSET_RENDERER_CHANNELS } from "../desktop/services/local-asset-renderer-rpc.mjs";
 import { NetworkClient, validateNetworkUrl } from "../desktop/services/network-client.mjs";
 import { ProviderRegistry, validateProviderBaseUrl } from "../desktop/services/provider-registry.mjs";
 import { BackupFileService } from "../desktop/services/backup-files.mjs";
@@ -191,6 +192,7 @@ test("window settings and navigation helpers enforce the renderer boundary", () 
 test("preload exposes only the nested ngrDesktop contract", async () => {
   const preloadSource = await readFile(new URL("../desktop/preload/index.cjs", import.meta.url), "utf8");
   const calls = [];
+  const subscriptions = new Map();
   let exposed;
   const fakeElectron = {
     contextBridge: {
@@ -204,8 +206,10 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
         calls.push([channel, payload]);
         return { ok: true };
       },
-      on() {},
-      removeListener() {},
+      on(channel, listener) { subscriptions.set(channel, listener); },
+      removeListener(channel, listener) {
+        if (subscriptions.get(channel) === listener) subscriptions.delete(channel);
+      },
       send() {},
     },
   };
@@ -220,6 +224,8 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
     module.exports,
   );
   assert.deepEqual(Object.keys(exposed), [
+    "localTools",
+    "localAssets",
     "finderExtension",
     "autoStart",
     "keepAwake",
@@ -254,6 +260,20 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.files.writeFile, "function");
   assert.equal(typeof exposed.dailyReport.export, "function");
   assert.equal(typeof exposed.tapdReport.open, "function");
+  assert.deepEqual(Object.keys(exposed.localTools), ["action"]);
+  await exposed.localTools.action({ action: "status" });
+  assert.deepEqual(calls.at(-1), [ipcChannels.localToolsAction, { action: "status" }]);
+  assert.deepEqual(Object.keys(exposed.localAssets), ["onRequest", "onCancel", "reply"]);
+  const messages = [];
+  const unsubscribe = exposed.localAssets.onRequest((...args) => messages.push(args));
+  const request = { id: "local-asset-test", action: "release_job", payload: {} };
+  subscriptions.get(LOCAL_ASSET_RENDERER_CHANNELS.request)({ sender: "internal event" }, request);
+  assert.deepEqual(messages, [[request]]);
+  unsubscribe();
+  assert.equal(subscriptions.has(LOCAL_ASSET_RENDERER_CHANNELS.request), false);
+  const reply = { id: request.id, result: null };
+  await exposed.localAssets.reply(reply);
+  assert.deepEqual(calls.at(-1), [ipcChannels.localAssetReply, reply]);
   assert.deepEqual(Object.keys(exposed.finderExtension), ["status", "detect", "choose", "open"]);
   await exposed.finderExtension.status();
   assert.deepEqual(calls.at(-1), [ipcChannels.finderExtensionStatus, undefined]);
@@ -444,6 +464,19 @@ test("provider registry keeps secrets in DPAPI storage and exposes metadata only
     });
     assert.equal(resolved.url.href, "https://api.openai.com/v1/responses");
     assert.equal(resolved.headers.authorization, "Bearer provider-secret-test-only");
+    await assert.rejects(registry.resolveRequest({
+      providerId: "user-ai",
+      operation: "chat",
+      expectedProviderBaseUrl: "http://127.0.0.1:11435/v1",
+      body: { model: "local-model", messages: [] },
+    }), { code: "PROVIDER_ENDPOINT_CHANGED" });
+    const approved = await registry.resolveRequest({
+      providerId: "user-ai",
+      operation: "chat",
+      expectedProviderBaseUrl: "http://127.0.0.1:11434/v1",
+      body: { model: "local-model", messages: [] },
+    });
+    assert.equal(approved.url.href, "http://127.0.0.1:11434/v1/chat/completions");
     await registry.upsert({
       provider: { id: "baidu", apiFormat: "baidu-ai" },
       secretAction: "replace",
