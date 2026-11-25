@@ -36,7 +36,9 @@ async function verifyTarget(target) {
     const appInfo = await electronApp.evaluate(({ app }) => ({ name: app.getName(), userData: app.getPath("userData") }));
     assert.equal(appInfo.name, target.product);
     assert.equal(path.resolve(appInfo.userData), path.resolve(userDataPath));
-    await window.waitForFunction(() => Boolean(window.ngrDesktop?.environment));
+    await window.waitForFunction(() => Boolean(
+      window.ngrDesktop?.environment && document.querySelector("#apiSettingsView > .settings-tabs"),
+    ));
     if (target.badge) {
       await window.waitForFunction(
         (expected) => document.querySelector("#editionBadge")?.textContent?.includes(expected),
