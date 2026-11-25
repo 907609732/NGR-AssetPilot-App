@@ -57,15 +57,15 @@
           </div>
           <button class="entry-button primary" id="workEntry" type="button">
             <svg class="home-entry-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6M13 3v5h5m-5-5 5 5v3M8 11h5m-5 4h3m3 6 1-4 5-5 2 2-5 5z"/></svg>
-            <div><span>开始命名</span><small>上传切图和参考图，批量生成并导出名称</small></div>
+            <span class="home-entry-copy"><strong>开始命名</strong><small>上传切图和参考图，批量生成并导出名称</small></span>
           </button>
           <button class="entry-button" id="detectEntry" type="button">
             <svg class="home-entry-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5m4-3 3 3 5-6"/></svg>
-            <div><span>UI切图检测</span><small>上传文件夹后检测分辨率、背景图、大图和图集规范</small></div>
+            <span class="home-entry-copy"><strong>UI切图检测</strong><small>上传文件夹后检测分辨率、背景图、大图和图集规范</small></span>
           </button>
           <button class="entry-button local-search-entry" id="localImageSearchEntry" type="button">
             <svg class="home-entry-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 20H4V4h16v6M4 15l5-5 3 3m7 6 3 3"/><circle cx="16" cy="16" r="4"/></svg>
-            <div><span>本地 AI 搜图</span><small>截图粘贴、图片或中英文文字搜索本地相似素材</small></div>
+            <span class="home-entry-copy"><strong>本地 AI 搜图</strong><small>截图粘贴、图片或中英文文字搜索本地相似素材</small></span>
           </button>
           <div class="signature">
             <span>by五成（月财）</span>
@@ -326,7 +326,7 @@
                 </label>
                 <div class="action-row compact-actions">
                   <button class="ghost-action" id="diagnosticsSelectVisible" type="button">选择当前分类</button>
-                  <button class="primary-action" id="diagnosticsRunSelected" type="button">一键网络体检</button>
+                  <button class="primary-action" id="diagnosticsRunSelected" type="button">检测当前勾选</button>
                   <button class="danger-action hidden" id="diagnosticsCancelRun" type="button">取消测试</button>
                 </div>
               </div>
@@ -477,7 +477,8 @@
                   <button class="ghost-action hidden" id="localSearchRetryDownload" type="button">重试</button>
                   <button class="danger-action hidden" id="localSearchRemoveModel" type="button">删除内置模型</button>
                 </div>
-                <p class="local-search-privacy">纯离线电脑可导入 .ngrmodel 模型包或本地 ONNX 特征模型。所有文件由主进程选择和校验；模型就绪后远程访问始终关闭，图片和查询不会上传。</p>
+                <p class="local-search-privacy hidden" id="localSearchOfflineModelHint">当前离线，可直接导入本地模型。</p>
+                <p class="local-search-privacy">离线时可导入 .ngrmodel 模型包或本地 ONNX 模型。图库和搜索在本机处理。</p>
               </section>
 
               <section class="local-search-card local-search-engine-card">
@@ -1547,7 +1548,8 @@
             <button class="primary-action" id="localSearchCustomImportStart" type="button">导入 ONNX 模型</button>
           </div>
           <div class="local-search-managed-models" id="localSearchManagedModels"></div>
-          <div class="local-search-empty" id="localSearchManagedModelsEmpty">尚无可用模型</div>
+          <div class="local-search-empty" id="localSearchManagedModelsEmpty">暂无已安装模型</div>
+          <p class="local-search-validation-status hidden" id="localSearchModelRemovalStatus" role="status"></p>
 
           <form class="local-search-model-wizard hidden" id="localSearchModelWizard">
             <div class="local-search-wizard-head">
@@ -1666,6 +1668,15 @@
           </form>
         </section>
       </div>
+
+      <dialog class="utility-dialog" id="localSearchRemoveModelDialog" aria-labelledby="localSearchRemoveModelTitle">
+        <h2 id="localSearchRemoveModelTitle">删除本地模型</h2>
+        <p id="localSearchRemoveModelNotice"></p>
+        <form method="dialog" class="action-row">
+          <button class="ghost-action" value="cancel" autofocus>取消</button>
+          <button class="danger-action" value="remove">确认删除</button>
+        </form>
+      </dialog>
 
       <div class="tutorial-overlay hidden" id="tutorialOverlay" aria-hidden="true">
         <section class="tutorial-dialog" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">

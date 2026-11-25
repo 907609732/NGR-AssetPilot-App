@@ -79,16 +79,23 @@
     list.innerHTML = targets.map((target) => {
       const selected = state.selected.has(target.id);
       return `
-        <label class="network-diagnostics-target ${selected ? "selected" : ""}">
-          <input type="checkbox" data-diagnostics-target="${escapeHtml(target.id)}" ${selected ? "checked" : ""} />
-          <span class="network-diagnostics-target-copy">
-            <strong>${escapeHtml(target.name)}</strong>
-            <small>${escapeHtml(target.category)} · ${escapeHtml(target.method)} · ${escapeHtml(target.displayUrl)}</small>
-          </span>
-          ${target.unsafe ? '<em class="diagnostics-risk-label">高级方法</em>' : ""}
-        </label>`;
+        <div class="network-diagnostics-target ${selected ? "selected" : ""}">
+          <label class="network-diagnostics-target-label">
+            <input type="checkbox" data-diagnostics-target="${escapeHtml(target.id)}" ${selected ? "checked" : ""} />
+            <span class="network-diagnostics-target-copy">
+              <strong>${escapeHtml(target.name)}</strong>
+              <small>${escapeHtml(target.category)} · ${escapeHtml(target.method)} · ${escapeHtml(target.displayUrl)}</small>
+            </span>
+            ${target.unsafe ? '<em class="diagnostics-risk-label">高级方法</em>' : ""}
+          </label>
+          <button type="button" class="ghost-action" data-diagnostics-run-target="${escapeHtml(target.id)}"
+            aria-label="检测 ${escapeHtml(target.name)}" ${state.running ? "disabled" : ""}>检测</button>
+        </div>`;
     }).join("");
     empty?.classList.toggle("hidden", targets.length > 0);
+    list.querySelectorAll("[data-diagnostics-run-target]").forEach((button) => {
+      button.addEventListener("click", () => runTargets([button.dataset.diagnosticsRunTarget]));
+    });
     list.querySelectorAll("[data-diagnostics-target]").forEach((checkbox) => {
       checkbox.addEventListener("change", () => {
         if (checkbox.checked) state.selected.add(checkbox.dataset.diagnosticsTarget);
@@ -248,11 +255,14 @@
     byId("diagnosticsRunSelected").disabled = state.running;
     byId("diagnosticsSelectVisible").disabled = state.running;
     byId("diagnosticsCancelRun").classList.toggle("hidden", !state.running);
+    document.querySelectorAll("[data-diagnostics-run-target]").forEach((button) => {
+      button.disabled = state.running;
+    });
   }
 
   async function runTargets(targetIds) {
     if (state.running) return;
-    const ids = [...new Set((targetIds?.length ? targetIds : [...state.selected]).filter((id) => targetById(id)))];
+    const ids = [...new Set(targetIds.filter((id) => targetById(id)))];
     if (!ids.length) {
       toast("请先选择至少一个诊断服务");
       return;
@@ -327,7 +337,9 @@
       targets.forEach((target) => allSelected ? state.selected.delete(target.id) : state.selected.add(target.id));
       renderTargets();
     });
-    byId("diagnosticsRunSelected")?.addEventListener("click", () => runTargets());
+    byId("diagnosticsRunSelected")?.addEventListener("click", () => {
+      runTargets(visibleTargets().filter((target) => state.selected.has(target.id)).map((target) => target.id));
+    });
     byId("diagnosticsCancelRun")?.addEventListener("click", async () => {
       if (!state.currentRequestId) return;
       await api().cancel({ requestId: state.currentRequestId });

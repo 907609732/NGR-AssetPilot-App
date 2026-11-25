@@ -70,12 +70,8 @@ test("Electron API 页可创建自定义目标、运行本机诊断并管理历�
     await window.locator("#diagnosticsSaveCustom").click();
     await window.waitForFunction(() => document.querySelector("#diagnosticsCustomList")?.textContent?.includes("本机健康检查"));
 
-    await window.locator("[data-diagnostics-target]").evaluateAll((checkboxes) => {
-      for (const checkbox of checkboxes) {
-        checkbox.checked = false;
-        checkbox.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    });
+    assert.equal(await window.locator('[data-diagnostics-target="openai-api"]').isChecked(), true);
+    await window.locator("#diagnosticsCategoryFilter").selectOption("自定义");
     const localCheckbox = window.locator(".network-diagnostics-target", { hasText: "本机健康检查" }).locator("input");
     await localCheckbox.check();
     await window.locator("#diagnosticsRouteMode").selectOption("system");
@@ -83,10 +79,17 @@ test("Electron API 页可创建自定义目标、运行本机诊断并管理历�
     await window.waitForFunction(() => document.querySelector("#diagnosticsProgressBadge")?.textContent?.includes("测试完成"));
 
     const resultText = await window.locator("#diagnosticsResultsBody").innerText();
+    assert.equal(await window.locator("#diagnosticsResultsBody tr").count(), 1);
     assert.match(resultText, /本机健康检查/);
     assert.match(resultText, /可达，需要鉴权/);
     assert.match(resultText, /401/);
     assert.doesNotMatch(resultText, /must-not-be-exposed|must-not-be-read/);
+
+    await localCheckbox.uncheck();
+    await window.getByRole("button", { name: "检测 本机健康检查", exact: true }).click();
+    await window.waitForFunction(() => document.querySelector("#diagnosticsProgressBadge")?.textContent === "测试完成 · 1 项");
+    assert.equal(await localCheckbox.isChecked(), false);
+    assert.match(await window.locator("#diagnosticsResultsBody").innerText(), /本机健康检查.*401/s);
 
     await window.locator("#diagnosticsHistoryDetails summary").click();
     assert.match(await window.locator("#diagnosticsHistoryList").innerText(), /1\/1 项收到 HTTP 响应/);

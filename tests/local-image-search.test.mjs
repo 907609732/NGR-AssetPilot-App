@@ -1274,11 +1274,13 @@ test("删除本地模型会保留 SQLite 图库索引并重建空模型状态", 
     userDataPath,
     dialog: {},
     shell: {},
-    netFetch: fetch,
+    netFetch: () => assert.fail("删除本地模型不应发出网络请求"),
     getWindow: () => null,
   });
   const source = path.join(root, "source");
   await mkdir(source);
+  const original = path.join(source, "original.png");
+  await writeFile(original, "原图");
   const library = controller.storage.createLibrary({ id: randomUUID(), rootPath: source, name: "保留图库" });
   await mkdir(controller.modelRoot, { recursive: true });
   await writeFile(path.join(controller.modelRoot, "marker.bin"), Buffer.from("model"));
@@ -1286,6 +1288,7 @@ test("删除本地模型会保留 SQLite 图库索引并重建空模型状态", 
   assert.equal(result.removed, true);
   assert.equal(result.state, "missing");
   assert.equal(controller.storage.getLibrary(library.id).name, "保留图库");
+  assert.equal(await readFile(original, "utf8"), "原图");
   await assert.rejects(readFile(path.join(controller.modelRoot, "marker.bin")));
   await controller.dispose();
 }));

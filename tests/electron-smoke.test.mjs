@@ -11,6 +11,67 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const appEntry = path.join(projectRoot, "desktop", "main", "index.mjs");
 const cloudConfigured = Boolean(await loadManagedProviderConfig(path.join(projectRoot, "build/generated/managed-provider-config.json")));
 
+test("离线时可取消或确认删除模型，已安装列表和提示随结果更新", { timeout: 45_000 }, async () => {
+  fs.mkdirSync(path.join(projectRoot, ".tmp"), { recursive: true });
+  const runRoot = fs.mkdtempSync(path.join(projectRoot, ".tmp", "offline-model-removal-"));
+  const electronApp = await electron.launch({
+    args: [appEntry], cwd: projectRoot,
+    env: { ...process.env, NGR_E2E_USER_DATA: path.join(runRoot, "UserData") },
+  });
+  try {
+    const window = await electronApp.firstWindow();
+    await electronApp.evaluate(({ ipcMain }) => {
+      let installed = true;
+      let attempts = 0;
+      const listChannel = "ngr:local-image-search:list-models";
+      const removalChannel = "ngr:local-image-search:remove-model";
+      ipcMain.removeHandler(listChannel);
+      ipcMain.removeHandler(removalChannel);
+      ipcMain.handle(listChannel, () => ({
+        activeModelId: "fixture-ready",
+        models: [
+          { id: "fixture-ready", name: "离线测试模型", builtin: true, ready: installed, status: installed ? "ready" : "missing" },
+          { id: "fixture-missing", name: "未安装测试模型", builtin: true, ready: false, status: "missing" },
+        ],
+      }));
+      ipcMain.handle(removalChannel, (_event, { modelId }) => {
+        if (modelId !== "fixture-ready") throw Error("错误的模型");
+        attempts += 1;
+        if (attempts === 1) throw Error("模型文件正在使用");
+        installed = false;
+        return { removed: true };
+      });
+    });
+    await window.reload();
+    await window.locator("#generalSettingsView > .settings-tabs").waitFor({ state: "attached" });
+    await window.locator("#rulesEntry").click();
+    await window.locator('#generalSettingsView [data-settings-view="localImageSearchSettings"]').click();
+    await window.locator("#localSearchModelSelect option[value='fixture-ready']").waitFor({ state: "attached" });
+    await window.locator("#localSearchManageModels").click();
+    await window.context().setOffline(true);
+    const cards = window.locator("#localSearchManagedModels .local-search-managed-model");
+    const confirmation = window.locator("#localSearchRemoveModelDialog");
+    const status = window.locator("#localSearchModelRemovalStatus");
+    assert.equal(await cards.count(), 1);
+    await cards.getByRole("button", { name: "删除", exact: true }).click();
+    await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+    assert.equal(await cards.count(), 1);
+    await cards.getByRole("button", { name: "删除", exact: true }).click();
+    await confirmation.getByRole("button", { name: "确认删除" }).click();
+    await window.waitForFunction(() => document.getElementById("localSearchModelRemovalStatus")?.textContent.includes("模型文件正在使用"));
+    assert.equal(await cards.count(), 1);
+    await cards.getByRole("button", { name: "删除", exact: true }).click();
+    await confirmation.getByRole("button", { name: "确认删除" }).click();
+    await window.locator("#localSearchManagedModelsEmpty").waitFor();
+    assert.match(await status.innerText(), /已删除/);
+    await window.locator("#localSearchModelManagerClose").click();
+    assert.equal(await window.locator("#localSearchDownloadModel").isDisabled(), true);
+    assert.equal(await window.locator("#localSearchImportModel").isEnabled(), true);
+  } finally {
+    await electronApp.close();
+  }
+});
+
 async function waitForMaximizedWindow(electronApp, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs;
   let stableSince = 0;
@@ -406,11 +467,8 @@ test("Electron development app boots with the Dev identity and an isolated rende
     await window.waitForFunction(() => document.querySelector("#localImageSearchSettingsView")?.classList.contains("active"));
     await window.locator("#localSearchManageModels").click();
     await window.locator("#localSearchModelManagerOverlay:not(.hidden)").waitFor();
-    assert.equal(await window.locator("#localSearchManagedModels .local-search-managed-model").count(), 2);
-    const managedModelText = await window.locator("#localSearchManagedModels").innerText();
-    assert.match(managedModelText, /稳定 GPU 版/);
-    assert.match(managedModelText, /旧版兼容/);
-    assert.match(managedModelText, /内置|已认证/);
+    assert.equal(await window.locator("#localSearchManagedModels .local-search-managed-model").count(), 0);
+    assert.equal(await window.locator("#localSearchManagedModelsEmpty").isVisible(), true);
     await window.locator("#localSearchCustomImportStart").click();
     await window.locator("#localSearchCustomModelName").fill("E2E 离线向量模型");
     await window.locator("#localSearchCustomModelType").selectOption("image-text");

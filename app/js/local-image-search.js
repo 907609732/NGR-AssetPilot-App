@@ -21,6 +21,7 @@
     models: [],
     activeModelId: null,
     modelValidation: null,
+    removingModel: false,
     packageStatus: null,
     engineStatus: null,
     activeJobId: null,
@@ -39,7 +40,7 @@
       "localSearchRuntimeStatus", "localSearchWebOnly", "localSearchDesktopContent", "localSearchModelSummary",
       "localSearchModelState", "localSearchModelProgress", "localSearchDownloadModel", "localSearchCancelDownload",
       "localSearchRetryDownload", "localSearchImportModel", "localSearchExportModel", "localSearchCreateLibrary", "localSearchLibraryList", "localSearchLibraryEmpty",
-      "localSearchRemoveModel", "localSearchModelSelect", "localSearchModelMeta", "localSearchManageModels",
+      "localSearchRemoveModel", "localSearchModelSelect", "localSearchModelMeta", "localSearchManageModels", "localSearchOfflineModelHint",
       "localSearchEngineDetails", "localSearchEngineState", "localSearchVisionProvider", "localSearchTextProvider",
       "localSearchEngineBatch", "localSearchEngineFallback", "localSearchJobStage", "localSearchJobSpeed",
       "localSearchJobEta", "localSearchJobProvider",
@@ -51,6 +52,7 @@
       "localSearchClearImageQuery",
       "localSearchResultsEmpty", "localSearchLibrarySelect", "localSearchQuickLibrarySelect", "localSearchGuideOverlay", "localSearchGuideClose", "localSearchGuideStart",
       "localSearchModelManagerOverlay", "localSearchModelManagerClose", "localSearchCustomImportStart",
+      "localSearchModelRemovalStatus", "localSearchRemoveModelDialog", "localSearchRemoveModelNotice",
       "localSearchManagedModels", "localSearchManagedModelsEmpty", "localSearchModelWizard", "localSearchCustomModelName",
       "localSearchCustomModelType", "localSearchCustomModelLicense", "localSearchCustomLayout", "localSearchCustomWidth",
       "localSearchCustomHeight", "localSearchCustomColorSpace", "localSearchCustomResizeMode", "localSearchCustomPixelType",
@@ -164,7 +166,7 @@
     const percent = packageStatus.totalBytes ? Math.min(100, Number(packageStatus.downloadedBytes || 0) / Number(packageStatus.totalBytes) * 100) : 0;
     nodes.localSearchModelProgress.value = percent;
 
-    if (activeModel) {
+    if (activeModel?.ready) {
       const dimensions = Number(activeModel.dimensions || 0);
       const textLabel = modelSupportsText(activeModel) ? "图片 + 文字" : "仅图片";
       nodes.localSearchModelSummary.textContent = `${activeModel.name} · ${dimensions ? `${dimensions} 维 · ` : ""}${textLabel}`;
@@ -172,9 +174,9 @@
       nodes.localSearchModelState.textContent = activeModel.ready === false || activeModel.status === "missing" ? "未就绪" : activeModel.builtin ? "已认证" : "未认证";
       nodes.localSearchModelState.dataset.state = activeModel.ready === false ? "missing" : activeModel.builtin ? "ready" : "uncertified";
     } else {
-      nodes.localSearchModelSummary.textContent = packageStatus.totalBytes
+      nodes.localSearchModelSummary.textContent = packageStatus.state === "downloading" && packageStatus.totalBytes
         ? `${formatBytes(packageStatus.downloadedBytes)} / ${formatBytes(packageStatus.totalBytes)}`
-        : "约 190 MB，首次使用需下载或导入";
+        : "暂无可用模型";
       nodes.localSearchModelMeta.textContent = "内置模型支持图片和中英文文字搜索";
       nodes.localSearchModelState.textContent = packageStatus.state === "importing" ? "导入校验中" : packageStatus.state === "exporting" ? "正在导出" : packageStatus.ready ? "已就绪" : packageStatus.state === "downloading" ? "下载中" : packageStatus.state === "error" ? "校验失败" : packageStatus.state === "canceled" ? "已取消" : "未下载";
       nodes.localSearchModelState.dataset.state = packageStatus.ready ? "ready" : packageStatus.state;
@@ -190,7 +192,14 @@
     nodes.localSearchExportModel.classList.toggle("hidden", !packageStatus.ready || busy);
     nodes.localSearchCancelDownload.classList.toggle("hidden", packageStatus.state !== "downloading");
     nodes.localSearchRetryDownload.classList.toggle("hidden", packageStatus.state !== "error" && packageStatus.state !== "canceled");
+    const offline = globalScope.navigator.onLine === false;
+    nodes.localSearchOfflineModelHint.classList.toggle("hidden", !offline);
+    for (const button of [nodes.localSearchDownloadModel, nodes.localSearchRetryDownload]) {
+      button.disabled = offline;
+      button.title = button.disabled ? "当前离线，可导入本地模型" : "";
+    }
     nodes.localSearchRemoveModel.classList.toggle("hidden", !builtinReady);
+    nodes.localSearchRemoveModel.disabled = state.removingModel;
     renderTextCapability();
   }
 
@@ -346,8 +355,9 @@
   function renderManagedModels() {
     if (!nodes.localSearchManagedModels) return;
     nodes.localSearchManagedModels.replaceChildren();
-    nodes.localSearchManagedModelsEmpty.classList.toggle("hidden", state.models.length > 0);
-    state.models.forEach((model) => {
+    const installedModels = state.models.filter((model) => !model.builtin || model.ready);
+    nodes.localSearchManagedModelsEmpty.classList.toggle("hidden", installedModels.length > 0);
+    installedModels.forEach((model) => {
       const card = document.createElement("article");
       card.className = `local-search-managed-model${model.id === state.activeModelId ? " active" : ""}`;
 
@@ -358,7 +368,7 @@
       name.textContent = model.name;
       const badge = document.createElement("span");
       badge.className = model.builtin ? "local-search-certified" : "local-search-uncertified";
-      badge.textContent = model.builtin ? "已认证" : "未认证";
+      badge.textContent = model.builtin ? "已认证" : model.ready ? "未认证" : "文件缺失";
       title.append(name, badge);
       const meta = document.createElement("small");
       const capability = modelSupportsText(model) ? "图片 + 文字" : "仅图片";
@@ -373,7 +383,7 @@
       activate.type = "button";
       activate.className = "ghost-action";
       activate.textContent = model.id === state.activeModelId ? "当前模型" : "使用";
-      activate.disabled = model.id === state.activeModelId || model.ready === false || model.status === "missing";
+      activate.disabled = state.removingModel || model.id === state.activeModelId || !model.ready;
       activate.addEventListener("click", () => activateModel(model.id).catch((error) => showStatus(friendlyError(error, "模型切换失败"), "error")));
       actions.appendChild(activate);
 
@@ -382,6 +392,7 @@
         validate.type = "button";
         validate.className = "ghost-action";
         validate.textContent = "重新验证";
+        validate.disabled = state.removingModel;
         validate.addEventListener("click", () => revalidateInstalledModel(model).catch((error) => showModelManagerStatus(friendlyError(error, "模型验证失败"), "error")));
         actions.appendChild(validate);
       }
@@ -390,7 +401,8 @@
       remove.type = "button";
       remove.className = "danger-action";
       remove.textContent = "删除";
-      remove.addEventListener("click", () => removeManagedModel(model).catch((error) => showModelManagerStatus(friendlyError(error, "删除模型失败"), "error")));
+      remove.disabled = state.removingModel;
+      remove.addEventListener("click", () => removeManagedModel(model));
       actions.appendChild(remove);
 
       card.append(copy, actions);
@@ -558,17 +570,44 @@
   }
 
   async function removeManagedModel(model) {
-    const vectorNotice = model.builtin ? "对应模型文件将被删除" : "该模型文件及其独立向量索引将被删除";
-    if (!globalScope.confirm(`确定删除模型“${model.name}”吗？${vectorNotice}，不会删除任何图库原图。`)) return;
-    await bridge().removeModel({ modelId: model.id });
-    resetQueryAndBrowse({ refresh: false });
-    await refreshModels();
-    await Promise.all([refreshModelStatus(), refreshLibraries()]);
-    await refreshEngineStatus().catch(() => {});
-    showStatus(`模型“${model.name}”已删除，图库原图未做任何修改。`, "ready");
+    const dialog = nodes.localSearchRemoveModelDialog;
+    if (state.removingModel || dialog.open) return;
+    nodes.localSearchRemoveModelNotice.textContent = `删除“${model.name}”及其向量索引？原始图片会保留。`;
+    dialog.returnValue = "";
+    const confirmed = new Promise((resolve) => {
+      dialog.addEventListener("close", () => resolve(dialog.returnValue === "remove"), { once: true });
+    });
+    dialog.showModal();
+    if (!await confirmed) return;
+
+    const status = nodes.localSearchModelRemovalStatus;
+    const showRemovalStatus = (message, tone) => {
+      status.classList.remove("hidden");
+      status.textContent = message;
+      status.dataset.tone = tone;
+      showStatus(message, tone);
+    };
+    state.removingModel = true;
+    renderManagedModels();
+    renderModelStatus();
+    showRemovalStatus(`正在删除“${model.name}”…`, "working");
+    try {
+      const result = await bridge().removeModel({ modelId: model.id });
+      resetQueryAndBrowse({ refresh: false });
+      await refreshModels();
+      showRemovalStatus(result?.removed ? `已删除“${model.name}”。` : "模型已不存在，列表已刷新。", "ready");
+      await Promise.allSettled([refreshModelStatus(), refreshLibraries(), refreshEngineStatus()]);
+    } catch (error) {
+      showRemovalStatus(friendlyError(error, "删除模型失败，请重试。"), "error");
+    } finally {
+      state.removingModel = false;
+      renderManagedModels();
+      renderModelStatus();
+    }
   }
 
   async function startModelDownload() {
+    if (globalScope.navigator.onLine === false) return showStatus("当前离线，请导入本地模型。", "error");
     const expectedBytes = Number(state.packageStatus?.totalBytes || 0);
     const expectedSize = expectedBytes > 0 ? formatBytes(expectedBytes) : "约 190 MB";
     if (!globalScope.confirm(`首次使用需要下载 ${expectedSize} 的固定离线模型。下载完成后所有分析和搜索均离线运行，是否继续？`)) return;
@@ -602,15 +641,10 @@
   }
 
   async function removeModel() {
-    if (!globalScope.confirm("删除内置模型会同时删除该模型对应的向量索引，但不会删除任何图库原图。再次使用前需要重新下载或导入并重新分析，是否继续？")) return;
-    const builtinModel = getActiveModel()?.builtin
-      ? getActiveModel()
-      : state.models.find((model) => model.builtin);
-    await bridge().removeModel(builtinModel ? { modelId: builtinModel.id } : undefined);
-    await refreshModels();
-    await Promise.all([refreshModelStatus(), refreshLibraries()]);
-    await refreshEngineStatus().catch(() => {});
-    showStatus("内置模型及其向量索引已删除，图库原图未做任何修改。", "ready");
+    const builtinModel = state.models.find((model) => model.id === getPackageModelId() && model.builtin && model.ready);
+    if (!builtinModel) return;
+    showModelManager();
+    await removeManagedModel(builtinModel);
   }
 
   async function refreshLibraries(preferredId = null) {
@@ -992,6 +1026,8 @@
   }
 
   function bindEvents() {
+    globalScope.addEventListener("offline", renderModelStatus);
+    globalScope.addEventListener("online", renderModelStatus);
     nodes.localSearchDownloadModel.addEventListener("click", () => startModelDownload().catch((error) => showStatus(friendlyError(error), "error")));
     nodes.localSearchRetryDownload.addEventListener("click", () => startModelDownload().catch((error) => showStatus(friendlyError(error), "error")));
     nodes.localSearchCancelDownload.addEventListener("click", () => {
@@ -1082,7 +1118,8 @@
       if (event.target === nodes.localSearchGuideOverlay) markGuideComplete();
     });
     window.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !nodes.localSearchModelManagerOverlay.classList.contains("hidden")) hideModelManager();
+      if (event.key === "Escape" && !nodes.localSearchRemoveModelDialog.open
+        && !nodes.localSearchModelManagerOverlay.classList.contains("hidden")) hideModelManager();
     });
   }
 
