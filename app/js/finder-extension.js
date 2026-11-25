@@ -1,6 +1,7 @@
 (() => {
   const el = (id) => document.getElementById(`finderExtension${id}`);
-  const dialog = el("Dialog"), entry = el("Entry"), api = window.ngrDesktop?.finderExtension;
+  const dialog = el("Dialog"), entry = el("Entry"), manage = el("Manage"), api = window.ngrDesktop?.finderExtension;
+  const menu = document.getElementById("moreFeaturesPopover");
   const labels = { selecting: "等待选择扩展包", reading: "正在读取扩展包", manifest: "正在检查扩展清单", extracting: "正在解压并校验文件", verifying: "正在校验已安装扩展", publishing: "正在完成安装", activating: "正在完成安装", loading: "正在加载工作台", complete: "处理完成", error: "处理未完成", cancelled: "已取消选择" };
   let actionBusy = false, checking = false, state, fallback, fallbackRevision, pollTimer, pollInFlight = false, destroyed = false, refreshError = "", previousStep = 0, previousOperation;
   const terminal = (p) => ["complete", "error", "cancelled"].includes(p?.state || p?.phase);
@@ -16,10 +17,11 @@
   const busy = () => actionBusy || active(visibleProgress());
   function syncButtons() {
     const locked = busy() || checking;
+    manage.hidden = !state || Boolean(state.bound?.builtin);
     el("Choose").hidden = Boolean(state?.bound?.builtin);
     el("Choose").disabled = locked; el("Detect").disabled = locked; el("Launch").disabled = locked || !state?.bound;
     // Keep these available to reopen the modal without starting a second operation.
-    entry.disabled = false; el("Manage").disabled = false; el("Close").disabled = false;
+    entry.disabled = false; manage.disabled = false; el("Close").disabled = false;
     el("Download").hidden = true; el("Download").disabled = true;
     el("Choose").textContent = visibleProgress()?.state === "error" ? "重新导入扩展 ZIP" : state?.bound ? "导入新版扩展 ZIP" : "导入扩展 ZIP";
   }
@@ -77,7 +79,7 @@
     el("Candidates").replaceChildren(); renderProgress(p); syncButtons();
   }
   function show() {
-    document.getElementById("moreFeaturesPopover").hidePopover();
+    menu.hidePopover();
     if (!dialog.open) dialog.showModal();
   }
   function schedulePoll() {
@@ -123,9 +125,12 @@
     if (next?.launched && dialog.open) dialog.close();
   }
   entry.addEventListener("click", open);
-  el("Manage").addEventListener("click", () => { show(); render(); if (busy()) schedulePoll(); else void refresh(); });
+  window.addEventListener("DOMContentLoaded", () => {
+    if (api && !state) void refresh();
+  }, { once: true });
+  manage.addEventListener("click", () => { show(); render(); if (busy()) schedulePoll(); else void refresh(); });
   el("Close").addEventListener("click", () => dialog.close());
-  dialog.addEventListener("close", () => document.getElementById("moreFeaturesEntry").focus({ preventScroll: true }));
+  dialog.addEventListener("close", () => entry.focus({ preventScroll: true }));
   el("Launch").addEventListener("click", open);
   el("Detect").addEventListener("click", () => { void run("verify", () => api.detect()); });
   el("Choose").addEventListener("click", () => { void run("install", () => api.choose()); });

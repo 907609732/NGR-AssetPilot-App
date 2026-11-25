@@ -31,6 +31,11 @@ Authorization: Bearer <token>
 
 返回 `ok: true` 且 `configured: true` 才能进入软件打包阶段。
 
+如已从百度翻译后台取得该软件对应应用的累计调用次数，可将非负整数填入
+`NGR_TRANSLATION_USAGE_COUNT`，并将统计截至日期（ISO 8601）填入
+`NGR_TRANSLATION_USAGE_AS_OF`。GET 同时返回 `usage: { count, asOf }`。
+请每周更新这两个值，桌面端仅展示最近发布的快照。
+
 ## 安全边界
 
 - 百度 APPID/密钥不得写入源码、GitHub、安装包或日志。

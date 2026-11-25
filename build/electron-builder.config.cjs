@@ -56,6 +56,10 @@ const extraResources = [
     to: "tray-icon.ico",
   },
 ];
+const installationReleaseNotesPath = path.join(projectRoot, "docs", "releases", `v${packageJson.version}.md`);
+if (fs.existsSync(installationReleaseNotesPath)) {
+  extraResources.push({ from: installationReleaseNotesPath, to: "installation-release-notes.md" });
+}
 const finderLockPath = path.join(projectRoot, "build", "finder-builtin.lock.json");
 if (fs.existsSync(finderLockPath)) {
   const finderAsar = path.join(projectRoot, "build", "generated", "finder-builtin", "resources", "app.asar");
@@ -134,6 +138,7 @@ module.exports = {
   nsis: {
     // Keep the identity stable, while manual launches use the assisted wizard.
     // electron-updater still supplies /S and the current install directory.
+    include: path.join(projectRoot, "build", "install-events.nsh"),
     guid: installerGuid,
     oneClick: false,
     perMachine: false,

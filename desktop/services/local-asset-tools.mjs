@@ -463,7 +463,10 @@ export function createLocalAssetTools({ dialog, getWindow, runRenderer, now = Da
   }
 
   const tools = [
-    ["list_sources", "列出通过 AI资源领航本机页面选择的资源来源和相对路径。", schema({
+    ["grant_sources", "打开 AI资源领航桌面的文件或文件夹选择器。用户确认后返回 sourceId，供命名或切图检测使用。", schema({
+      kind: { type: "string", enum: ["files", "directory"] },
+    })],
+    ["list_sources", "列出已选择的图片来源，或按 sourceId 分页列出相对路径。", schema({
       sourceId: ID_SCHEMA,
       offset: { type: "integer", minimum: 0 },
       limit: { type: "integer", minimum: 1, maximum: MAX_PAGE_SIZE },

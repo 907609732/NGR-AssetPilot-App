@@ -143,7 +143,12 @@ test("正式版、开发版和测试版身份、入口、数据与产物完全�
     const cloudResource = config.extraResources.find(({ to }) => to === "managed-provider-config.json");
     const cloudExpected = fs.existsSync(path.join(projectRoot, "build/generated/managed-provider-config.json"));
     assert.equal(Boolean(cloudResource), cloudExpected);
-    assert.equal(config.extraResources.length, cloudExpected ? 3 : 2);
+    const notesPath = path.join(projectRoot, "docs", "releases", `v${packageJson.version}.md`);
+    const notesResource = config.extraResources.find(({ to }) => to === "installation-release-notes.md");
+    const notesExpected = fs.existsSync(notesPath);
+    assert.equal(notesResource?.from, notesExpected ? notesPath : undefined);
+    assert.equal(config.extraResources.length, 2 + Number(cloudExpected) + Number(notesExpected));
+    assert.equal(config.nsis.include, path.join(projectRoot, "build", "install-events.nsh"));
     assert.ok(config.extraResources.some(({ to }) => to === "finder-builtin/resources/app.asar"));
     const trayIcon = config.extraResources.find(({ to }) => to === "tray-icon.ico");
     assert.match(trayIcon.from, /build[\\/]icon\.ico$/);

@@ -10,6 +10,7 @@ import { CredentialStore } from "../services/credential-store.mjs";
 import { DirectoryTokenStore } from "../services/directory-tokens.mjs";
 import { ExternalAppRegistry } from "../services/external-app-registry.mjs";
 import { InterfaceFinderExtension } from "../services/interface-finder-extension.mjs";
+import { InstallationNotice } from "../services/installation-notice.mjs";
 import { LocalToolsServer } from "../services/local-tools-server.mjs";
 import { createLocalAssetTools } from "../services/local-asset-tools.mjs";
 import { createLocalAssetRendererRpc } from "../services/local-asset-renderer-rpc.mjs";
@@ -201,6 +202,12 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
   writeStartupLog(app, "credentials-ready", { managedTranslation: Boolean(managedProviderConfig?.baiduCfc?.enabled) });
 
   const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
+  const installationNotice = new InstallationNotice({
+    enabled: app.isPackaged && !isPortable,
+    resourcesPath: process.resourcesPath,
+    userDataPath,
+    version: app.getVersion(),
+  });
   const updateChannel = isProductionEdition ? "latest" : isTestEdition ? "test" : "dev";
   const updaterRequested = app.isPackaged && isProductionEdition;
   const autoUpdater = await resolveAutoUpdater(updaterRequested);
@@ -307,17 +314,29 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     try {
       switch (request?.action) {
         case "status": return localTools.status();
+        case "translationUsage": {
+          const endpoint = managedProviderConfig?.baiduCfc?.endpoint;
+          if (!endpoint) return null;
+          try {
+            const response = await net.fetch(endpoint, { redirect: "error", signal: AbortSignal.timeout(5000) });
+            if (!response.ok) return null;
+            const { usage } = await response.json();
+            if (!Number.isSafeInteger(usage?.count) || usage.count < 0
+              || typeof usage.asOf !== "string" || !Number.isFinite(Date.parse(usage.asOf))) return null;
+            return { count: usage.count, asOf: usage.asOf };
+          } catch {
+            return null;
+          }
+        }
         case "set": return await localTools.setEnabled(request.feature, request.enabled);
-        case "openBrowser": await shell.openExternal(localTools.browserLink()); break;
+        case "openBrowser":
+          if (!localTools.status().webEnabled) await localTools.setEnabled("web", true);
+          await shell.openExternal(localTools.browserLink());
+          break;
         case "copyUrl": clipboard.writeText(localTools.status().mcpUrl); break;
         case "copyToken": clipboard.writeText(localTools.getToken()); break;
+        case "copyMcpGuide": clipboard.writeText(await localTools.mcpGuide()); break;
         case "rotateToken": localTools.rotateToken(); break;
-        case "grantSource": {
-          const state = localTools.status();
-          if (!state.mcpEnabled && !state.webEnabled) throw new DesktopError("LOCAL_TOOLS_DISABLED", "请先开启本机服务");
-          const grant = await localAssets.invoke("grant_sources", { kind: request.kind });
-          return { ...localTools.status(), granted: !grant.canceled };
-        }
         default: throw new DesktopError("LOCAL_TOOLS_ACTION_INVALID", "未知的本机服务操作");
       }
       return localTools.status();
@@ -330,6 +349,9 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     await localTools.dispose();
     localAssetRpc.dispose();
     await Promise.allSettled([localAssets.dispose(), finderExtension.dispose()]);
+  });
+  await localTools.setEnabled("mcp", true).catch(error => {
+    runtimeLogger.warn("mcp-start-failed", { code: errorCodeOnly(error) });
   });
   const keepAwake = new KeepAwakeService({ userDataPath, powerSaveBlocker: electron.powerSaveBlocker, powerMonitor: electron.powerMonitor });
   keepAwake.initialize();
@@ -466,6 +488,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     dailyReport,
     tapdReport,
     finderExtension,
+    installationNotice,
     localToolsAction,
     localAssetRpc,
     runtimeLogger,

@@ -7,11 +7,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { LocalToolsServer } from "../desktop/services/local-tools-server.mjs";
 
-async function fixture(t) {
+async function fixture(t, port = 0) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "ngr-local-tools-"));
   await fs.writeFile(path.join(root, "index.html"), "<title>Local tools</title>");
   const server = new LocalToolsServer({
-    port: 0,
+    port,
     webRoot: root,
     assets: {
       tools: [{
@@ -30,6 +30,19 @@ async function fixture(t) {
   });
   return server;
 }
+
+test("a second desktop can start MCP on loopback while the preferred port is occupied", async t => {
+  const first = await fixture(t);
+  await first.setEnabled("mcp", true);
+  const firstUrl = new URL(first.status().mcpUrl);
+  const second = await fixture(t, Number(firstUrl.port));
+  const secondUrl = new URL((await second.setEnabled("mcp", true)).mcpUrl);
+  assert.equal(secondUrl.hostname, "127.0.0.1");
+  assert.notEqual(secondUrl.port, firstUrl.port);
+  assert.ok((await second.mcpGuide()).includes(secondUrl.href));
+  assert.equal((await fetch(secondUrl)).status, 401);
+  assert.notEqual(second.sessionCookieName(), first.sessionCookieName());
+});
 
 test("browser uses single-use pairing, same-origin POST, and revocable sessions", async t => {
   const server = await fixture(t);
@@ -78,7 +91,14 @@ test("standard MCP client lists and calls authenticated tools and old tokens are
   await assert.rejects(connect("bad"));
   const client = await connect(token);
   try {
-    assert.equal((await client.listTools()).tools[0].name, "start_slice_check");
+    const [tool] = (await client.listTools()).tools;
+    assert.equal(tool.name, "start_slice_check");
+    const guide = await server.mcpGuide();
+    assert.ok(guide.includes(url.href));
+    assert.ok(guide.includes(tool.name));
+    assert.ok(guide.includes(JSON.stringify(tool.inputSchema)));
+    assert.ok(!guide.includes(token));
+    assert.ok(!guide.includes("finder_search"));
     assert.deepEqual((await client.callTool({ name: "start_slice_check", arguments: {} })).structuredContent,
       { state: "queued" });
     assert.equal((await client.callTool({ name: "start_slice_check", arguments: { unknown: true } })).isError, true);

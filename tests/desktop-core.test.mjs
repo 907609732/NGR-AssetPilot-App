@@ -224,6 +224,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
     module.exports,
   );
   assert.deepEqual(Object.keys(exposed), [
+    "installationNotice",
     "localTools",
     "localAssets",
     "finderExtension",
@@ -260,6 +261,11 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.equal(typeof exposed.files.writeFile, "function");
   assert.equal(typeof exposed.dailyReport.export, "function");
   assert.equal(typeof exposed.tapdReport.open, "function");
+  assert.deepEqual(Object.keys(exposed.installationNotice), ["get", "acknowledge"]);
+  await exposed.installationNotice.get();
+  assert.deepEqual(calls.at(-1), [ipcChannels.installationNoticeGet, undefined]);
+  await exposed.installationNotice.acknowledge("install-001");
+  assert.deepEqual(calls.at(-1), [ipcChannels.installationNoticeAcknowledge, "install-001"]);
   assert.deepEqual(Object.keys(exposed.localTools), ["action"]);
   await exposed.localTools.action({ action: "status" });
   assert.deepEqual(calls.at(-1), [ipcChannels.localToolsAction, { action: "status" }]);

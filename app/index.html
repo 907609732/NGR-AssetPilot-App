@@ -44,6 +44,7 @@
         <button class="feedback-form-button" id="feedbackFormLink" type="button" aria-label="打开反馈与建议表单" title="反馈与建议">
           <span aria-hidden="true">✦</span>
           <span>反馈与建议</span>
+          <span class="feedback-guide" aria-hidden="true"><span class="feedback-guide-arrow">↑</span><span>赶快来反馈建议吧！</span></span>
         </button>
         <button class="settings-button" id="rulesEntry" type="button" aria-label="设置" title="设置">⚙</button>
       </header>
@@ -68,14 +69,17 @@
           </button>
           <div class="signature">
             <span>by五成（月财）</span>
-            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：907609732/NGR-AssetPilot-App</a>
+            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：NGR-AssetPilot-App</a>
             <a href="https://ngr.lttlt.top" target="_blank" rel="noreferrer">官网：ngr.lttlt.top</a>
-            <p>若有合作意向或意见建议，可发送邮件至 907609732@qq.com，也欢迎前往 GitHub 提交反馈。</p>
           </div>
           <div class="home-secondary-actions" aria-label="辅助功能">
             <button class="home-secondary-feature" id="moreFeaturesEntry" type="button" popovertarget="moreFeaturesPopover">
               <span aria-hidden="true">⋯</span><span>更多功能</span>
             </button>
+            <div class="finder-feature-row">
+              <button class="home-secondary-feature" id="finderExtensionEntry" type="button"><span aria-hidden="true">⌕</span><span>快速找界面</span></button>
+              <button id="finderExtensionManage" class="ghost-action" type="button" aria-label="管理快速找界面扩展" title="管理扩展" hidden>⚙</button>
+            </div>
           </div>
           <div id="moreFeaturesPopover" class="more-features-popover" popover aria-label="更多功能">
             <strong>更多功能</strong>
@@ -93,10 +97,6 @@
             <button class="more-feature-item" id="figmaPluginHealthEntry" type="button" popovertarget="moreFeaturesPopover" popovertargetaction="hide">
               <span aria-hidden="true">✓</span><span>Figma插件健康检测</span>
             </button>
-            <div class="finder-feature-row">
-              <button class="more-feature-item" id="finderExtensionEntry" type="button" popovertarget="moreFeaturesPopover" popovertargetaction="hide"><span aria-hidden="true">⌕</span><span>快速找界面</span></button>
-              <button id="finderExtensionManage" class="ghost-action" type="button" aria-label="管理快速找界面扩展" title="管理扩展">⚙</button>
-            </div>
           </div>
         </section>
 
@@ -844,9 +844,8 @@
           </section>
           <div class="signature page-signature">
             <span>by五成（月财）</span>
-            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：907609732/NGR-AssetPilot-App</a>
+            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：NGR-AssetPilot-App</a>
             <a href="https://ngr.lttlt.top" target="_blank" rel="noreferrer">官网：ngr.lttlt.top</a>
-            <p>若有合作意向或意见建议，可发送邮件至 907609732@qq.com，也欢迎前往 GitHub 提交反馈。</p>
           </div>
         </section>
 
@@ -855,6 +854,13 @@
             <div>
               <h2>开始命名</h2>
               <p id="activeRuleText">当前规则：T_UI_工程名_</p>
+            </div>
+            <div class="translation-usage">
+              <span>本月云函数调用 <strong>1,027 次</strong></span>
+              <button type="button" aria-label="翻译用量统计说明" popovertarget="translationUsageTip">!</button>
+              <div id="translationUsageTip" popover>
+                后台快照，截至 2026 年 11 月 25 日，非实时数据。云函数调用含健康检查及失败请求。
+              </div>
             </div>
             <div class="toolbar-actions">
               <div class="naming-service-split-action">
@@ -1048,8 +1054,7 @@
           </div>
           <div class="signature page-signature">
             <span>by五成（月财）</span>
-            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：907609732/NGR-AssetPilot-App</a>
-            <p>若有合作意向或意见建议，可发送邮件至 907609732@qq.com，也欢迎前往 GitHub 提交反馈。</p>
+            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：NGR-AssetPilot-App</a>
           </div>
         </section>
 
@@ -1126,8 +1131,7 @@
 
           <div class="signature page-signature">
             <span>by五成（月财）</span>
-            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：907609732/NGR-AssetPilot-App</a>
-            <p>若有合作意向或意见建议，可发送邮件至 907609732@qq.com，也欢迎前往 GitHub 提交反馈。</p>
+            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：NGR-AssetPilot-App</a>
           </div>
         </section>
 
@@ -1312,8 +1316,7 @@
 
           <div class="signature page-signature">
             <span>by五成（月财）</span>
-            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：907609732/NGR-AssetPilot-App</a>
-            <p>若有合作意向或意见建议，可发送邮件至 907609732@qq.com，也欢迎前往 GitHub 提交反馈。</p>
+            <a href="https://github.com/907609732/NGR-AssetPilot-App" target="_blank" rel="noreferrer">GitHub：NGR-AssetPilot-App</a>
           </div>
         </section>
       </main>
@@ -1717,6 +1720,22 @@
       </div>
     </div>
 
+    <dialog id="installationNoticeDialog" class="app-modal installation-notice-dialog" aria-labelledby="installationNoticeTitle" aria-describedby="installationNoticeVersion">
+      <header class="app-modal-head">
+        <div>
+          <h2 id="installationNoticeTitle">安装完成</h2>
+          <p id="installationNoticeVersion"></p>
+        </div>
+      </header>
+      <section class="update-release-notes" aria-labelledby="installationNoticeChanges">
+        <strong id="installationNoticeChanges">本版变动</strong>
+        <pre id="installationNoticeNotes" tabindex="0" aria-labelledby="installationNoticeChanges"></pre>
+      </section>
+      <form method="dialog" class="installation-notice-actions">
+        <button class="primary-action" id="installationNoticeClose" autofocus>知道了</button>
+      </form>
+    </dialog>
+
     <dialog id="figmaGuideImageDialog" class="figma-guide-image-dialog" aria-label="教程图片放大查看">
       <div><strong id="figmaGuideImageTitle"></strong><button id="figmaGuideImageClose" class="ghost-action" type="button" aria-label="关闭放大图片">×</button></div>
       <img id="figmaGuideImage" alt="" />
@@ -1766,34 +1785,39 @@
 
     <dialog id="localToolsDialog" class="utility-dialog local-tools-dialog" aria-labelledby="localToolsTitle">
       <header>
-        <h2 id="localToolsTitle">连接 AI 或打开本机网页</h2>
-        <button type="button" class="ghost-action" id="localToolsClose" aria-label="关闭">×</button>
+        <h2 id="localToolsTitle">本机工具</h2>
+        <button type="button" class="ghost-action" id="localToolsClose" aria-label="关闭"><span aria-hidden="true">×</span></button>
       </header>
-      <section>
-        <label><input type="checkbox" id="localToolsMcp" /> 启用 MCP</label>
-        <div id="localToolsMcpConnect" hidden>
-          <code id="localToolsMcpUrl"></code>
+      <section class="local-tools-card" aria-labelledby="localToolsMcpTitle">
+        <div class="local-tools-row">
+          <span class="local-tools-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6V3m8 3V3M5 8h14v3a7 7 0 0 1-14 0V8Zm7 10v3m-8-13h16"/></svg></span>
+          <div class="local-tools-copy">
+            <h3 id="localToolsMcpTitle">AI 连接（MCP）</h3>
+            <p>让本机 AI 客户端调用软件功能</p>
+          </div>
+          <label class="local-tools-toggle">
+            <input type="checkbox" id="localToolsMcp" aria-label="启用 MCP" />
+          </label>
+        </div>
+        <div class="local-tools-card-content" id="localToolsMcpConnect" hidden>
+          <code id="localToolsMcpUrl" class="local-tools-address"></code>
           <div class="local-tools-buttons">
+            <button type="button" class="primary-action" id="localToolsCopyGuide">复制给 AI</button>
             <button type="button" class="ghost-action" id="localToolsCopyUrl">复制地址</button>
             <button type="button" class="ghost-action" id="localToolsCopyToken">复制令牌</button>
-            <button type="button" class="ghost-action" id="localToolsRotate">重置令牌</button>
+            <button type="button" class="local-tools-text-action" id="localToolsRotate">重置令牌</button>
           </div>
         </div>
-        <ol>
-          <li>在同一台电脑的 AI 客户端添加 MCP 服务，选择 Streamable HTTP。</li>
-          <li>粘贴地址和 Bearer 令牌。</li>
-          <li>试一句「查背包系统的 Figma 链接」。也可以让 AI 命名或检测已授权的图片。</li>
-        </ol>
-        <div class="local-tools-buttons" id="localToolsGrant" hidden>
-          <button type="button" class="ghost-action" id="localToolsGrantFiles">授权图片文件</button>
-          <button type="button" class="ghost-action" id="localToolsGrantDirectory">授权图片文件夹</button>
-        </div>
+        <details class="local-tools-help">
+          <summary>接入说明</summary>
+          <ol>
+            <li>在本机 AI 客户端添加 Streamable HTTP 服务，填入地址和 Bearer 令牌。</li>
+            <li>点击「复制给 AI」，把调用说明粘贴到对话，再告诉 AI 要做什么。</li>
+          </ol>
+        </details>
       </section>
-      <section>
-        <label><input type="checkbox" id="localToolsWeb" /> 启用本机网页</label>
-        <button type="button" class="primary-action" id="localToolsBrowser" disabled>在浏览器打开</button>
-      </section>
-      <p id="localToolsNotice" role="status"></p>
+      <button type="button" class="ghost-action local-tools-browser" id="localToolsBrowser">在浏览器打开本机网页</button>
+      <p id="localToolsNotice" role="status" hidden></p>
     </dialog>
     <script src="vendor/fflate-0.8.3.min.js?v=V3.0.26"></script>
     <script src="historical-knowledge.js?v=V3.0.26"></script>
@@ -1828,11 +1852,13 @@
     <script src="js/lexicon-panel.js?v=V3.0.26"></script>
     <script src="js/arthub-folders.js?v=V3.0.26"></script>
     <script src="js/tutorial-center.js?v=V3.0.26"></script>
+    <script src="js/installation-notice.js?v=V3.0.26"></script>
     <script src="js/more-features.js?v=V3.0.26"></script>
     <script src="js/figma-plugin-health.js?v=V3.0.26"></script>
     <script src="js/figma-guide.js?v=V3.0.26"></script>
     <script src="js/finder-extension.js?v=V3.0.26"></script>
     <script src="js/local-asset-renderer.js?v=V3.0.26"></script>
     <script src="js/local-tools.js?v=V3.0.26"></script>
+    <script src="js/home-ambient.js"></script>
   </body>
 </html>

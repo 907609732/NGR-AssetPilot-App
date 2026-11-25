@@ -92,6 +92,8 @@ const channels = Object.freeze({
   localImageSearchOpenResult: "ngr:local-image-search:open-result",
   localImageSearchRevealResult: "ngr:local-image-search:reveal-result",
   localToolsAction: "ngr:local-tools:action",
+  installationNoticeGet: "ngr:installation-notice:get",
+  installationNoticeAcknowledge: "ngr:installation-notice:acknowledge",
   localAssetReply: "ngr:local-asset:reply",
   localAssetRequest: "ngr:local-asset:request",
   localAssetCancel: "ngr:local-asset:cancel",
@@ -117,6 +119,10 @@ function subscribe(channel, callback) {
 }
 
 const api = deepFreeze({
+  installationNotice: {
+    get: () => invoke(channels.installationNoticeGet),
+    acknowledge: id => invoke(channels.installationNoticeAcknowledge, id),
+  },
   localTools: {
     action: request => invoke(channels.localToolsAction, request),
   },

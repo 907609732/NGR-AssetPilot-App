@@ -158,10 +158,19 @@ async function handle(event) {
   const requestId = String(event?.requestContext?.requestId || event?.headers?.["x-request-id"] || "").slice(0, 128);
   const method = String(event?.httpMethod || "POST").toUpperCase();
   if (method === "GET") {
+    const rawCount = process.env.NGR_TRANSLATION_USAGE_COUNT;
+    const count = Number(rawCount);
+    const asOf = process.env.NGR_TRANSLATION_USAGE_AS_OF;
+    const usage = /^\d+$/.test(rawCount ?? "") && Number.isSafeInteger(count)
+      && typeof asOf === "string" && Number.isFinite(Date.parse(asOf))
+      ? { count, asOf } : undefined;
     return response(200, {
       ok: true,
       service: "ngr-baidu-translation",
+      usageSnapshotSupported: true,
+      successLoggingSupported: true,
       configured: Boolean(process.env.BAIDU_TRANSLATE_APP_ID && process.env.BAIDU_TRANSLATE_SECRET),
+      ...(usage ? { usage } : {}),
     }, requestId);
   }
   if (method !== "POST") return response(405, { error: "仅支持 POST 请求" }, requestId);
@@ -170,10 +179,12 @@ async function handle(event) {
     enforceRateLimit(event);
     const input = parseBody(event);
     const cacheKey = `${input.from}\u001f${input.to}\u001f${input.q}`.toLowerCase();
-    const cached = getCached(cacheKey);
-    if (cached) return response(200, cached, requestId);
-    const translated = await fetchBaiduTranslation(input);
-    setCached(cacheKey, translated);
+    let translated = getCached(cacheKey);
+    if (!translated) {
+      translated = await fetchBaiduTranslation(input);
+      setCached(cacheKey, translated);
+    }
+    console.info("NGR_TRANSLATION_SUCCESS_V1");
     return response(200, translated, requestId);
   } catch (error) {
     const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;

@@ -87,6 +87,8 @@ module.exports = Object.freeze({
   localImageSearchOpenResult: "ngr:local-image-search:open-result",
   localImageSearchRevealResult: "ngr:local-image-search:reveal-result",
   localToolsAction: "ngr:local-tools:action",
+  installationNoticeGet: "ngr:installation-notice:get",
+  installationNoticeAcknowledge: "ngr:installation-notice:acknowledge",
   localAssetReply: "ngr:local-asset:reply",
   appBeforeQuit: "ngr:app:before-quit",
   appReadyToQuit: "ngr:app:ready-to-quit",

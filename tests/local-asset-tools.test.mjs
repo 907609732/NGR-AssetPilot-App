@@ -71,7 +71,8 @@ async function waitForJob(adapter, jobId) {
 
 test("native source grants expose only snapshotted relative paths and reject traversal", async (t) => {
   const { adapter, source, rendererCalls } = await setup(t);
-  const { sources: [grant] } = await adapter.invoke("grant_sources", { kind: "directory" });
+  const grantTool = adapter.tools.find(({ name }) => name === "grant_sources");
+  const { sources: [grant] } = await grantTool.run({ kind: "directory" });
   assert.equal(grant.name, "source");
   assert.equal(grant.fileCount, 2);
   assert.ok(grant.sourceId);
@@ -90,7 +91,6 @@ test("native source grants expose only snapshotted relative paths and reject tra
   assert.deepEqual(rendererCalls, []);
   const { sources: [filesGrant] } = await adapter.invoke("grant_sources", { kind: "files" });
   assert.equal(filesGrant.fileCount, 1);
-  assert.equal(adapter.tools.some(({ name }) => name === "grant_sources"), false);
   assert.ok(adapter.tools.every(({ inputSchema }) => inputSchema.type === "object"));
 });
 

@@ -47,11 +47,13 @@ try {
   const action = (name, details = {}) => desktop.evaluate(
     ([action, extra]) => window.ngrDesktop.localTools.action({ action, ...extra }), [name, details]);
   await desktop.getByRole("button", { name: "MCP 使用说明" }).click();
-  await desktop.getByRole("dialog", { name: "连接 AI 或打开本机网页" }).waitFor();
-  await desktop.getByRole("checkbox", { name: "启用 MCP" }).click();
-  await desktop.waitForFunction(() => document.getElementById("localToolsMcp").checked);
-  await desktop.getByRole("checkbox", { name: "启用本机网页" }).click();
-  await desktop.waitForFunction(() => document.getElementById("localToolsWeb").checked);
+  await desktop.getByRole("dialog", { name: "本机工具" }).waitFor();
+  const initial = await action("status");
+  assert.equal(initial.mcpEnabled, true, "MCP must be ready at application startup");
+  assert.equal(initial.webEnabled, false);
+  assert.equal(await desktop.getByRole("checkbox", { name: "启用本机网页" }).count(), 0);
+  assert.equal(await desktop.getByRole("region", { name: "图片授权" }).count(), 0);
+  assert.equal((await fetch(initial.webUrl)).status, 404);
   await desktop.getByRole("button", { name: "复制令牌" }).click();
   const token = await instance.evaluate(() => globalThis.ngrTestClipboard);
   const { mcpUrl } = await action("status");
@@ -62,7 +64,7 @@ try {
     requestInit: { headers: { Authorization: "Bearer " + token } },
   }));
   const names = (await client.listTools()).tools.map(tool => tool.name);
-  for (const name of ["finder_search", "finder_create", "start_naming", "start_slice_check", "export_named_copies"]) {
+  for (const name of ["finder_search", "finder_create", "grant_sources", "start_naming", "start_slice_check", "export_named_copies"]) {
     assert.ok(names.includes(name), "missing tool: " + name);
   }
   const call = async (name, args = {}) => {
@@ -70,6 +72,24 @@ try {
     assert.equal(result.isError, undefined, JSON.stringify(result.content));
     return result.structuredContent;
   };
+  await desktop.getByRole("button", { name: "复制给 AI" }).click();
+  await desktop.getByRole("status").filter({ hasText: "调用说明已复制" }).waitFor();
+  const guide = await instance.evaluate(() => globalThis.ngrTestClipboard);
+  assert.ok(guide.includes(mcpUrl));
+  assert.ok(!guide.includes(token));
+  for (const name of names) assert.ok(guide.includes(name), "guide omitted " + name);
+
+  const rejectedGrant = await client.callTool({ name: "grant_sources", arguments: { kind: "directory", path: input } });
+  assert.equal(rejectedGrant.isError, true);
+  await instance.evaluate(({ dialog }) => {
+    globalThis.ngrTestPicker = dialog.showOpenDialog;
+    dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
+  });
+  assert.deepEqual(await call("grant_sources", { kind: "files" }), { canceled: true, sources: [] });
+  assert.deepEqual(await call("list_sources"), { sources: [] });
+  await instance.evaluate(({ dialog }) => { dialog.showOpenDialog = globalThis.ngrTestPicker; });
+  const { sources: [mcpSource] } = await call("grant_sources", { kind: "directory" });
+  assert.ok(mcpSource.sourceId);
   const refused = await client.callTool({ name: "finder_create", arguments: { kind: "group", name: "拒绝写入样本" } });
   const refusedSearch = await call("finder_search", { query: "拒绝写入样本" });
   assert.equal(refused.structuredContent?.status, "cancelled");
@@ -77,9 +97,13 @@ try {
   await instance.evaluate(() => { globalThis.ngrTestApprove = true; });
   await call("finder_create", { kind: "group", name: "浏览器验收组" });
 
-  await desktop.getByRole("button", { name: "在浏览器打开" }).click();
+  const openBrowser = desktop.getByRole("button", { name: "在浏览器打开本机网页" });
+  await openBrowser.click();
+  await desktop.waitForFunction(() => !document.getElementById("localToolsBrowser").disabled);
   const link = await instance.evaluate(() => globalThis.ngrTestOpenLink);
-  assert.match(link, /^http:\/\/127\.0\.0\.1:5199\/#ticket=/);
+  const pairedUrl = new URL(link);
+  assert.equal(pairedUrl.origin, new URL(initial.webUrl).origin);
+  assert.match(pairedUrl.hash, /^#ticket=/);
   browser = await chromium.launch({ executablePath: browserExe, headless: true,
     args: ["--disable-background-networking"] });
   const page = await browser.newPage();
@@ -101,8 +125,8 @@ try {
   await page.getByRole("button", { name: "选择文件夹" }).click();
   await page.getByText("icon_button.png", { exact: true }).first().waitFor();
   const sources = await call("list_sources");
-  assert.equal(sources.sources.length, 1);
-  const sourceId = sources.sources[0].sourceId;
+  assert.equal(sources.sources.length, 2);
+  const sourceId = mcpSource.sourceId;
   const outside = await client.callTool({
     name: "start_slice_check", arguments: { sourceId, relativePaths: ["../private.png"] },
   });
@@ -141,10 +165,10 @@ try {
   assert.deepEqual(await fs.readFile(path.join(input, "icon_button.png")), original);
 
   await action("set", { feature: "web", enabled: false });
-  assert.equal((await fetch("http://127.0.0.1:5199/api/session")).status, 404);
+  assert.equal((await fetch(new URL("api/session", initial.webUrl))).status, 404);
   await action("rotateToken");
   await assert.rejects(client.listTools());
-  console.log(JSON.stringify({ packaged: Boolean(packagedExe), browser: true, mcpTools: names,
+  console.log(JSON.stringify({ packaged: Boolean(packagedExe), browser: true, mcpUrl, mcpTools: names,
     finderEditing: true, pngDetection: true, namingExport: true, sourcePreserved: true }));
 } finally {
   await client?.close().catch(() => {});
