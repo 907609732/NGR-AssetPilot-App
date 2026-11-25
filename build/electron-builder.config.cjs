@@ -61,13 +61,8 @@ if (fs.existsSync(installationReleaseNotesPath)) {
   extraResources.push({ from: installationReleaseNotesPath, to: "installation-release-notes.md" });
 }
 const finderLockPath = path.join(projectRoot, "build", "finder-builtin.lock.json");
+const finderAsar = path.join(projectRoot, "build", "generated", "finder-builtin", "resources", "app.asar");
 if (fs.existsSync(finderLockPath)) {
-  const finderAsar = path.join(projectRoot, "build", "generated", "finder-builtin", "resources", "app.asar");
-  const lock = require(finderLockPath);
-  const digest = require("node:crypto").createHash("sha256").update(fs.readFileSync(finderAsar)).digest("hex");
-  if (digest !== lock.sha256 || fs.statSync(finderAsar).size !== lock.bytes) {
-    throw new Error("内置快速找界面产物与固定版本不一致");
-  }
   extraResources.push({ from: finderAsar, to: "finder-builtin/resources/app.asar" });
 }
 const managedProviderConfigPath = path.join(projectRoot, "build", "generated", "managed-provider-config.json");
@@ -84,6 +79,15 @@ module.exports = {
   executableName: productName,
   electronVersion: "43.4.1",
   electronDist: fs.existsSync(installedElectronDist) ? installedElectronDist : undefined,
+  beforePack: () => {
+    if (!fs.existsSync(finderLockPath)) return;
+    if (!fs.existsSync(finderAsar)) throw new Error("缺少内置快速找界面产物，请先运行 stage-builtin-finder.mjs");
+    const lock = require(finderLockPath);
+    const digest = require("node:crypto").createHash("sha256").update(fs.readFileSync(finderAsar)).digest("hex");
+    if (digest !== lock.sha256 || fs.statSync(finderAsar).size !== lock.bytes) {
+      throw new Error("内置快速找界面产物与固定版本不一致");
+    }
+  },
   afterPack: ({ appOutDir, electronPlatformName }) => {
     if (electronPlatformName === "win32") {
       fs.rmSync(path.join(appOutDir, "resources", "default_app.asar"), { force: true });
