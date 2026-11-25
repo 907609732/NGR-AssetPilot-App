@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { _electron as electron } from "playwright";
 
-test("工程标题文件夹入口、首次连接、结果保留和过期查询", { timeout: 120_000 }, async () => {
+test.skip("工程标题文件夹入口暂时下线，待客户端接口可用后恢复测试", { timeout: 120_000 }, async () => {
   const root = path.resolve(import.meta.dirname, "..");
   fs.mkdirSync(path.join(root, ".tmp"), { recursive: true });
   const dir = fs.mkdtempSync(path.join(root, ".tmp", "arthub-ui-"));

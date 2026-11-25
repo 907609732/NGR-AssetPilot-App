@@ -8,7 +8,6 @@ import { DesktopError, isPlainRecord } from "../shared/core.mjs";
 const STORAGE_VERSION = 1;
 const MAX_HISTORY_RUNS = 30;
 const MAX_CUSTOM_TARGETS = 100;
-const MAX_TARGETS_PER_RUN = 50;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 3;
@@ -49,6 +48,32 @@ const BUILTIN_TARGETS = Object.freeze([
   { id: "github-releases", name: "GitHub Releases", category: "软件依赖", url: "https://github.com/907609732/NGR-AssetPilot-App/releases", method: "HEAD" },
   { id: "huggingface", name: "Hugging Face", category: "软件依赖", url: "https://huggingface.co/", method: "HEAD" },
   { id: "huggingface-model", name: "Hugging Face 模型仓库", category: "软件依赖", url: "https://huggingface.co/Xenova/clip-vit-base-patch32", method: "HEAD" },
+  { id: "deepseek", name: "DeepSeek API", category: "AI 服务", url: "https://api.deepseek.com/models", method: "GET", expectedContent: "json" },
+  { id: "anthropic", name: "Claude / Anthropic API", category: "AI 服务", url: "https://api.anthropic.com/v1/models", method: "GET", expectedContent: "json" },
+  { id: "gemini", name: "Google Gemini API", category: "AI 服务", url: "https://generativelanguage.googleapis.com/v1beta/models", method: "GET", expectedContent: "json" },
+  { id: "openrouter", name: "OpenRouter API", category: "AI 服务", url: "https://openrouter.ai/api/v1/models", method: "GET", expectedContent: "json" },
+  { id: "siliconflow", name: "硅基流动 API", category: "AI 服务", url: "https://api.siliconflow.cn/v1/models", method: "GET", expectedContent: "json" },
+  { id: "volcengine-ark", name: "火山方舟 / 豆包 API", category: "AI 服务", url: "https://ark.cn-beijing.volces.com/api/v3/models", method: "GET", expectedContent: "json" },
+  { id: "zhipu", name: "智谱 GLM API", category: "AI 服务", url: "https://open.bigmodel.cn/", method: "HEAD" },
+  { id: "groq", name: "Groq API", category: "AI 服务", url: "https://api.groq.com/openai/v1/models", method: "GET", expectedContent: "json" },
+  { id: "hunyuan-compatible", name: "腾讯混元兼容 API", category: "AI 服务", url: "https://api.hunyuan.cloud.tencent.com/v1/models", method: "GET", expectedContent: "json" },
+  { id: "assetpilot-web", name: "AI资源领航官网", category: "软件依赖", url: "https://ngr.lttlt.top/", method: "HEAD" },
+  { id: "bilibili-player", name: "哔哩哔哩教程播放器", category: "软件依赖", url: "https://player.bilibili.com/", method: "HEAD" },
+  { id: "bilibili-web", name: "哔哩哔哩官网", category: "软件依赖", url: "https://www.bilibili.com/", method: "HEAD" },
+  { id: "tencent-home", name: "腾讯官网", category: "腾讯域名", url: "https://www.tencent.com/", method: "HEAD" },
+  { id: "qq-home", name: "腾讯网", category: "腾讯域名", url: "https://www.qq.com/", method: "HEAD" },
+  { id: "tapd-web", name: "TAPD", category: "腾讯域名", url: "https://tapd.tencent.com/", method: "HEAD" },
+  { id: "arthub-tencent", name: "ArtHub 腾讯域名", category: "腾讯域名", url: "https://service.arthub.tencent.com/", method: "HEAD" },
+  { id: "tencent-docs", name: "腾讯文档", category: "腾讯域名", url: "https://docs.qq.com/", method: "HEAD" },
+  { id: "weixin-docs", name: "微信文档", category: "腾讯域名", url: "https://doc.weixin.qq.com/", method: "HEAD" },
+  { id: "wechat", name: "微信官网", category: "腾讯域名", url: "https://weixin.qq.com/", method: "HEAD" },
+  { id: "wechat-open", name: "微信开放平台", category: "腾讯域名", url: "https://open.weixin.qq.com/", method: "HEAD" },
+  { id: "wecom", name: "企业微信", category: "腾讯域名", url: "https://work.weixin.qq.com/", method: "HEAD" },
+  { id: "tencent-meeting", name: "腾讯会议", category: "腾讯域名", url: "https://meeting.tencent.com/", method: "HEAD" },
+  { id: "smoba-ecology", name: "王者生态工具", category: "腾讯域名", url: "https://bag.ecology.smoba.qq.com/", method: "HEAD" },
+  { id: "tencent-cloud-console", name: "腾讯云控制台", category: "腾讯云", url: "https://console.cloud.tencent.com/", method: "HEAD" },
+  { id: "aliyun-console", name: "阿里云控制台", category: "阿里云", url: "https://console.aliyun.com/", method: "HEAD" },
+  { id: "baidu-cloud-console", name: "百度智能云控制台", category: "百度云", url: "https://console.bce.baidu.com/", method: "HEAD" },
 ].map((target) => Object.freeze({ ...target, builtin: true, timeoutMs: DEFAULT_TIMEOUT_MS, unsafe: false })));
 
 function clone(value) {
@@ -246,6 +271,7 @@ function resultCodeForStatus(status) {
   if (status === 405) return "REACHABLE_METHOD_NOT_ALLOWED";
   if (status === 429) return "REACHABLE_RATE_LIMITED";
   if (status >= 500) return "REACHABLE_SERVICE_ERROR";
+  if (status >= 400) return "REACHABLE_UNEXPECTED_STATUS";
   if (status >= 300) return "REACHABLE_REDIRECT";
   return "REACHABLE";
 }
@@ -426,8 +452,8 @@ export class NetworkDiagnosticsService {
     if (!isPlainRecord(input) || !REQUEST_ID_PATTERN.test(String(input.requestId || ""))) throw new DesktopError("DIAGNOSTICS_REQUEST_INVALID", "诊断请求标识无效");
     const routeMode = ROUTE_MODES.has(input.routeMode) ? input.routeMode : "system";
     const ids = [...new Set(Array.isArray(input.targetIds) ? input.targetIds.map(String) : [])];
-    if (!ids.length || ids.length > MAX_TARGETS_PER_RUN) throw new DesktopError("DIAGNOSTICS_TARGET_SELECTION_INVALID", "请选择 1 到 50 个诊断目标");
     const allTargets = new Map([...this.builtinTargets, ...this.targets].map((target) => [target.id, target]));
+    if (!ids.length || ids.length > allTargets.size) throw new DesktopError("DIAGNOSTICS_TARGET_SELECTION_INVALID", "请选择已登记的诊断目标");
     const targets = ids.map((id) => allTargets.get(id));
     if (targets.some((target) => !target)) throw new DesktopError("DIAGNOSTICS_TARGET_NOT_FOUND", "诊断目标不存在或已被删除");
     const confirmedUnsafe = new Set(Array.isArray(input.confirmedUnsafeTargetIds) ? input.confirmedUnsafeTargetIds.map(String) : []);

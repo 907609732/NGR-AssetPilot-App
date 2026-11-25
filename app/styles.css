@@ -3579,7 +3579,17 @@ button:disabled {
 }
 
 #uploadDropZone {
-  grid-template-columns: minmax(280px, 1.25fr) minmax(220px, 1fr) minmax(220px, 1fr);
+  grid-template-columns: minmax(280px, 1.25fr) minmax(220px, 1fr);
+}
+
+#workView:not(:has(#namingModeSelect option[value="ai"]:checked)) :is(.upload-panel.reference, #referencePreviewWrap) {
+  display: none;
+}
+
+@media (min-width: 981px) {
+  #workView:has(#namingModeSelect option[value="ai"]:checked) #uploadDropZone {
+    grid-template-columns: minmax(280px, 1.25fr) minmax(220px, 1fr) minmax(220px, 1fr);
+  }
 }
 
 .upload-combined-panel {
@@ -4880,12 +4890,73 @@ button:disabled {
 }
 
 /* V3 desktop navigation, prefix library, download action and updater */
-.home-view {
-  grid-template-columns: repeat(3, minmax(260px, 360px));
+#homeView {
+  grid-template-columns: minmax(0, 550px) minmax(0, 465px);
+  gap: 16px;
+  padding: 32px 24px 80px;
+  box-sizing: border-box;
 }
 
-.home-view .entry-button span {
-  white-space: nowrap;
+#homeView .entry-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 116px;
+  padding: 22px 42px 22px 22px;
+  border-radius: 16px;
+  box-shadow: 0 3px 12px rgb(27 36 40 / 5%);
+}
+
+#homeView .entry-button::after {
+  content: "";
+  position: absolute;
+  right: 25px;
+  width: 6px;
+  height: 6px;
+  border: solid var(--muted);
+  border-width: 2px 2px 0 0;
+  transform: rotate(45deg);
+}
+
+#homeView .entry-button span {
+  margin-bottom: 5px;
+  font-size: 21px;
+}
+
+#homeView #workEntry {
+  grid-row: span 2;
+  flex-direction: column;
+  justify-content: end;
+  align-items: start;
+  gap: 26px;
+  padding: 28px 42px 26px 28px;
+}
+
+#homeView #workEntry span { font-size: 32px; }
+#homeView #workEntry::after { bottom: 55px; }
+
+.home-entry-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 13px;
+  box-sizing: content-box;
+  border-radius: 13px;
+  background: #e9f3f1;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#workEntry .home-entry-icon { padding: 19px; background: #e8effa; }
+#localImageSearchEntry .home-entry-icon { background: #eeedf7; }
+
+@media (max-width: 860px) {
+  #homeView { grid-template-columns: minmax(0, 500px); }
+  #homeView #workEntry { grid-row: auto; }
 }
 
 .update-available-button {
@@ -4987,10 +5058,6 @@ button:disabled {
 }
 
 .project-folder-field { display: grid; gap: 6px; min-width: 0; }
-.project-folder-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.project-folder-heading label { white-space: nowrap; }
-.project-folder-heading button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 7px; min-height: 30px; color: var(--accent); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; }
-.project-folder-heading svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .arthub-folder-dialog, .utility-dialog { width: min(560px, calc(100vw - 40px)); max-height: calc(100vh - 40px); box-sizing: border-box; overflow: auto; border: 1px solid var(--line); border-radius: 14px; padding: 20px; color: var(--text); background: var(--surface); }
 .arthub-folder-dialog::backdrop, .utility-dialog::backdrop { background: #172c3c55; }
 .arthub-folder-dialog header, .arthub-folder-dialog footer, .utility-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

@@ -38,12 +38,15 @@ try {
   const report = await window.evaluate(async ({ ids, mode }) => {
     const catalog = await window.ngrDesktop.diagnostics.listCatalog();
     const available = new Set(catalog.targets.map((target) => target.id));
-    const targetIds = ids.filter((id) => available.has(id));
+    const targetIds = ids.length === 1 && ids[0] === "all"
+      ? catalog.targets.filter((target) => target.builtin).map((target) => target.id)
+      : ids;
+    if (targetIds.some((id) => !available.has(id))) throw new Error("存在未登记的诊断目标");
     const requestId = `manual_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
     const run = await window.ngrDesktop.diagnostics.run({ requestId, targetIds, routeMode: mode });
-    return { online: catalog.online, run };
+    return { online: catalog.online, expectedResults: targetIds.length * (mode === "compare" ? 2 : 1), run };
   }, { ids: selectedTargets, mode: routeMode });
-  assert.ok(report.run.results.length > 0, "未返回任何诊断结果");
+  assert.equal(report.run.results.length, report.expectedResults, "诊断结果数与目标及测试路线不一致");
   const rows = report.run.results.map((result) => ({
     service: result.targetName,
     route: result.route,

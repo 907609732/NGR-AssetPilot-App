@@ -113,14 +113,16 @@ test("Electron development app boots with the Dev identity and an isolated rende
       const home = document.querySelector("#homeView").getBoundingClientRect();
       return {
         visible: [work, detect, local, more].every((rect) => rect.width > 0 && rect.height > 0),
-        localRestored: Math.abs(local.width - work.width) < 2 && Math.abs(local.height - work.height) < 2,
+        featureCardsAligned: work.right < detect.left && Math.abs(work.top - detect.top) < 2
+          && Math.abs(local.left - detect.left) < 2 && local.top > detect.bottom
+          && Math.abs(local.bottom - work.bottom) < 2,
         secondaryButtons: more.width >= 150 && more.width <= 210 && more.height >= 40 && more.height <= 54
           && finder.left > more.right && Math.abs(finder.top - more.top) < 2 && Math.abs(finder.height - more.height) < 2,
         secondaryActionsAtBottomCenter: Math.abs((secondaryActions.left + secondaryActions.width / 2) - (home.left + home.width / 2)) < 2 && home.bottom - secondaryActions.bottom <= 30,
       };
     });
     assert.equal(homeLayout.visible, true);
-    assert.equal(homeLayout.localRestored, true);
+    assert.equal(homeLayout.featureCardsAligned, true);
     assert.equal(homeLayout.secondaryButtons, true);
     assert.equal(homeLayout.secondaryActionsAtBottomCenter, true);
     assert.equal(await window.locator("#feedbackFormLink").isVisible(), true);

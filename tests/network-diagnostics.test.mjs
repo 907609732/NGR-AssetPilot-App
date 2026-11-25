@@ -130,6 +130,8 @@ test("HTTP 状态、代理和直连对比均返回脱敏的可达结论", async 
     assert.ok(run.results.every((result) => result.firstByteMs != null && result.totalMs >= result.firstByteMs));
     assert.ok(run.results.every((result) => result.failureStage === ""));
     assert.equal(resultCodeForStatus(405), "REACHABLE_METHOD_NOT_ALLOWED");
+    assert.equal(resultCodeForStatus(404), "REACHABLE_UNEXPECTED_STATUS");
+    assert.equal(resultCodeForStatus(302), "REACHABLE_REDIRECT");
     assert.equal(resultCodeForStatus(429), "REACHABLE_RATE_LIMITED");
     assert.equal(resultCodeForStatus(503), "REACHABLE_SERVICE_ERROR");
     assert.equal(summarizeProxy("HTTPS proxy.example:443; SOCKS5 hidden:1080; DIRECT"), "HTTPS + SOCKS5 + DIRECT");

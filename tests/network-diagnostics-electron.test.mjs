@@ -60,6 +60,8 @@ test("Electron API 页可创建自定义目标、运行本机诊断并管理历�
     assert.match(await window.locator("#diagnosticsTargetList").innerText(), /Figma REST API/);
     assert.match(await window.locator("#diagnosticsTargetList").innerText(), /阿里云 OSS/);
     assert.match(await window.locator("#diagnosticsTargetList").innerText(), /腾讯云 COS/);
+    assert.match(await window.locator("#diagnosticsTargetList").innerText(), /DeepSeek API/);
+    assert.match(await window.locator("#diagnosticsTargetList").innerText(), /ArtHub 腾讯域名/);
 
     await window.locator("#diagnosticsCustomDetails summary").click();
     await window.locator("#diagnosticsCustomName").fill("本机健康检查");
