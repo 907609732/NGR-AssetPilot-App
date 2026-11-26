@@ -52,6 +52,11 @@ jobs:
         run: npm run prepare:managed-provider -- --required
       - name: Test production release
         run: npm test
+      - name: Stage the pinned Finder component
+        env:
+          NGR_FINDER_ASAR_URL: ${{ vars.NGR_FINDER_ASAR_URL }}
+          NGR_FINDER_ASAR_TOKEN: ${{ secrets.NGR_FINDER_ASAR_TOKEN }}
+        run: node scripts/prepare-builtin-finder-ci.mjs
       - name: Build production release
         run: npm run build
       - name: Verify packaged production release

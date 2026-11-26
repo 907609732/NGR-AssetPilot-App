@@ -117,7 +117,7 @@
 
   function formatProvider(provider, deviceName = "") {
     const normalized = String(provider || "").toLowerCase();
-    const label = isDirectML(normalized) ? "GPU DirectML" : normalized === "cpu" ? "CPU 兼容模式" : provider ? String(provider) : "待检测";
+    const label = normalized === "rtx" ? "GPU TensorRT for RTX" : isDirectML(normalized) ? "GPU DirectML" : normalized === "cpu" ? "CPU 兼容模式" : provider ? String(provider) : "待检测";
     return deviceName ? `${label} · ${deviceName}` : label;
   }
 
@@ -368,7 +368,7 @@
       name.textContent = model.name;
       const badge = document.createElement("span");
       badge.className = model.builtin ? "local-search-certified" : "local-search-uncertified";
-      badge.textContent = model.builtin ? "已认证" : model.ready ? "未认证" : "文件缺失";
+      badge.textContent = model.sharedRtx ? "共享模型" : model.builtin ? "已认证" : model.ready ? "未认证" : "文件缺失";
       title.append(name, badge);
       const meta = document.createElement("small");
       const capability = modelSupportsText(model) ? "图片 + 文字" : "仅图片";
@@ -387,7 +387,7 @@
       activate.addEventListener("click", () => activateModel(model.id).catch((error) => showStatus(friendlyError(error, "模型切换失败"), "error")));
       actions.appendChild(activate);
 
-      if (!model.builtin) {
+      if (!model.builtin && !model.sharedRtx) {
         const validate = document.createElement("button");
         validate.type = "button";
         validate.className = "ghost-action";
@@ -401,7 +401,7 @@
       remove.type = "button";
       remove.className = "danger-action";
       remove.textContent = "删除";
-      remove.disabled = state.removingModel;
+      remove.disabled = state.removingModel || model.sharedRtx;
       remove.addEventListener("click", () => removeManagedModel(model));
       actions.appendChild(remove);
 
@@ -811,7 +811,7 @@
     const visionProvider = status.visionProvider || status.executionProvider;
     const textProvider = status.textProvider || "cpu";
     const deviceName = status.deviceName || status.device || (Number.isInteger(status.deviceId) ? `设备 ${status.deviceId}` : "");
-    const usingGpu = isDirectML(visionProvider);
+    const usingGpu = isDirectML(visionProvider) || visionProvider === "rtx";
     nodes.localSearchVisionProvider.textContent = formatProvider(visionProvider, usingGpu ? deviceName : "");
     nodes.localSearchTextProvider.textContent = formatProvider(textProvider);
     nodes.localSearchEngineBatch.textContent = Number(status.batchSize) > 0 ? String(status.batchSize) : "单张";
@@ -825,7 +825,7 @@
     nodes.localSearchEngineFallback.textContent = status.fallbackReason ? `自动回退原因：${status.fallbackReason}` : "";
     nodes.localSearchEngineFallback.classList.toggle("hidden", !status.fallbackReason);
     if (bridge()?.isAvailable()) {
-      nodes.localSearchRuntimeStatus.textContent = usingGpu ? "Windows 桌面版 · GPU DirectML" : visionProvider ? "Windows 桌面版 · CPU 兼容" : "Windows 桌面版 · 本机离线";
+      nodes.localSearchRuntimeStatus.textContent = usingGpu ? `Windows 桌面版 · ${formatProvider(visionProvider)}` : visionProvider ? "Windows 桌面版 · CPU 兼容" : "Windows 桌面版 · 本机离线";
     }
     if (!state.activeJobId) {
       nodes.localSearchJobProvider.textContent = `推理设备 ${formatProvider(visionProvider)}${Number(status.batchSize) > 0 ? ` · 批量 ${status.batchSize}` : ""}`;

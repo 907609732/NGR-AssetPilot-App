@@ -392,6 +392,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     netFetch: net.fetch.bind(net),
     getWindow: () => mainWindow,
     utilityProcess,
+    sharedInference: input => finderExtension.inferWithFinder(input),
     onEngineEvent: (event = {}) => {
       const stage = `local-search:${String(event.stage || "engine-event")}`;
       const details = {
@@ -408,6 +409,13 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
       }
     },
   });
+  finderExtension.additionalAiComponents.activateSharedRtx = async () => {
+    try {
+      await localImageSearch.activateSharedRtx();
+    } catch (error) {
+      runtimeLogger.warn("offline-ai:shared-model-not-activated", { code: error?.code || "SHARED_RTX_UNAVAILABLE" });
+    }
+  };
   lifecycle.addFinalizer("desktop-services", async () => {
     const results = await Promise.allSettled([
       Promise.resolve().then(() => localImageSearch.dispose()),

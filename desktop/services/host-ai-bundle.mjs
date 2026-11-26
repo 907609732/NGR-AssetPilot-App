@@ -21,6 +21,7 @@ export function createHostAiBundleComponents({ onnxComponent, offlineTranslation
     async install(staging) {
       if (onnxComponent) await onnxComponent.install(path.join(staging, runtime));
       await offlineTranslationInstaller.install(path.join(staging, translationRoot));
+      await this.activateSharedRtx?.();
     },
   };
 }

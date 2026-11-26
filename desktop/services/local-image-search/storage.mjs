@@ -91,6 +91,7 @@ function rowToModel(row) {
     gpuCompatibility: safeJson(row.gpu_compatibility, { status: "unknown" }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    sharedRtx: manifest.sharedRtx === true,
     manifest,
   };
 }

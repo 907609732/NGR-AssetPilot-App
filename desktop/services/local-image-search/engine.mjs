@@ -349,8 +349,10 @@ export class LocalImageSearchEngine {
     testPauseAfterIndexBegin = false,
     utilityProcess = null,
     onEvent = null,
+    sharedInference = null,
   }) {
     this.dbPath = dbPath;
+    this.sharedInference = sharedInference;
     this.modelRoot = modelRoot;
     this.utilityProcess = utilityProcess && typeof utilityProcess.fork === "function"
       ? utilityProcess
@@ -425,7 +427,7 @@ export class LocalImageSearchEngine {
   }
 
   async startWorker(kind, visionPath, modelConfig, precomputedProbe) {
-    const probe = kind === "query" ? {
+    const probe = kind === "query" || modelConfig?.sharedRtx ? {
       preferredProvider: "cpu",
       deviceId: null,
       deviceName: null,
@@ -449,7 +451,10 @@ export class LocalImageSearchEngine {
       testPauseAfterIndexBegin: this.testPauseAfterIndexBegin,
     });
     this.workers.set(kind, worker);
-    worker.on("message", (message) => this.onMessage(kind, message));
+    worker.on("message", (message) => {
+      if (message?.type !== "shared-inference") return this.onMessage(kind, message);
+      void this.forwardSharedInference(worker, message);
+    });
     worker.on("error", (cause, location) => {
       const error = cause instanceof Error ? cause : new Error(String(cause || "LOCAL_SEARCH_UTILITY_PROCESS_FATAL"));
       if (!(cause instanceof Error)) error.code = "LOCAL_SEARCH_UTILITY_PROCESS_FATAL";
@@ -492,6 +497,21 @@ export class LocalImageSearchEngine {
     if (this.workers.get(kind) === worker) this.workers.delete(kind);
     this.workerPromises.delete(kind);
     await worker.terminate();
+  }
+
+  async forwardSharedInference(worker, message) {
+    const { requestId, fingerprint, input } = message;
+    let response;
+    try {
+      if (!this.sharedInference || !/^[a-f0-9]{64}$/.test(fingerprint))
+        throw new Error("SHARED_MODEL_NOT_AVAILABLE");
+      response = { result: await this.sharedInference({
+        ...input, image: input.image ? Buffer.from(input.image) : undefined, expectedFingerprint: fingerprint,
+      }) };
+    } catch (error) {
+      response = { error: String(error.message || "SHARED_INFERENCE_FAILED").slice(0, 160) };
+    }
+    try { worker.postMessage({ action: "shared-inference-result", requestId, ...response }); } catch {}
   }
 
   onMessage(kind, message) {
@@ -605,12 +625,12 @@ export class LocalImageSearchEngine {
     const visionPath = payload?.modelConfig?.vision?.modelPath;
     const modelConfig = payload?.modelConfig;
     const defaultVisionPath = path.join(this.modelRoot, "vision", "onnx", "vision_model_q4f16.onnx");
-    if (action === "status" && !this.workers.has(kind) && !this.workerPromises.has(kind)) {
+    if (action === "status" && !modelConfig?.sharedRtx && !this.workers.has(kind) && !this.workerPromises.has(kind)) {
       const candidate = visionPath || defaultVisionPath;
       if (!await stat(candidate).then((info) => info.isFile()).catch(() => false)) return missingModelStatus();
     }
     let engineProbe = null;
-    if (["index", "status", "getEngineStatus"].includes(action)) {
+    if (!modelConfig?.sharedRtx && ["index", "status", "getEngineStatus"].includes(action)) {
       engineProbe = await probeDirectML({
         modelRoot: this.modelRoot,
         dbPath: this.dbPath,

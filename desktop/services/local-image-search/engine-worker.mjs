@@ -120,6 +120,20 @@ const canceledJobs = new Set();
 const activeOrQueuedJobs = new Set();
 const sessionStates = new Map();
 const progressEmissionTimes = new Map();
+const sharedRequests = new Map();
+let sharedSequence = 0;
+
+async function sharedEmbedding(model, input) {
+  const requestId = ++sharedSequence;
+  const result = await new Promise((resolve, reject) => {
+    sharedRequests.set(requestId, { resolve, reject });
+    postParentMessage({ type: "shared-inference", requestId, fingerprint: model.fingerprint, input });
+  });
+  const shape = (values, length) => Array.isArray(values) && values.length === length && values.every(Number.isFinite);
+  if (!shape(result?.clip, 512) || (input.image && !shape(result.dino, 384))) throw Error("SHARED_MODEL_VECTOR_INVALID");
+  const dino = input.image ? result.dino.map(value => value * Math.sqrt(1.2)) : Array(384).fill(0);
+  return normalizeVector(result.clip.concat(dino), model.dimensions);
+}
 let activeCache = null;
 let indexTail = Promise.resolve();
 let requestTail = Promise.resolve();
@@ -203,6 +217,7 @@ function resolveModelConfig(payload = {}) {
     supportsText,
     builtin: Boolean(raw.builtin ?? isBuiltinDefault),
     legacyCompatibility: raw.legacyCompatibility === true,
+    sharedRtx: raw.sharedRtx === true,
     preprocessingVersion: String(raw.preprocessingVersion || raw.indexProfile || "1"),
     vision,
     text,
@@ -273,6 +288,7 @@ async function releaseState(state) {
 
 async function activateSessionState(model, requestProbe) {
   const key = modelKey(model);
+  if (model.sharedRtx) return { model, visionProvider: "rtx", batchSize: 1, probeDiagnostics: [] };
   for (const [existingKey, state] of sessionStates) {
     if (existingKey === key) continue;
     await releaseState(state);
@@ -441,6 +457,15 @@ async function preprocessCandidate(candidate, model) {
   const source = candidate.bytes || candidate.absolutePath;
   const pipeline = sharp(source, { pages: 1, limitInputPixels: MAX_INPUT_PIXELS, animated: false });
   const metadata = candidate.knownMetadata || await pipeline.metadata();
+  if (model.sharedRtx) {
+    const image = candidate.bytes || await readFile(candidate.absolutePath);
+    if (image.length > 20 * 1024 * 1024) throw Error("LOCAL_SEARCH_QUERY_TOO_LARGE");
+    candidate.bytes = null;
+    return { candidate, image, metadata: {
+      format: metadata.format || path.extname(candidate.relativePath).slice(1),
+      width: metadata.width || null, height: metadata.height || null,
+    } };
+  }
   const { data, info } = await pipeline
     .rotate()
     .removeAlpha()
@@ -546,6 +571,14 @@ async function inferCpuWithIsolation(state, prepared) {
 
 async function inferIndexBatch(state, prepared) {
   if (!prepared.length) return [];
+  if (state.model.sharedRtx) {
+    const output = [];
+    for (const item of prepared) {
+      try { output.push({ vector: await sharedEmbedding(state.model, { image: item.image }), error: null }); }
+      catch (error) { output.push({ vector: null, error }); }
+    }
+    return output;
+  }
   if (!state.gpuDisabled) {
     try {
       const session = await loadGpuVision(state);
@@ -615,6 +648,7 @@ function convertTokenizerTensor(tensor, session, name) {
 }
 
 async function embedText(text, state) {
+  if (state.model.sharedRtx) return sharedEmbedding(state.model, { text });
   const loaded = await loadText(state);
   const encoded = await loaded.tokenizer(text, { truncation: true, max_length: 128 });
   const feeds = {};
@@ -637,6 +671,7 @@ async function embedText(text, state) {
 }
 
 async function embedImageBytes(bytes, state) {
+  if (state.model.sharedRtx) return sharedEmbedding(state.model, { image: bytes });
   const prepared = await preprocessCandidate({
     bytes,
     absolutePath: null,
@@ -932,7 +967,7 @@ function runtimeFields(state) {
   return {
     executionProvider: state.visionProvider,
     visionProvider: state.visionProvider,
-    textProvider: "cpu",
+    textProvider: state.model.sharedRtx ? "rtx" : "cpu",
     deviceId: state.visionProvider === "dml" ? state.deviceId : null,
     deviceName: state.visionProvider === "dml" ? state.deviceName : null,
     batchSize: state.batchSize,
@@ -1910,9 +1945,7 @@ async function handleRequest(action, payload) {
     const vector = await embedImageBytes(Buffer.from(payload.bytes), state);
     return {
       results: exactSearch(payload.libraryId, model, vector, payload.limit),
-      executionProvider: "cpu",
-      visionProvider: "cpu",
-      textProvider: "cpu",
+      ...runtimeFields(state),
       modelId: model.id,
     };
   }
@@ -1922,9 +1955,7 @@ async function handleRequest(action, payload) {
     const vector = await embedText(payload.text, state);
     return {
       results: exactSearch(payload.libraryId, model, vector, payload.limit),
-      executionProvider: "cpu",
-      visionProvider: state.visionProvider,
-      textProvider: "cpu",
+      ...runtimeFields(state),
       modelId: model.id,
     };
   }
@@ -1938,7 +1969,15 @@ async function handleRequest(action, payload) {
   throw new Error("WORKER_ACTION_INVALID");
 }
 
-onParentMessage(({ requestId, action, payload }) => {
+onParentMessage(({ requestId, action, payload, result, error }) => {
+  if (action === "shared-inference-result") {
+    const pending = sharedRequests.get(requestId);
+    if (!pending) return;
+    sharedRequests.delete(requestId);
+    if (error) pending.reject(new Error(error));
+    else pending.resolve(result);
+    return;
+  }
   const run = async () => {
   try {
     const result = await handleRequest(action, payload || {});

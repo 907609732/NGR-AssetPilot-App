@@ -2,12 +2,10 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const [source] = process.argv.slice(2);
-if (!source) throw new Error("用法：node scripts/stage-builtin-finder.mjs <Finder 基础组件目录>");
 const project = path.resolve(import.meta.dirname, "..");
 const lock = JSON.parse(await fs.readFile(path.join(project, "build", "finder-builtin.lock.json"), "utf8"));
-const archive = path.resolve(source, "resources", "app.asar");
 const output = path.join(project, "build", "generated", "finder-builtin", "resources");
 const destination = path.join(output, "app.asar");
 
@@ -19,15 +17,23 @@ async function verify(file) {
   }
 }
 
-await verify(archive);
-await fs.mkdir(output, { recursive: true });
-const temporary = await fs.mkdtemp(path.join(output, ".staging-"));
-try {
-  const candidate = path.join(temporary, "app.asar");
-  await fs.copyFile(archive, candidate);
-  await verify(candidate);
-  await fs.rename(candidate, destination);
-} finally {
-  await fs.rm(path.join(temporary, "app.asar"), { force: true });
-  await fs.rmdir(temporary);
+export async function stageBuiltinFinder(source) {
+  const archive = path.resolve(source, "resources", "app.asar");
+  await verify(archive);
+  await fs.mkdir(output, { recursive: true });
+  const temporary = await fs.mkdtemp(path.join(output, ".staging-"));
+  try {
+    const candidate = path.join(temporary, "app.asar");
+    await fs.copyFile(archive, candidate);
+    await verify(candidate);
+    await fs.rename(candidate, destination);
+  } finally {
+    await fs.rm(path.join(temporary, "app.asar"), { force: true });
+    await fs.rmdir(temporary);
+  }
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [source] = process.argv.slice(2);
+  if (!source) throw new Error("用法：node scripts/stage-builtin-finder.mjs <Finder 基础组件目录>");
+  await stageBuiltinFinder(source);
 }

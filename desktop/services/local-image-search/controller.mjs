@@ -74,12 +74,14 @@ export class LocalImageSearchController {
     getWindow,
     utilityProcess = null,
     onEngineEvent = null,
+    sharedInference = null,
   }) {
     this.dialog = dialog;
     this.shell = shell;
     this.getWindow = getWindow;
     this.netFetch = netFetch;
     this.utilityProcess = utilityProcess;
+    this.sharedInference = sharedInference;
     this.onEngineEvent = typeof onEngineEvent === "function" ? onEngineEvent : null;
     this.dataRoot = path.join(userDataPath, "local-image-search");
     this.modelRoot = path.join(this.dataRoot, "models");
@@ -111,6 +113,7 @@ export class LocalImageSearchController {
       modelRoot: this.modelRoot,
       utilityProcess: this.utilityProcess,
       onEvent: this.onEngineEvent,
+      sharedInference: this.sharedInference,
     });
     this.unsubscribeProgress = this.engine.onProgress((jobId, progress) => {
       const job = this.jobs.get(jobId);
@@ -126,8 +129,29 @@ export class LocalImageSearchController {
     return this.builtinManagers.get(modelId) || this.models;
   }
 
+  async activateSharedRtx() {
+    this.assertModelIdle();
+    const status = await this.sharedInference?.("status");
+    if (status?.device !== "cuda" || !/^[a-f0-9]{64}$/.test(status.fingerprint))
+      throw Error("共享 RTX 模型尚未就绪");
+    const id = "finder-rtx-" + status.fingerprint.slice(0, 24);
+    this.storage.upsertModel({
+      id, fingerprint: status.fingerprint, name: "Chinese-CLIP + DINOv2（共享 RTX）",
+      kind: "image-text", version: "1", dimensions: 896, builtin: false, sharedRtx: true,
+      relativeRoot: ".", certification: "verified",
+    }, { gpuCompatibility: { status: "compatible" } });
+    await this.setActiveModel({ modelId: id });
+    return id;
+  }
+
   async inspectRegisteredModel(model, { force = false } = {}) {
     if (!model) throw new DesktopError("LOCAL_SEARCH_MODEL_NOT_FOUND", "模型不存在");
+    if (model.manifest.sharedRtx) {
+      const status = await this.sharedInference?.("status").catch(() => null);
+      const ready = status?.device === "cuda" && status.fingerprint === model.fingerprint;
+      this.storage.updateModelStatus(model.id, ready ? "ready" : "missing");
+      return { ready, state: ready ? "ready" : "missing" };
+    }
     if (!force && this.modelInspectionCache.has(model.id)) return this.modelInspectionCache.get(model.id);
     const inspection = model.builtin
       ? await this.managerForModel(model.id).inspect({ force })
@@ -166,6 +190,11 @@ export class LocalImageSearchController {
     if (!manifest || manifest.id !== model.id || manifest.fingerprint !== model.fingerprint) {
       throw new DesktopError("LOCAL_SEARCH_MODEL_MANIFEST_INVALID", "模型清单与注册信息不一致");
     }
+    if (manifest.sharedRtx) return {
+      id: model.id, fingerprint: model.fingerprint, dimensions: model.dimensions,
+      kind: model.kind, supportsText: true, sharedRtx: true,
+      preprocessingVersion: "finder-clip-dino-weighted-v1",
+    };
     const root = manifest.relativeRoot === "."
       ? path.resolve(this.modelRoot)
       : this.resolveManifestPath(this.modelRoot, manifest.relativeRoot);
@@ -211,9 +240,10 @@ export class LocalImageSearchController {
     const model = this.storage.getModel(modelId);
     if (!model || !status) return;
     const provider = status.visionProvider || status.executionProvider || "cpu";
+    if (model.sharedRtx && provider !== "rtx") return;
     this.storage.updateModelStatus(modelId, model.status === "missing" ? "missing" : "ready", {
       gpuCompatibility: {
-        status: provider === "dml" ? "compatible" : "cpu-only",
+        status: provider === "dml" || provider === "rtx" ? "compatible" : "cpu-only",
         deviceId: Number.isInteger(status.deviceId) ? status.deviceId : null,
         deviceName: typeof status.deviceName === "string" ? status.deviceName : null,
         batchSize: Number.isInteger(status.batchSize) ? status.batchSize : 1,
@@ -447,6 +477,7 @@ export class LocalImageSearchController {
       : requireModelId(requireRecord(payload).modelId);
     const model = this.storage.getModel(modelId);
     if (!model) return { removed: false, sourceFilesDeleted: false };
+    if (model.manifest.sharedRtx) throw Error("共享 RTX 模型由快速找界面管理");
     const manager = model.builtin ? this.managerForModel(modelId) : this.models;
     const preservePaths = [];
     if (model.builtin) {

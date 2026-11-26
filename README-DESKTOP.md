@@ -1,19 +1,17 @@
 # NGR AssetPilot 桌面版安装、开发与数据说明
 
-本文按 **v3.0.25（2026-11-24 发布）**核对。普通用户安装 Windows x64 正式版即可；开发命令需要该版本的源码。
-
-**源码版本提醒**。本次已将正式版源码统一整合为 v3.0.25；启动和构建前核对当前工作树的 package.json。
+本文按 **2026-11-26 的主干源码 v3.0.29** 核对。下载安装请查看公开 Release；主干的功能可能尚未包含在公开安装器中。
 
 ## 下载与安装
 
 1. 打开 [最新正式版 Release](https://github.com/907609732/NGR-AssetPilot-App/releases/latest)。
-2. 在 **Assets** 下载 `NGR-AssetPilot-<版本号>-Setup-x64.exe`。本文对应 [v3.0.25 安装包](https://github.com/907609732/NGR-AssetPilot-App/releases/download/v3.0.25/NGR-AssetPilot-3.0.25-Setup-x64.exe)。
+2. 在 **Assets** 下载 `NGR-AssetPilot-<版本号>-Setup-x64.exe`。
 3. 运行安装器，按向导选择安装位置，完成后从桌面或开始菜单打开 **NGR AssetPilot**。
 4. 在设置的“数据与关于”中查看版本；正式版不显示 `DEV 开发版` 或 `TEST 测试版` 徽标。
 
 Release 下的 `Source code (zip)` / `Source code (tar.gz)` 是源码，`.blockmap` 和 `latest.yml` 是更新元数据，都不是普通用户的安装入口。安装正式版无需自行安装 Node.js、Python 或 CUDA。TAPD 采集需要另行安装 **Google Chrome**，并在软件打开的专用 Chrome 窗口中登录 TAPD。
 
-v3.0.25 沿用未签名构建，Windows 可能显示“未知发布者”。可使用同一 Release 的 `NGR-AssetPilot-3.0.25-SHA256SUMS.txt` 核对下载文件：
+可使用同一 Release 中提供的 SHA-256 清单核对下载文件，以下命令使用文件名示例：
 
 ```powershell
 Get-FileHash .\NGR-AssetPilot-3.0.25-Setup-x64.exe -Algorithm SHA256
@@ -23,7 +21,7 @@ Get-FileHash .\NGR-AssetPilot-3.0.25-Setup-x64.exe -Algorithm SHA256
 
 ## 正式版更新
 
-打开 **设置 → 数据与关于 → 检查更新**，查看版本说明后点击“下载更新”。v3.0.25 的更新流程在下载及完整性检查完成后，会进入保存工作区、自动关闭、静默安装和重新打开流程，不需要再手动点击“安装”。请在当前采集、导出等任务完成后发起更新。
+打开 **设置 → 数据与关于 → 检查更新**，查看版本说明后点击“下载更新”。当前正式版的更新流程在下载及完整性检查完成后，会进入保存工作区、自动关闭、静默安装和重新打开流程，不需要再手动点击“安装”。请在当前采集、导出等任务完成后发起更新。
 
 应用内正式更新面向已安装的正式版。源码开发版、测试版、内部 portable 包以及浏览器兼容模式不使用该正式更新流程；更新失败时可从 Release 下载 Setup 安装器。
 
@@ -37,7 +35,7 @@ Get-FileHash .\NGR-AssetPilot-3.0.25-Setup-x64.exe -Algorithm SHA256
 
 三版拥有不同应用 ID 和主数据目录，命名工作区、项目设置、API 凭据、图库索引、模型与缩略图分别管理。首次启动且目标目录尚无搜图资料时，程序可能从兼容的旧版目录复制本地搜图资料，原目录保留；这不是持续同步。
 
-**v3.0.25 的两个例外：**TAPD 报表与专用 Chrome 登录资料使用 `%APPDATA%\TAPD月报工具`，不按上述三版划分；快速找界面的扩展安装目录位于 `%APPDATA%\NGR\extensions`，扩展项目资料和缓存才放在对应宿主的主数据目录内。调试这些功能时应留意现有资料。
+TAPD 报表与专用 Chrome 登录资料使用 `%APPDATA%\TAPD月报工具`，可能在三种身份间共享。Finder 使用各宿主自己的扩展资料和缓存目录，旧手工安装的扩展载荷保存在 `%APPDATA%\NGR\extensions`。
 
 ## 工作区保存、备份与迁移
 
@@ -62,16 +60,22 @@ Get-FileHash .\NGR-AssetPilot-3.0.25-Setup-x64.exe -Algorithm SHA256
 - 支持经过隔离验证的自定义 ONNX embedding 模型。图像单塔提供图片搜索；图文双塔通过维度与 tokenizer 校验后才提供文字搜索。
 - 自定义模型仅接受规定的模型及数据文件，不加载脚本或自定义算子 DLL；推理阶段关闭远程模型访问。
 
-“本地 AI 搜图”与“快速找界面”是两个入口。后者使用独立扩展 ZIP，不随宿主安装包附带扩展模型。v3.0.25 Release 记录已验证扩展 `0.7.0`，公开旧独立版 `0.5.7` 不能作为扩展导入；兼容扩展包当时尚未公开下载，需单独交付。首次导入或点击“重新检查”会完整校验；日常打开复用持久校验记录，发现文件变化再完整检查。
+### 快速找界面与统一离线包
 
-## 获取 v3.0.25 源码并开发
+主干版本从首页直接打开内置「快速找界面」。首次打开选择已有资料库或新建资料库。ArtHub 同步的项目应选择已经同步至本机的目录。右键首页入口可重置 Finder 本机设置，之后需重新选择目录。
 
-开发环境要求 **Windows、Git、Node.js `>=22.13.0` 和 npm**；对应发布工作流使用 Node.js 24。下面在新目录检出已发布标签，避免把旧 `main` 误当成最新版：
+在 Finder 的「设置与本地 AI → AI 搜图与媒体」导入统一离线 AI ZIP，一次安装 RTX 图搜模型、运行环境、媒体工具和宿主的离线中译英组件。该 ZIP 需要支持此格式的宿主。主干本地验收包约 1254.22 MiB，公开附件及完整性校验以实际交付为准。主安装器只内置工作台基础程序。
+
+导入成功且共享 RTX 模型就绪后，宿主「本地 AI 搜图」会使用它建立新索引。已有 ONNX 索引保留，可在模型管理中切换回原模型。没有可用 RTX 时，仍可按本节原有方法安装 ONNX 权重。实现细节见[系统架构](docs/ARCHITECTURE.md)。
+
+## 获取源码并开发
+
+开发环境要求 **Windows、Git、Node.js `>=22.13.0` 和 npm**；对应发布工作流使用 Node.js 24。开发主干使用 `main`，复现公开安装器时检出相应发布标签：
 
 ```powershell
-git clone --branch v3.0.25 --single-branch https://github.com/907609732/NGR-AssetPilot-App.git NGR-AssetPilot-v3.0.25
-cd NGR-AssetPilot-v3.0.25
-git switch -c work/desktop-v3.0.25
+git clone https://github.com/907609732/NGR-AssetPilot-App.git
+cd NGR-AssetPilot-App
+git switch -c work/desktop
 npm.cmd ci
 npm.cmd run env:check
 npm.cmd start
@@ -88,7 +92,7 @@ npm.cmd start
 
 ## 测试与发布构建
 
-在 v3.0.25 源码中，根据改动范围运行验证：
+根据改动范围运行验证：
 
 ```powershell
 # 隔离的测试版主工作区
@@ -109,7 +113,7 @@ npm.cmd run build:test
 
 正式版生成 Windows x64 Setup；开发版和测试版另外生成 portable x64 EXE。发布流程还生成 SHA-256、SBOM、构建清单和更新元数据，并检查扩展版本。产物包含 `LICENSE` 和 `THIRD-PARTY-NOTICES.md`，不内置用户 API 凭据。
 
-优先使用 GitHub 的 **Desktop Production Release** 工作流。手动运行用于构建和验收；推送符合规则的版本 tag 会触发公开 Release，应仅在明确准备发布时执行。发布前同步 `package.json`、相关版本信息与 `docs/releases/v<版本号>.md`；工作流实际读取该 Markdown 并追加扩展版本检查结果。源码测试通过不能替代安装器、自动更新和打包资源验收。
+构建前，准备与 [组件锁](build/finder-builtin.lock.json) 匹配的 Finder 基础组件，运行 `node scripts/stage-builtin-finder.mjs "<Finder 基础组件目录>"`。GitHub 正式发布工作流通过发布环境变量 `NGR_FINDER_ASAR_URL` 获取相同的 ASAR。私有下载源可配置 `NGR_FINDER_ASAR_TOKEN`，下载后根据组件锁校验。手动运行用于构建和验收；推送符合规则的版本 tag 会触发公开 Release，应仅在明确准备发布时执行。发布前同步 `package.json`、相关版本信息与 `docs/releases/v<版本号>.md`；工作流实际读取该 Markdown 并追加扩展版本检查结果。源码测试通过不能替代安装器、自动更新和打包资源验收。
 
 需要测量图库分析性能时，可使用独立测试库：
 
