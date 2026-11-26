@@ -282,7 +282,7 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   const reply = { id: request.id, result: null };
   await exposed.localAssets.reply(reply);
   assert.deepEqual(calls.at(-1), [ipcChannels.localAssetReply, reply]);
-  assert.deepEqual(Object.keys(exposed.finderExtension), ["status", "detect", "choose", "open"]);
+  assert.deepEqual(Object.keys(exposed.finderExtension), ["status", "detect", "choose", "open", "contextMenu"]);
   await exposed.finderExtension.status();
   assert.deepEqual(calls.at(-1), [ipcChannels.finderExtensionStatus, undefined]);
   await exposed.finderExtension.detect();
@@ -291,6 +291,8 @@ test("preload exposes only the nested ngrDesktop contract", async () => {
   assert.deepEqual(calls.at(-1), [ipcChannels.finderExtensionChoose, { candidateIndex: 0 }]);
   await exposed.finderExtension.open();
   assert.deepEqual(calls.at(-1), [ipcChannels.finderExtensionOpen, undefined]);
+  await exposed.finderExtension.contextMenu();
+  assert.deepEqual(calls.at(-1), [ipcChannels.finderExtensionContextMenu, undefined]);
   assert.equal(typeof exposed.backup.beginImport, "function");
   assert.equal(typeof exposed.backup.finishImport, "function");
   assert.equal(typeof exposed.backup.cancelImport, "function");
