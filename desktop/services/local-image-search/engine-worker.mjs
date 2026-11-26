@@ -574,7 +574,7 @@ async function inferIndexBatch(state, prepared) {
   if (state.model.sharedRtx) {
     const output = [];
     for (const item of prepared) {
-      try { output.push({ vector: await sharedEmbedding(state.model, { image: item.image }), error: null }); }
+      try { output.push({ vector: await sharedEmbedding(state.model, { image: item.image, background: true }), error: null }); }
       catch (error) { output.push({ vector: null, error }); }
     }
     return output;

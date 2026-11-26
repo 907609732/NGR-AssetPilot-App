@@ -113,7 +113,7 @@ npm.cmd run build:test
 
 正式版生成 Windows x64 Setup；开发版和测试版另外生成 portable x64 EXE。发布流程还生成 SHA-256、SBOM、构建清单和更新元数据，并检查扩展版本。产物包含 `LICENSE` 和 `THIRD-PARTY-NOTICES.md`，不内置用户 API 凭据。
 
-构建前，准备与 [组件锁](build/finder-builtin.lock.json) 匹配的 Finder 基础组件，运行 `node scripts/stage-builtin-finder.mjs "<Finder 基础组件目录>"`。GitHub 正式发布工作流通过发布环境变量 `NGR_FINDER_ASAR_URL` 获取相同的 ASAR。私有下载源可配置 `NGR_FINDER_ASAR_TOKEN`，下载后根据组件锁校验。手动运行用于构建和验收；推送符合规则的版本 tag 会触发公开 Release，应仅在明确准备发布时执行。发布前同步 `package.json`、相关版本信息与 `docs/releases/v<版本号>.md`；工作流实际读取该 Markdown 并追加扩展版本检查结果。源码测试通过不能替代安装器、自动更新和打包资源验收。
+构建前，准备与 [组件锁](build/finder-builtin.lock.json) 匹配的 Finder 基础组件，运行 `node scripts/stage-builtin-finder.mjs "<Finder 基础组件目录>"`。GitHub 正式发布工作流通过发布环境变量 `NGR_FINDER_ASAR_BASE_URL` 指定私有文件源根目录。将 ASAR 上传到根目录下的 `<Finder 源码提交>/<ASAR SHA-256>/app.asar`。工作流从组件锁推导下载路径并校验文件大小和 SHA-256。需要鉴权时配置发布环境密钥 `NGR_FINDER_ASAR_TOKEN`。手动运行用于构建和验收；推送符合规则的版本 tag 会触发公开 Release，应仅在明确准备发布时执行。发布前同步 `package.json`、相关版本信息与 `docs/releases/v<版本号>.md`；工作流实际读取该 Markdown 并追加扩展版本检查结果。源码测试通过不能替代安装器、自动更新和打包资源验收。
 
 需要测量图库分析性能时，可使用独立测试库：
 

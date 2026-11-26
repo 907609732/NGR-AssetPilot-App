@@ -12,22 +12,35 @@ const executablePath = path.resolve(packagedExe || 'node_modules/electron/dist/e
 const instance = await _electron.launch({ executablePath, args: packagedExe ? [] : ['.', '--ngr-edition=test'], env, timeout: 40000 });
 try {
   const host = await instance.firstWindow();
+  const findFinder = () => instance.windows().find(page => page.url().includes('finder-builtin'));
+  const windowState = () => instance.evaluate(({ BrowserWindow }) => {
+    const finder = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('finder-builtin'));
+    return finder ? { visible: finder.isVisible() } : null;
+  });
+  async function waitUntil(check, label) {
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      const result = await check();
+      if (result) return result;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw Error(label);
+  }
   const open = async () => {
     await host.waitForFunction(() => typeof window.ngrDesktop?.finderExtension?.open === 'function');
-    const pending = instance.waitForEvent('window', { timeout: 15000 });
     await host.evaluate(() => window.ngrDesktop.finderExtension.open());
-    const finder = await pending;
+    const finder = await waitUntil(findFinder, 'Finder page did not open');
     await finder.waitForFunction(() => document.body.innerText.includes('我的资料库'));
+    await waitUntil(async () => (await windowState())?.visible, 'Finder window did not become visible');
     return finder;
   };
-  let finder = await open();
-  const closed = finder.waitForEvent('close');
-  await instance.evaluate(({ BrowserWindow }, needle) =>
-    BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes(needle)).close(),
-    'finder-builtin');
-  await closed;
+  await open();
+  await instance.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('finder-builtin')).close());
+  // Shared inference can retain an invisible Finder window after it is closed.
+  await waitUntil(async () => !(await windowState())?.visible, 'Finder window did not close or hide');
   assert.equal(host.isClosed(), false);
-  finder = await open();
+  await open();
   const versions = await instance.evaluate(async ({app}) => {
     const sqlite = process.getBuiltinModule('node:sqlite');
     const database = new sqlite.DatabaseSync(':memory:');
