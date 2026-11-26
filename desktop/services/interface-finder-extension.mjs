@@ -76,6 +76,7 @@ export class InterfaceFinderExtension {
   }
 
   async detect() {
+    if (this.pendingReset) throw new Error("快速找界面正在重置设置");
     this.checkActive();
     if (this.pendingCheck) return this.pendingCheck;
     if (this.pendingInstall || this.pendingOpen) throw new Error("扩展正在处理，请稍后再检查");
@@ -117,6 +118,7 @@ export class InterfaceFinderExtension {
   }
 
   async choose(request) {
+    if (this.pendingReset) throw new Error("快速找界面正在重置设置");
     if (request !== undefined && (request === null || typeof request !== "object" || Object.keys(request).length)) throw new Error("请通过原生文件选择器导入扩展 ZIP");
     if (this.disposed) throw new Error("扩展管理已关闭");
     if (this.pendingInstall) return this.pendingInstall;
@@ -172,17 +174,71 @@ export class InterfaceFinderExtension {
     return this.runtime;
   }
 
+  async inferWithFinder(input) {
+    const result = await this.openWorkspace({ visible: false });
+    if (!result.launched || typeof this.runtime?.sharedInference !== "function") {
+      throw new Error("请更新内置快速找界面，再使用共享模型");
+    }
+    const runtime = this.runtime;
+    const output = await runtime.sharedInference(input);
+    if (this.runtime === runtime) this.sharedInferenceRuntime = runtime;
+    return output;
+  }
+
   async setLocalAccess(enabled) {
     this.localAccess = enabled;
     if (!enabled) await this.pendingOpen?.catch(() => {});
-    if (!this.localAccess && this.runtime?.getWindow()?.isVisible?.() === false) {
+    if (!this.localAccess && this.runtime !== this.sharedInferenceRuntime && this.runtime?.getWindow()?.isVisible?.() === false) {
       const runtime = this.runtime;
       this.runtime = null;
       await runtime.dispose();
     }
   }
 
+  async showContextMenu() {
+    const window = this.getWindow();
+    if (!window || window.isDestroyed()) return;
+    const { Menu } = require("electron");
+    const selected = await new Promise(resolve => {
+      const menu = Menu.buildFromTemplate([
+        { label: "重置快速找界面设置", enabled: !this.pendingReset, click: () => resolve(true) },
+      ]);
+      menu.popup({ window, callback: () => resolve(false) });
+    });
+    if (selected) await this.resetSettings();
+  }
+
+  async resetSettings() {
+    if (this.pendingReset) return this.pendingReset;
+    this.pendingReset = this.confirmAndResetSettings().finally(() => { this.pendingReset = null; });
+    return this.pendingReset;
+  }
+
+  async confirmAndResetSettings() {
+    this.checkActive();
+    if (this.pendingOpen || this.pendingInstall || this.pendingCheck)
+      throw new Error("请等待快速找界面的当前操作完成，再重置设置");
+    const result = await this.dialog.showMessageBox(this.getWindow(), {
+      type: "warning",
+      title: "重置快速找界面设置",
+      message: "重置后需要重新选择资料库文件夹。",
+      detail: "外观和本机偏好将恢复默认。资料库、图片和历史记录会保留。",
+      buttons: ["取消", "重置设置"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (result.response !== 1) return false;
+    this.checkActive();
+    await this.runtime?.dispose();
+    this.runtime = null;
+    await this.sessionFactory?.()?.clearStorageData({ storages: ["localstorage"] });
+    await rm(path.join(this.userDataPath, "extensions-data", FINDER_ID, "settings.json"), { force: true });
+    return true;
+  }
+
   async openWorkspace({ visible }) {
+    if (this.pendingReset) throw new Error("快速找界面正在重置设置");
     if (this.disposed) throw new Error("扩展管理已关闭");
     if (this.pendingInstall) throw new Error("扩展正在安装，请等待完成");
     if (this.pendingCheck) throw new Error("扩展正在检查，请等待完成");
@@ -222,7 +278,7 @@ export class InterfaceFinderExtension {
     if (typeof module?.createFinderRuntime !== "function") throw new Error("扩展未提供兼容的工作台接口，请重新导入正式扩展包");
     if (!visible && module.localAccessVersion !== 1) throw new Error("请更新快速找界面组件");
     let runtime;
-    runtime = await module.createFinderRuntime({ hosted: true, background: !visible, keepAliveOnClose: () => Boolean(this.localAccess), componentRoot: this.componentRoot, root: path.join(entry.root, "resources", "app.asar"), resourcesRoot: path.join(entry.root, "resources"), profileRoot: path.join(this.userDataPath, "extensions-data", FINDER_ID), cacheRoot: path.join(this.userDataPath, "extensions-cache", FINDER_ID), inheritSettingsFile: path.join(this.appDataPath, "QuickInterfaceFinder", "settings.json"), session: this.sessionFactory?.(), version: entry.version, parentWindow: this.getWindow(), onClosed: () => { if (this.runtime === runtime) this.runtime = null; } });
+    runtime = await module.createFinderRuntime({ hosted: true, background: !visible, keepAliveOnClose: () => Boolean(this.localAccess || this.sharedInferenceRuntime === runtime), componentRoot: this.componentRoot, additionalAiComponents: this.additionalAiComponents, root: path.join(entry.root, "resources", "app.asar"), resourcesRoot: path.join(entry.root, "resources"), profileRoot: path.join(this.userDataPath, "extensions-data", FINDER_ID), cacheRoot: path.join(this.userDataPath, "extensions-cache", FINDER_ID), inheritSettingsFile: path.join(this.appDataPath, "QuickInterfaceFinder", "settings.json"), session: this.sessionFactory?.(), version: entry.version, parentWindow: this.getWindow(), onClosed: () => { if (this.runtime === runtime) this.runtime = null; if (this.sharedInferenceRuntime === runtime) this.sharedInferenceRuntime = null; } });
     if (!runtime || !["start", "show", "dispose", "getWindow"].every(key => typeof runtime[key] === "function")) throw new Error("扩展工作台接口不完整");
     this.runtime = runtime;
     try { this.checkActive(); await runtime.start(); this.checkActive(); }

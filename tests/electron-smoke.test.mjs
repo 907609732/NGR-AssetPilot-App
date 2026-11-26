@@ -67,6 +67,9 @@ test("离线时可取消或确认删除模型，已安装列表和提示随结�
     await window.locator("#localSearchModelManagerClose").click();
     assert.equal(await window.locator("#localSearchDownloadModel").isDisabled(), true);
     assert.equal(await window.locator("#localSearchImportModel").isEnabled(), true);
+    const offlineGuide = window.locator("#localSearchOfflineModelHint");
+    assert.equal(await offlineGuide.getAttribute("open"), "");
+    assert.match(await offlineGuide.getByRole("link").getAttribute("href"), /onnxruntime-node-1\.30\.0\.tgz$/);
   } finally {
     await electronApp.close();
   }

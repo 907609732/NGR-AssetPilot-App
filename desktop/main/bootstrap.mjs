@@ -20,6 +20,7 @@ import { NetworkClient } from "../services/network-client.mjs";
 import { NetworkDiagnosticsService } from "../services/network-diagnostics-service.mjs";
 import { OfflineTranslationService } from "../services/offline-translation/service.mjs";
 import { createOnnxInstaller } from "../services/onnx-installer.mjs";
+import { createHostAiBundleComponents } from "../services/host-ai-bundle.mjs";
 import { createTranslationInstaller } from "../services/offline-translation/installer.mjs";
 import { ProviderRegistry } from "../services/provider-registry.mjs";
 import { RuntimeLogger } from "../services/runtime-logger.mjs";
@@ -297,6 +298,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     modelLibraryRoot: offlineTranslationInstaller.library,
   });
   offlineTranslation.installModel = offlineTranslationInstaller.install;
+  finderExtension.additionalAiComponents = createHostAiBundleComponents({ onnxComponent, offlineTranslationInstaller });
   const lifecycle = new QuitCoordinator({ app, channel: channels.appBeforeQuit });
   const localAssetRpc = createLocalAssetRendererRpc({ getWindow: () => mainWindow });
   const localAssets = createLocalAssetTools({ dialog, getWindow: () => mainWindow, runRenderer: localAssetRpc.run });
@@ -475,6 +477,7 @@ export async function runDesktopApp({ edition = "dev" } = {}) {
     networkDiagnostics,
     offlineTranslation,
     onnxComponent,
+    isOnline: () => net.isOnline(),
     directoryTokens,
     backupService,
     updater,

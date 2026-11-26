@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NGR AssetPilot｜AI资源领航</title>
-    <link rel="stylesheet" href="styles.css?v=V3.0.28" />
-    <link rel="stylesheet" href="tutorials/figma-guide.css?v=V3.0.28" />
+    <link rel="stylesheet" href="styles.css?v=V3.0.29" />
+    <link rel="stylesheet" href="tutorials/figma-guide.css?v=V3.0.29" />
   </head>
   <body>
     <div id="app">
@@ -16,7 +16,7 @@
             <span class="brand-logo-core"></span>
           </div>
           <div class="topbar-title">
-            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.28</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
+            <h1><span class="brand-en">NGR AssetPilot</span><span class="brand-divider">｜</span><span class="brand-cn">AI资源领航</span> <span class="version-badge" data-app-version>V3.0.29</span><span class="edition-badge hidden" id="editionBadge"></span></h1>
             <p id="pageHint">批量整理 UI 切图名称，让文件名保持统一、清楚、可追踪。</p>
           </div>
         </div>
@@ -77,7 +77,13 @@
               <span aria-hidden="true">⋯</span><span>更多功能</span>
             </button>
             <div class="finder-feature-row">
-              <button class="home-secondary-feature" id="finderExtensionEntry" type="button"><span aria-hidden="true">⌕</span><span>快速找界面</span></button>
+              <div class="more-feature-with-tip finder-feature-with-tip">
+                <button class="home-secondary-feature" id="finderExtensionEntry" type="button" aria-describedby="finderExtensionTip"><span aria-hidden="true">⌕</span><span>快速找界面</span></button>
+                <div class="more-feature-tip" id="finderExtensionTip" role="tooltip">
+                  <strong>截图找界面</strong>
+                  <span>粘贴截图，找到对应的界面、工程和 Figma 链接。</span>
+                </div>
+              </div>
               <button id="finderExtensionManage" class="ghost-action" type="button" aria-label="管理快速找界面扩展" title="管理扩展" hidden>⚙</button>
             </div>
           </div>
@@ -91,10 +97,15 @@
               <span aria-hidden="true">T</span>
               <span>自动生成TAPD周报</span>
             </button>
-            <button class="more-feature-item" id="figmaVariantsEntry" type="button" popovertarget="moreFeaturesPopover" popovertargetaction="hide">
-              <span aria-hidden="true">F</span><span>Figma一键变体</span>
-            </button>
-            <button class="more-feature-item" id="figmaPluginHealthEntry" type="button" popovertarget="moreFeaturesPopover" popovertargetaction="hide">
+            <div class="more-feature-with-tip">
+              <button class="more-feature-item" id="figmaVariantsEntry" type="button" popovertarget="moreFeaturesPopover" popovertargetaction="hide" aria-describedby="figmaVariantsTip">
+                <span aria-hidden="true">F</span><span>Figma一键变体</span>
+              </button>
+              <div class="more-feature-tip" id="figmaVariantsTip" role="tooltip">
+                <span>figma一键变体插件,用会提速10000%,把原来废脑子活变成一秒钟,节约半个小时修复脑力时间,原来填属性要几分钟,修复脑力时间要半个小时,现在只要一秒钟,解决</span>
+              </div>
+            </div>
+            <button class="more-feature-item" id="figmaPluginHealthEntry" type="button" title="检查 Figma 插件的连接和服务状态" popovertarget="moreFeaturesPopover" popovertargetaction="hide">
               <span aria-hidden="true">✓</span><span>Figma插件健康检测</span>
             </button>
           </div>
@@ -205,7 +216,7 @@
                   <h2>软件版本</h2>
                   <p id="manualUpdateStatus">正在读取当前版本…</p>
                 </div>
-                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.28</span>
+                <span class="version-badge" id="currentAppVersion" data-app-version>V3.0.29</span>
               </div>
               <div class="action-row compact-actions">
                 <button class="primary-action" id="manualUpdateCheck" type="button">检查更新</button>
@@ -477,8 +488,11 @@
                   <button class="ghost-action hidden" id="localSearchRetryDownload" type="button">重试</button>
                   <button class="danger-action hidden" id="localSearchRemoveModel" type="button">删除内置模型</button>
                 </div>
-                <p class="local-search-privacy hidden" id="localSearchOfflineModelHint">当前离线，可直接导入本地模型。</p>
-                <p class="local-search-privacy">离线时可导入 .ngrmodel 模型包或本地 ONNX 模型。图库和搜索在本机处理。</p>
+                <details class="local-search-privacy" id="localSearchOfflineModelHint">
+                  <summary>离线安装需要哪些包？</summary>
+                  <p>在联网电脑下载 <a href="https://registry.npmjs.org/onnxruntime-node/-/onnxruntime-node-1.30.0.tgz" target="_blank" rel="noreferrer">onnxruntime-node-1.30.0.tgz</a>，原样拷到离线电脑。点「导入 .ngrmodel」后，如果提示缺少推理组件，先选「导入组件包」并选择这个 TGZ 文件。</p>
+                  <p>模型请在联网电脑下载后，点「导出 .ngrmodel」。例如，稳定 GPU 版会导出 NGR-AssetPilot-clip-b32-multilingual-q4f16-v1.ngrmodel。模型已在本机时，可点「开始分析」补装推理组件。</p>
+                </details>
               </section>
 
               <section class="local-search-card local-search-engine-card">
@@ -626,7 +640,7 @@
 
         <section class="view rules-view" id="rulesView">
           <div class="section-head">
-            <h2>设置 <span class="version-badge" data-app-version>V3.0.28</span><time class="version-date" datetime="2026-11-24">更新于 2026-11-24</time></h2>
+            <h2>设置 <span class="version-badge" data-app-version>V3.0.29</span><time class="version-date" datetime="2026-11-26">更新于 2026-11-26</time></h2>
             <p>配置命名规则、方案模板和项目知识库；在线服务统一在“API”页签管理。</p>
           </div>
 
@@ -1457,10 +1471,10 @@
             <div><dt>发布日期</dt><dd id="updateReleaseDate">—</dd></div>
           </dl>
           <div class="update-release-notes">
-            <strong>新版介绍</strong>
+            <strong>更新内容</strong>
+            <span id="updateVersionsBehind" hidden></span>
             <pre id="updateReleaseNotes">暂无更新说明</pre>
           </div>
-          <section class="release-history" data-release-history aria-label="所有历史版本"></section>
           </div>
           <footer class="update-dialog-footer">
           <div class="update-progress-wrap hidden" id="updateProgressWrap" aria-live="polite">
@@ -1830,45 +1844,45 @@
       <button type="button" class="ghost-action local-tools-browser" id="localToolsBrowser">在浏览器打开本机网页</button>
       <p id="localToolsNotice" role="status" hidden></p>
     </dialog>
-    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.28"></script>
-    <script src="historical-knowledge.js?v=V3.0.28"></script>
-    <script src="js/config.js?v=V3.0.28"></script>
-    <script src="js/prefix-library.js?v=V3.0.28"></script>
-    <script src="js/desktop-bridge.js?v=V3.0.28"></script>
-    <script src="js/daily-report-core.js?v=V3.0.28"></script>
-    <script src="js/daily-report.js?v=V3.0.28"></script>
-    <script src="js/keep-awake.js?v=V3.0.28"></script>
-    <script src="js/auto-start.js?v=V3.0.28"></script>
-    <script src="js/network-diagnostics.js?v=V3.0.28"></script>
-    <script src="js/external-app-launcher.js?v=V3.0.28"></script>
-    <script src="js/updates.js?v=V3.0.28"></script>
-    <script src="js/workspace-backup.js?v=V3.0.28"></script>
-    <script src="js/state-dom.js?v=V3.0.28"></script>
-    <script src="js/local-image-browser.js?v=V3.0.28"></script>
-    <script src="js/local-image-search.js?v=V3.0.28"></script>
-    <script src="js/lifecycle-rules.js?v=V3.0.28"></script>
-    <script src="js/uploads-editor-translator.js?v=V3.0.28"></script>
-    <script src="js/ai-workflow.js?v=V3.0.28"></script>
-    <script src="js/assets-detection.js?v=V3.0.28"></script>
-    <script src="js/rendering.js?v=V3.0.28"></script>
-    <script src="js/naming-knowledge.js?v=V3.0.28"></script>
-    <script src="js/lexicon-data.js?v=V3.0.28"></script>
-    <script src="js/export-template-storage.js?v=V3.0.28"></script>
-    <script src="js/toast.js?v=V3.0.28"></script>
-    <script src="js/workspace-storage.js?v=V3.0.28"></script>
-    <script src="js/workspace-migration.js?v=V3.0.28"></script>
-    <script src="js/feature-tests.js?v=V3.0.28"></script>
-    <script src="js/main.js?v=V3.0.28"></script>
-    <script src="js/selection-actions.js?v=V3.0.28"></script>
-    <script src="js/lexicon-panel.js?v=V3.0.28"></script>
-    <script src="js/tutorial-center.js?v=V3.0.28"></script>
-    <script src="js/installation-notice.js?v=V3.0.28"></script>
-    <script src="js/more-features.js?v=V3.0.28"></script>
-    <script src="js/figma-plugin-health.js?v=V3.0.28"></script>
-    <script src="js/figma-guide.js?v=V3.0.28"></script>
-    <script src="js/finder-extension.js?v=V3.0.28"></script>
-    <script src="js/local-asset-renderer.js?v=V3.0.28"></script>
-    <script src="js/local-tools.js?v=V3.0.28"></script>
-    <script src="js/home-ambient.js?v=V3.0.28"></script>
+    <script src="vendor/fflate-0.8.3.min.js?v=V3.0.29"></script>
+    <script src="historical-knowledge.js?v=V3.0.29"></script>
+    <script src="js/config.js?v=V3.0.29"></script>
+    <script src="js/prefix-library.js?v=V3.0.29"></script>
+    <script src="js/desktop-bridge.js?v=V3.0.29"></script>
+    <script src="js/daily-report-core.js?v=V3.0.29"></script>
+    <script src="js/daily-report.js?v=V3.0.29"></script>
+    <script src="js/keep-awake.js?v=V3.0.29"></script>
+    <script src="js/auto-start.js?v=V3.0.29"></script>
+    <script src="js/network-diagnostics.js?v=V3.0.29"></script>
+    <script src="js/external-app-launcher.js?v=V3.0.29"></script>
+    <script src="js/updates.js?v=V3.0.29"></script>
+    <script src="js/workspace-backup.js?v=V3.0.29"></script>
+    <script src="js/state-dom.js?v=V3.0.29"></script>
+    <script src="js/local-image-browser.js?v=V3.0.29"></script>
+    <script src="js/local-image-search.js?v=V3.0.29"></script>
+    <script src="js/lifecycle-rules.js?v=V3.0.29"></script>
+    <script src="js/uploads-editor-translator.js?v=V3.0.29"></script>
+    <script src="js/ai-workflow.js?v=V3.0.29"></script>
+    <script src="js/assets-detection.js?v=V3.0.29"></script>
+    <script src="js/rendering.js?v=V3.0.29"></script>
+    <script src="js/naming-knowledge.js?v=V3.0.29"></script>
+    <script src="js/lexicon-data.js?v=V3.0.29"></script>
+    <script src="js/export-template-storage.js?v=V3.0.29"></script>
+    <script src="js/toast.js?v=V3.0.29"></script>
+    <script src="js/workspace-storage.js?v=V3.0.29"></script>
+    <script src="js/workspace-migration.js?v=V3.0.29"></script>
+    <script src="js/feature-tests.js?v=V3.0.29"></script>
+    <script src="js/main.js?v=V3.0.29"></script>
+    <script src="js/selection-actions.js?v=V3.0.29"></script>
+    <script src="js/lexicon-panel.js?v=V3.0.29"></script>
+    <script src="js/tutorial-center.js?v=V3.0.29"></script>
+    <script src="js/installation-notice.js?v=V3.0.29"></script>
+    <script src="js/more-features.js?v=V3.0.29"></script>
+    <script src="js/figma-plugin-health.js?v=V3.0.29"></script>
+    <script src="js/figma-guide.js?v=V3.0.29"></script>
+    <script src="js/finder-extension.js?v=V3.0.29"></script>
+    <script src="js/local-asset-renderer.js?v=V3.0.29"></script>
+    <script src="js/local-tools.js?v=V3.0.29"></script>
+    <script src="js/home-ambient.js?v=V3.0.29"></script>
   </body>
 </html>

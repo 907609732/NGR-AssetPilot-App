@@ -158,7 +158,7 @@ async function verifyTarget(target) {
     assert.equal(state.offlineTranslationStatus.ready, false, "隔离的基础包不应预装离线翻译推理组件");
     await assert.rejects(
       window.evaluate(() => window.ngrDesktop.offlineTranslation.translate({ text: "下载按钮", from: "zh", to: "en" })),
-      /安装本地推理组件/,
+      /onnxruntime-node-1\.30\.0\.tgz/,
     );
     assert.deepEqual(state.apiSettingsPlacement, {
       aiInApi: true,

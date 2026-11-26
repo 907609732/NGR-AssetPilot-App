@@ -180,6 +180,8 @@ test("window settings and navigation helpers enforce the renderer boundary", () 
   assert.equal(isAllowedExternalUrl("https://www.bilibili.com/video/BV1jxHK6KEs4/?redirect=other"), false);
   assert.equal(isAllowedExternalUrl("http://www.bilibili.com/video/BV1jxHK6KEs4/"), false);
   assert.equal(isAllowedExternalUrl("https://github.com/907609732/NGR-AssetPilot-App/releases"), true);
+  assert.equal(isAllowedExternalUrl("https://registry.npmjs.org/onnxruntime-node/-/onnxruntime-node-1.30.0.tgz"), true);
+  assert.equal(isAllowedExternalUrl("https://registry.npmjs.org/onnxruntime-node/-/onnxruntime-node-1.29.0.tgz"), false);
   assert.equal(isAllowedExternalUrl("https://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=1"), true);
   assert.equal(isAllowedExternalUrl("https://doc.weixin.qq.com/forms/a-different-form?page=1"), false);
   assert.equal(isAllowedExternalUrl("https://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=2"), false);

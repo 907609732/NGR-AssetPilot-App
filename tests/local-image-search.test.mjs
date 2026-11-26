@@ -176,7 +176,12 @@ test("旧版单张 CPU 向量升级到兼容模型，图片元数据和向量保
 }));
 
 test("素材目录按图库隔离，支持中文文件夹、固定分页以及 %/_ 字面筛选", async () => withTempDirectory(async (root) => {
-  const storage = new LocalImageSearchStorage({ dataRoot: path.join(root, "data") });
+  const controller = new LocalImageSearchController({
+    userDataPath: root,
+    utilityProcess: { fork: () => assert.fail("浏览素材不应启动 AI 推理进程") },
+    netFetch: () => assert.fail("浏览素材不应请求网络"),
+  });
+  const { storage } = controller;
   const first = storage.createLibrary({ id: randomUUID(), rootPath: path.join(root, "一号"), name: "一号" });
   const second = storage.createLibrary({ id: randomUUID(), rootPath: path.join(root, "二号"), name: "二号" });
   const insert = storage.db.prepare(`
@@ -191,7 +196,7 @@ test("素材目录按图库隔离，支持中文文件夹、固定分页以及 %
     UPDATE libraries SET catalog_item_count=3,catalog_status='ready',catalog_revision=7 WHERE id=?
   `).run(first.id);
 
-  assert.deepEqual(storage.listAssetFolders({ libraryId: first.id, parentPrefix: "" }), {
+  assert.deepEqual(await controller.listAssetFolders({ libraryId: first.id, parentPrefix: "" }), {
     libraryId: first.id,
     catalogRevision: 7,
     parentPrefix: "",
@@ -203,7 +208,7 @@ test("素材目录按图库隔离，支持中文文件夹、固定分页以及 %
   assert.deepEqual(storage.listAssetFolders({ libraryId: first.id, parentPrefix: "分类_%" }).folders, [
     { name: "子图", prefix: "分类_%/子图", itemCount: 1 },
   ]);
-  const literalPercent = storage.listAssets({
+  const literalPercent = await controller.listAssets({
     libraryId: first.id, page: 1, pageSize: 100, folderPrefix: "", filter: "%", sort: "path-asc",
   });
   assert.equal(literalPercent.totalItems, 2);
@@ -222,7 +227,7 @@ test("素材目录按图库隔离，支持中文文件夹、固定分页以及 %
     () => storage.listAssets({ libraryId: first.id, page: 1, pageSize: 100, folderPrefix: "分类_\\%" }),
     /LOCAL_SEARCH_ASSET_PREFIX_INVALID/,
   );
-  storage.close();
+  await controller.dispose();
 }));
 
 test("图库根目录不可读时索引返回 INDEX_SCAN_INCOMPLETE 并保留旧记录为暂停状态", async () => withTempDirectory(async (root) => {

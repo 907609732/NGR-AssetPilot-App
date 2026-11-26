@@ -10,6 +10,7 @@ const channels = Object.freeze({
   finderExtensionDetect: "ngr:finder-extension:detect",
   finderExtensionChoose: "ngr:finder-extension:choose",
   finderExtensionOpen: "ngr:finder-extension:open",
+  finderExtensionContextMenu: "ngr:finder-extension:context-menu",
   environmentGetInfo: "ngr:environment:get-info",
   keepAwakeGet: "ngr:keep-awake:get",
   autoStartGet: "ngr:auto-start:get",
@@ -136,6 +137,7 @@ const api = deepFreeze({
     detect: () => invoke(channels.finderExtensionDetect),
     choose: (request) => invoke(channels.finderExtensionChoose, request),
     open: () => invoke(channels.finderExtensionOpen),
+    contextMenu: () => invoke(channels.finderExtensionContextMenu),
   },
   autoStart: {
     getState: () => invoke(channels.autoStartGet),

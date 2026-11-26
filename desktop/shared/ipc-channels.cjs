@@ -5,6 +5,7 @@ module.exports = Object.freeze({
   finderExtensionDetect: "ngr:finder-extension:detect",
   finderExtensionChoose: "ngr:finder-extension:choose",
   finderExtensionOpen: "ngr:finder-extension:open",
+  finderExtensionContextMenu: "ngr:finder-extension:context-menu",
   environmentGetInfo: "ngr:environment:get-info",
   keepAwakeGet: "ngr:keep-awake:get",
   autoStartGet: "ngr:auto-start:get",

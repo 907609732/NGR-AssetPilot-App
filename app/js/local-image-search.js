@@ -193,7 +193,7 @@
     nodes.localSearchCancelDownload.classList.toggle("hidden", packageStatus.state !== "downloading");
     nodes.localSearchRetryDownload.classList.toggle("hidden", packageStatus.state !== "error" && packageStatus.state !== "canceled");
     const offline = globalScope.navigator.onLine === false;
-    nodes.localSearchOfflineModelHint.classList.toggle("hidden", !offline);
+    if (offline) nodes.localSearchOfflineModelHint.open = true;
     for (const button of [nodes.localSearchDownloadModel, nodes.localSearchRetryDownload]) {
       button.disabled = offline;
       button.title = button.disabled ? "当前离线，可导入本地模型" : "";

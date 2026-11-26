@@ -6,9 +6,9 @@ import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
+import { ONNX_COMPONENT_URL } from "../shared/constants.mjs";
 
 const run = promisify(execFile);
-const url = "https://registry.npmjs.org/onnxruntime-node/-/onnxruntime-node-1.30.0.tgz";
 const sha512 = "twhs1C2C/BFkz1yc5OY0KIU2GUq6DURO7hD4bx5Q2Qy3nAMJwRXW8xU3NVczE29VA9lolLOYepoD8fjTGOfIqw==";
 const expectedBytes = 113507888;
 const binaries = ["DirectML.dll", "dxcompiler.dll", "dxil.dll", "onnxruntime_binding.node", "onnxruntime.dll"];
@@ -33,7 +33,7 @@ export function createOnnxInstaller(root, fetcher = fetch) {
       if (offline) {
         input = createReadStream(offline);
       } else {
-        const response = await fetcher(url, { signal: AbortSignal.timeout(300_000) });
+        const response = await fetcher(ONNX_COMPONENT_URL, { signal: AbortSignal.timeout(300_000) });
         if (!response.ok || !response.body) throw new Error("本地推理组件下载失败");
         input = response.body;
       }

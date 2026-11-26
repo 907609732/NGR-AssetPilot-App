@@ -480,6 +480,44 @@ main {
 .more-feature-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
 .more-feature-item:hover, .more-feature-item:focus-visible { background: #eaf6f7; color: var(--primary); }
 .more-feature-item > span:first-child { width: 20px; text-align: center; color: var(--primary); font-weight: 750; }
+/* The tooltip belongs to the top-layer popover and stays out of the menu flow. */
+.more-features-popover { overflow: visible; }
+.more-feature-with-tip { position: relative; }
+.more-feature-tip {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: calc(100% + 20px);
+  width: min(240px, calc(100vw - 48px));
+  padding: 12px 14px;
+  box-sizing: border-box;
+  transform: translateY(-50%);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(13, 52, 59, 0.2);
+  visibility: hidden;
+  pointer-events: none;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.more-feature-tip strong { display: block; margin-bottom: 4px; color: var(--primary); }
+.more-feature-tip span { display: block; }
+.more-feature-with-tip:hover .more-feature-tip,
+.more-feature-with-tip:focus-within .more-feature-tip { visibility: visible; }
+@media (max-width: 850px) {
+  .more-feature-tip {
+    inset: auto 4px calc(100% + 4px);
+    width: auto;
+    transform: none;
+  }
+}
+.finder-feature-with-tip .more-feature-tip {
+  inset: auto 0 calc(100% + 8px) auto;
+  width: min(240px, calc(100vw - 32px));
+  transform: none;
+}
 .finder-feature-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
 #finderExtensionManage { min-width: 32px; padding: 8px; }
 #finderExtensionManage[hidden] { display: none; }

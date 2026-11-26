@@ -1,4 +1,4 @@
-import { APP_HOST, APP_SCHEME } from "../shared/constants.mjs";
+import { APP_HOST, APP_SCHEME, ONNX_COMPONENT_URL } from "../shared/constants.mjs";
 
 const FEEDBACK_FORM_URL = "https://doc.weixin.qq.com/forms/ACwAeQeSAD0AawAWwZXAN0CNcmlvfsE1f?page=1";
 const TUTORIAL_VIDEO_URLS = new Set([
@@ -36,7 +36,7 @@ export function isAllowedExternalUrl(rawUrl) {
       !parsed.port &&
       !parsed.username &&
       !parsed.password &&
-      (allowedHosts.has(parsed.hostname.toLowerCase()) || isFeedbackForm || isTutorialVideo)
+      (allowedHosts.has(parsed.hostname.toLowerCase()) || isFeedbackForm || isTutorialVideo || parsed.href === ONNX_COMPONENT_URL)
     );
   } catch {
     return false;

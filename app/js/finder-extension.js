@@ -125,6 +125,12 @@
     if (next?.launched && dialog.open) dialog.close();
   }
   entry.addEventListener("click", open);
+  entry.addEventListener("contextmenu", async (event) => {
+    if (!api?.contextMenu) return;
+    event.preventDefault();
+    try { await api.contextMenu(); }
+    catch (error) { window.alert(error?.message || "重置设置失败，请重试。"); }
+  });
   window.addEventListener("DOMContentLoaded", () => {
     if (api && !state) void refresh();
   }, { once: true });

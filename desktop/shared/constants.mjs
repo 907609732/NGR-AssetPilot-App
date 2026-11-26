@@ -2,6 +2,7 @@ export const APP_SCHEME = "ngr-assetpilot";
 export const APP_HOST = "app";
 export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
 export const APP_URL = `${APP_ORIGIN}/`;
+export const ONNX_COMPONENT_URL = "https://registry.npmjs.org/onnxruntime-node/-/onnxruntime-node-1.30.0.tgz";
 
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",

@@ -52,12 +52,51 @@
     });
   }
 
+  const releaseVersion = (value) => /^v?(\d+\.\d+\.\d+)$/i.exec(String(value || ""))?.[1];
+  const compareReleaseVersions = (a, b) => {
+    const left = a.split(".").map(Number), right = b.split(".").map(Number);
+    return left[0] - right[0] || left[1] - right[1] || left[2] - right[2];
+  };
+  const updateContents = (notes) => String(notes || "").split(/\r?\n/)
+    .filter(line => !/签名|未知发布者|unsigned|unknown publisher|code.signing/i.test(line))
+    .join("\n").trim();
+
+  function renderUpdateContents() {
+    if (!els.updateReleaseNotes || !updateState) return;
+    const current = releaseVersion(updateState.currentVersion || desktopInfo.version);
+    const latest = releaseVersion(updateState.availableVersion);
+    const count = document.querySelector("#updateVersionsBehind");
+    if (!current || !latest || compareReleaseVersions(latest, current) <= 0) {
+      if (count) count.hidden = true;
+      els.updateReleaseNotes.textContent = "暂无更新说明";
+      return;
+    }
+    const releases = new Map([[latest, updateContents(updateState.releaseNotes)]]);
+    for (const release of historyData?.releases || []) {
+      const version = releaseVersion(release.version);
+      if (!release.prerelease && version && compareReleaseVersions(version, current) > 0 &&
+          compareReleaseVersions(version, latest) <= 0) {
+        const notes = updateContents(release.notes);
+        if (notes || !releases.has(version)) releases.set(version, notes);
+      }
+    }
+    if (count) {
+      count.hidden = false;
+      count.textContent = historyData && !historyData.stale
+        ? `已落后 ${releases.size} 个版本`
+        : `已落后至少 ${releases.size} 个版本`;
+    }
+    els.updateReleaseNotes.textContent = [...releases.entries()]
+      .sort(([a], [b]) => compareReleaseVersions(b, a))
+      .map(([version, notes]) => `v${version}\n${notes || "暂无更新说明"}`).join("\n\n");
+  }
+
   async function loadHistory() {
     if (historyLoading) return;
     historyLoading = true; historyError = ""; renderHistory();
     try { historyData = await NgrDesktopBridge.getReleaseHistory(); }
     catch { historyError = "历史版本加载失败，请检查网络后点击刷新。"; }
-    finally { historyLoading = false; renderHistory(); }
+    finally { historyLoading = false; renderHistory(); renderUpdateContents(); }
   }
 
   function formatBytes(bytes) {
@@ -183,7 +222,7 @@
     if (els.updateLatestVersion) els.updateLatestVersion.textContent = versionLabel(updateState.availableVersion);
     if (els.updateDownloadSize) els.updateDownloadSize.textContent = formatBytes(updateState.downloadSize);
     if (els.updateReleaseDate) els.updateReleaseDate.textContent = formatReleaseDate(updateState.releaseDate);
-    if (els.updateReleaseNotes) els.updateReleaseNotes.textContent = updateState.releaseNotes || "暂无更新说明";
+    renderUpdateContents();
     const progressView = getProgressViewModel(updateState);
     els.updateProgressWrap?.classList.toggle("hidden", !progressView.visible);
     els.updateProgressWrap?.classList.toggle("is-active", progressView.active);

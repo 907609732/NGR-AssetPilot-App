@@ -329,3 +329,57 @@ test("未公开的扩展仅链接项目页，不能把旧独立版标成扩展�
   report.extensions[0].publicDownloadAvailable = true;
   assert.match(extensionReleaseNotes(report), /\[下载扩展\]/);
 });
+
+test("resetting Finder clears profile preferences and keeps library files", async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "ngr-finder-reset-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const profile = path.join(root, "extensions-data", "quick-interface-finder");
+  const library = path.join(profile, "library.json");
+  const settings = path.join(profile, "settings.json");
+  await fs.mkdir(profile, { recursive: true });
+  await fs.writeFile(library, "original library data");
+  await fs.writeFile(settings, JSON.stringify({ libraryPath: "E:/shared" }));
+  let response = 0, disposed = 0, cleared = 0;
+  const manager = new InterfaceFinderExtension({
+    appDataPath: root,
+    dialog: { showMessageBox: async () => ({ response }) },
+    getWindow: () => null,
+    sessionFactory: () => ({ clearStorageData: async options => {
+      assert.deepEqual(options, { storages: ["localstorage"] });
+      cleared++;
+    } }),
+  });
+  manager.runtime = { dispose: async () => { disposed++; } };
+  assert.equal(await manager.resetSettings(), false);
+  assert.equal(disposed, 0);
+  assert.equal(cleared, 0);
+  await fs.access(settings);
+  response = 1;
+  assert.equal(await manager.resetSettings(), true);
+  assert.equal(disposed, 1);
+  assert.equal(cleared, 1);
+  await assert.rejects(fs.access(settings), { code: "ENOENT" });
+  assert.equal(await fs.readFile(library, "utf8"), "original library data");
+});
+
+test("Finder inference reuses one hosted runtime without the local web service", async () => {
+  const manager = new InterfaceFinderExtension({ appDataPath: "unused" });
+  const calls = [];
+  const runtime = {
+    getWindow: () => ({ isVisible: () => false }),
+    async sharedInference(request) { calls.push(request); return { device: "cuda" }; },
+    async dispose() { calls.push("dispose"); },
+  };
+  manager.openWorkspace = async options => {
+    assert.deepEqual(options, { visible: false });
+    manager.runtime = runtime;
+    return { launched: true };
+  };
+  assert.deepEqual(await manager.inferWithFinder("status"), { device: "cuda" });
+  await manager.setLocalAccess(false);
+  assert.equal(manager.runtime, runtime);
+  await manager.inferWithFinder({ text: "设置界面" });
+  assert.deepEqual(calls, ["status", { text: "设置界面" }]);
+  await manager.dispose();
+  assert.equal(calls.at(-1), "dispose");
+});

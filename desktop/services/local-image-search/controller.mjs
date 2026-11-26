@@ -526,7 +526,7 @@ export class LocalImageSearchController {
     const request = requireRecord(payload);
     const libraryId = requireId(request.libraryId, "图库 ID");
     try {
-      return await this.engine.request("listAssetFolders", {
+      return this.storage.listAssetFolders({
         libraryId,
         parentPrefix: request.parentPrefix,
       });
@@ -542,7 +542,7 @@ export class LocalImageSearchController {
     const request = requireRecord(payload);
     const libraryId = requireId(request.libraryId, "图库 ID");
     try {
-      return await this.engine.request("listAssets", {
+      return this.storage.listAssets({
         libraryId,
         page: request.page,
         pageSize: request.pageSize,

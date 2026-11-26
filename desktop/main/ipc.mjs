@@ -61,6 +61,7 @@ export function registerDesktopIpc({
   networkDiagnostics,
   offlineTranslation,
   onnxComponent,
+  isOnline = () => true,
   directoryTokens,
   backupService,
   updater,
@@ -147,7 +148,7 @@ export function registerDesktopIpc({
   handle(channels.diagnosticsClearHistory, async () => networkDiagnostics.clearHistory());
   function requireOnnx() {
     if (onnxComponent && !onnxComponent.ready()) {
-      throw new DesktopError("ONNX_COMPONENT_REQUIRED", "请在安装模型或建立索引时安装本地推理组件");
+      throw new DesktopError("ONNX_COMPONENT_REQUIRED", "缺少本地推理组件。离线时请在联网电脑下载 onnxruntime-node-1.30.0.tgz，再通过「开始分析」或「导入 .ngrmodel」导入组件包。");
     }
   }
 
@@ -156,15 +157,18 @@ export function registerDesktopIpc({
     const window = getWindow();
     let choice = mode;
     if (choice === undefined) {
+      const online = isOnline();
       const picked = await dialog.showMessageBox(window, {
         type: "question",
         message: "安装本地推理组件",
-        detail: "在线下载约 108 MiB，也可导入官方组件包。",
-        buttons: ["在线下载", "导入组件包", "取消"],
+        detail: online
+          ? "在线下载约 108 MiB。离线安装请在联网电脑先下载 onnxruntime-node-1.30.0.tgz，再导入组件包。"
+          : "当前离线。请在联网电脑下载 onnxruntime-node-1.30.0.tgz，拷到本机后选择「导入组件包」。下载链接在本地搜图设置里。",
+        buttons: online ? ["在线下载", "导入组件包", "取消"] : ["导入组件包", "取消"],
         defaultId: 0,
-        cancelId: 2,
+        cancelId: online ? 2 : 1,
       });
-      choice = picked.response;
+      choice = online ? picked.response : picked.response + 1;
     }
     if (choice === 2) return requireOnnx();
     let archive;
@@ -246,6 +250,7 @@ export function registerDesktopIpc({
   handle(channels.finderExtensionDetect, async () => finderExtension.detect());
   handle(channels.finderExtensionChoose, async (_event, request) => finderExtension.choose(request));
   handle(channels.finderExtensionOpen, async () => finderExtension.open());
+  handle(channels.finderExtensionContextMenu, async () => finderExtension.showContextMenu());
 
   handle(channels.backupBeginExport, async (event, payload) => backupService.beginExport(payload, event.sender.id));
   handle(channels.backupWriteExportChunk, async (event, payload) => backupService.writeExportChunk(payload, event.sender.id));
