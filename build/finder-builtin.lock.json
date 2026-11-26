@@ -4,5 +4,6 @@
   "version": "0.7.5",
   "hostApi": 1,
   "bytes": 23594568,
-  "sha256": "4a063c7b62e8fe2a84f50aae0a95ca6d286ba611bbd9fb2acca0e36bd6b9eaa3"
+  "sha256": "4a063c7b62e8fe2a84f50aae0a95ca6d286ba611bbd9fb2acca0e36bd6b9eaa3",
+  "artifactCommit": "4721ca8c3181277170ca7eded245a9a743c155a7"
 }

@@ -2,6 +2,11 @@ name: Desktop Production Release
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      host_commit:
+        type: string
+        required: true
   push:
     tags:
       - "v3.*"
@@ -11,6 +16,7 @@ permissions:
 
 jobs:
   build-release:
+    if: github.repository == '907609732/NGR-AssetPilot-App' || github.repository == '907609732/lingtu-interface-finder'
     runs-on: windows-latest
     environment: production-release
     permissions:
@@ -26,8 +32,19 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       NGR_BAIDU_CFC_ENDPOINT: ${{ vars.NGR_BAIDU_CFC_ENDPOINT }}
     steps:
+      - name: Validate private build input
+        if: github.repository == '907609732/lingtu-interface-finder'
+        env:
+          HOST_COMMIT: ${{ inputs.host_commit }}
+        shell: pwsh
+        run: |
+          if ($env:HOST_COMMIT -cnotmatch '^[a-f0-9]{40}$') {
+            throw 'A full AssetPilot main commit is required'
+          }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          repository: 907609732/NGR-AssetPilot-App
+          ref: ${{ inputs.host_commit || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -52,16 +69,31 @@ jobs:
         run: npm run prepare:managed-provider -- --required
       - name: Test production release
         run: npm test
-      - name: Stage the pinned Finder component
-        env:
-          NGR_FINDER_ASAR_BASE_URL: ${{ vars.NGR_FINDER_ASAR_BASE_URL }}
-          NGR_FINDER_ASAR_TOKEN: ${{ secrets.NGR_FINDER_ASAR_TOKEN }}
-        run: node scripts/prepare-builtin-finder-ci.mjs
+      - name: Read the Finder component lock
+        id: finder
+        shell: pwsh
+        run: |
+          $component = Get-Content -LiteralPath 'build/finder-builtin.lock.json' -Raw | ConvertFrom-Json
+          if ($component.repository -cne '907609732/lingtu-interface-finder' -or $component.artifactCommit -cnotmatch '^[a-f0-9]{40}$') {
+            throw 'Invalid pinned Finder artifact'
+          }
+          "artifact_commit=$($component.artifactCommit)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Check out the pinned private Finder artifact
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: 907609732/lingtu-interface-finder
+          ref: ${{ steps.finder.outputs.artifact_commit }}
+          path: .tmp/finder-component
+          ssh-key: ${{ github.repository == '907609732/NGR-AssetPilot-App' && secrets.NGR_FINDER_READ_KEY || '' }}
+          persist-credentials: false
+      - name: Verify and stage the pinned Finder component
+        run: node scripts/prepare-builtin-finder-ci.mjs .tmp/finder-component
       - name: Build production release
         run: npm run build
       - name: Verify packaged production release
         run: npm run verify:packaged:prod
       - name: Upload production build artifacts
+        if: github.repository == '907609732/lingtu-interface-finder' || startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: NGR-AssetPilot-Production-Windows-x64
@@ -84,7 +116,7 @@ jobs:
           "$releaseNotes`n`n$extensionNotes" | Set-Content -LiteralPath '.tmp/production-release-notes.md' -Encoding utf8
           $extensionNotes | Out-File -LiteralPath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - name: Publish GitHub Release for tag
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.repository == '907609732/NGR-AssetPilot-App' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: false
