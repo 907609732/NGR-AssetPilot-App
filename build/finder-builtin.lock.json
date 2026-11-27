@@ -1,9 +1,9 @@
 {
   "repository": "907609732/lingtu-interface-finder",
-  "commit": "659789946a87145e3ba26a29e563f1c30061899a",
+  "commit": "337bf41956cc9d6e467cdd3c65b06ea7a3e5dd23",
   "version": "0.7.5",
   "hostApi": 1,
-  "bytes": 23594568,
-  "sha256": "4a063c7b62e8fe2a84f50aae0a95ca6d286ba611bbd9fb2acca0e36bd6b9eaa3",
-  "artifactCommit": "4721ca8c3181277170ca7eded245a9a743c155a7"
+  "bytes": 23611046,
+  "sha256": "96a3b1fb051bf5b65f7f3ac54df6dabce1569e746c2a4f8ee90ebd7cce4fd419",
+  "artifactCommit": "1536416dbedd48502672923be38adf486d3b74eb"
 }
